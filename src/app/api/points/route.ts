@@ -8,6 +8,7 @@ import {
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { pushTextMessage } from '@/lib/line-messaging'
 import type { PointTransactionType } from '@/types/member'
 
 const LIFF_ID = (process.env.NEXT_PUBLIC_LIFF_ID ?? '').trim()
@@ -151,11 +152,11 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // 確認 member 屬於此 tenant（ownership check）
+    // 確認 member 屬於此 tenant（ownership check），同時取得 line_uid 與目前點數供推播用
     const supabase = createSupabaseAdminClient()
     const { data: member } = await supabase
       .from('members')
-      .select('id')
+      .select('id, line_uid, points')
       .eq('id', memberId)
       .eq('tenant_id', auth.tenantId)
       .single()
@@ -171,6 +172,18 @@ export async function POST(req: NextRequest) {
       amount: numAmount,
       note: note ?? null,
     })
+
+    // 推播通知（fire-and-forget，失敗不影響主流程）
+    const lineUid = member.line_uid as string
+    const currentPoints = member.points as number
+    const newTotal = Math.max(0, currentPoints + numAmount)
+    const pushText =
+      numAmount > 0
+        ? `感謝消費！您獲得了 ${numAmount} 點，目前累積 ${newTotal} 點 🎉`
+        : `您的點數已調整 ${numAmount} 點，目前累積 ${newTotal} 點。`
+    pushTextMessage(lineUid, pushText).catch((err) =>
+      console.error('[line-push] points notification failed:', err)
+    )
 
     return NextResponse.json(transaction, { status: 201 })
   } catch (err) {

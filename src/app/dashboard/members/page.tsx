@@ -1,20 +1,31 @@
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { getMembersByTenant } from '@/repositories/memberRepository'
+import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import MemberTable from '@/components/dashboard/MemberTable'
+import Pagination from '@/components/dashboard/Pagination'
+
+const PER_PAGE = 20
 
 async function getTenantIdForUser(email: string): Promise<string | null> {
-  const supabase = await createSupabaseServerClient()
-  const { data, error } = await supabase
+  const supabase = createSupabaseAdminClient()
+  const { data } = await supabase
     .from('tenant_users')
     .select('tenant_id')
     .eq('email', email)
     .limit(1)
     .single()
-  if (error || !data) return null
-  return data.tenant_id as string
+  return (data?.tenant_id as string) ?? null
 }
 
-export default async function MembersPage() {
+interface Props {
+  searchParams: Promise<{ page?: string }>
+}
+
+export default async function MembersPage({ searchParams }: Props) {
+  const { page: pageStr } = await searchParams
+  const page = Math.max(1, Number(pageStr ?? 1))
+  const offset = (page - 1) * PER_PAGE
+
   const supabase = await createSupabaseServerClient()
   const {
     data: { user },
@@ -27,14 +38,19 @@ export default async function MembersPage() {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold text-zinc-900">會員管理</h1>
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+        <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
           尚未設定租戶。請聯絡系統管理員將您的帳號加入租戶。
         </div>
       </div>
     )
   }
 
-  const { members, total } = await getMembersByTenant(tenantId, { limit: 50 })
+  const { members, total } = await getMembersByTenant(tenantId, {
+    limit: PER_PAGE,
+    offset,
+  })
+
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
 
   return (
     <div className="space-y-6">
@@ -48,6 +64,14 @@ export default async function MembersPage() {
 
       {/* Member table (client component for search / actions) */}
       <MemberTable members={members} />
+
+      {/* Pagination */}
+      <Pagination
+        currentPage={page}
+        totalPages={totalPages}
+        total={total}
+        perPage={PER_PAGE}
+      />
     </div>
   )
 }

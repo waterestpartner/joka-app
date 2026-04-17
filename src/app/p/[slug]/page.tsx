@@ -18,13 +18,11 @@ export default async function BrandLandingPage({ params }: Props) {
   }
 
   const primaryColor = tenant.primary_color ?? '#06C755'
-  const liffBaseUrl = `https://liff.line.me/${tenant.liff_id}`
-  const registerUrl = tenant.liff_id
-    ? `${liffBaseUrl}?tenantId=${tenant.id}&path=/register`
-    : '#'
-  const memberCardUrl = tenant.liff_id
-    ? `${liffBaseUrl}?tenantId=${tenant.id}&path=/member-card`
-    : '#'
+  // LIFF deep-link format: https://liff.line.me/{liffId}/{path}
+  // LINE redirects to the endpoint URL with the same path appended
+  const liffBaseUrl = tenant.liff_id ? `https://liff.line.me/${tenant.liff_id}` : null
+  const registerUrl = liffBaseUrl ? `${liffBaseUrl}/register` : '#'
+  const memberCardUrl = liffBaseUrl ? `${liffBaseUrl}/member-card` : '#'
 
   return (
     <main className="min-h-screen bg-gray-50">

@@ -11,6 +11,7 @@ import {
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { pushTextMessage } from '@/lib/line-messaging'
 import type { CouponType } from '@/types/coupon'
 
 // ── PATCH /api/coupons ────────────────────────────────────────────────────────
@@ -219,6 +220,35 @@ export async function POST(req: NextRequest) {
         }
 
         const memberCoupon = await issueCoupon(auth.tenantId, memberId, couponId)
+
+        // 推播通知（fire-and-forget，失敗不影響主流程）
+        ;(async () => {
+          try {
+            const supabase = createSupabaseAdminClient()
+            const [{ data: mem }, { data: cpn }] = await Promise.all([
+              supabase
+                .from('members')
+                .select('line_uid')
+                .eq('id', memberId)
+                .eq('tenant_id', auth.tenantId)
+                .single(),
+              supabase
+                .from('coupons')
+                .select('name')
+                .eq('id', couponId)
+                .single(),
+            ])
+            if (mem?.line_uid && cpn?.name) {
+              await pushTextMessage(
+                mem.line_uid as string,
+                `🎟 您獲得了一張優惠券：${cpn.name as string}！`
+              )
+            }
+          } catch (err) {
+            console.error('[line-push] coupon notification failed:', err)
+          }
+        })()
+
         return NextResponse.json(memberCoupon, { status: 201 })
       }
 
