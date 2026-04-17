@@ -5,7 +5,8 @@
 // 安全設計：
 //   - 從 Authorization header 取 LINE ID Token
 //   - 呼叫 LINE 驗證 API 確認 token 合法，取出真實 lineUid（sub）
-//   - 不信任 query params 傳來的 lineUid
+//   - member lookup 限定在本 LIFF deployment 對應的 tenant（防跨租戶）
+//   - 不信任任何 query param
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -13,7 +14,16 @@ import { verifyLineIdToken, extractBearerToken } from '@/lib/line-auth'
 import type { Member } from '@/types/member'
 import type { Tenant } from '@/types/tenant'
 
+const LIFF_ID = (process.env.NEXT_PUBLIC_LIFF_ID ?? '').trim()
+
 export async function GET(req: NextRequest) {
+  if (!LIFF_ID) {
+    return NextResponse.json(
+      { error: 'Server configuration error: LIFF_ID not set' },
+      { status: 500 }
+    )
+  }
+
   // 1. 取出並驗證 LINE ID Token
   const token = extractBearerToken(req)
   if (!token) {
@@ -32,20 +42,30 @@ export async function GET(req: NextRequest) {
   try {
     const supabase = createSupabaseAdminClient()
 
-    // 查詢此 LINE 用戶的會員資料（取最新一筆）
+    // 2. 確認本 LIFF 對應的 tenant
+    const { data: liffTenant } = await supabase
+      .from('tenants')
+      .select('id')
+      .eq('liff_id', LIFF_ID)
+      .single()
+
+    if (!liffTenant) {
+      return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+    }
+
+    // 3. 查詢此 LINE 用戶在這個 tenant 的會員資料（tenant 限定，防跨租戶）
     const { data: member, error: memberError } = await supabase
       .from('members')
       .select('*')
       .eq('line_uid', lineUid)
-      .order('created_at', { ascending: false })
-      .limit(1)
+      .eq('tenant_id', liffTenant.id)
       .single()
 
     if (memberError || !member) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     }
 
-    // 查詢所屬 tenant — 不回傳敏感欄位
+    // 4. 查詢所屬 tenant（不回傳敏感欄位）
     const { data: tenant, error: tenantError } = await supabase
       .from('tenants')
       .select('id, name, slug, logo_url, primary_color, line_channel_id, liff_id, created_at')

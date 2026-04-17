@@ -1,46 +1,70 @@
 // 會員 API 路由
 
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  getMemberByLineUid,
-  getMembersByTenant,
-} from '@/repositories/memberRepository'
+import { getMembersByTenant } from '@/repositories/memberRepository'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { verifyLineIdToken, extractBearerToken } from '@/lib/line-auth'
+import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import type { Member } from '@/types/member'
 
 // .trim() 防止 env var 夾帶換行
 const LIFF_ID = (process.env.NEXT_PUBLIC_LIFF_ID ?? '').trim()
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = req.nextUrl
-  const lineUid = searchParams.get('lineUid')
-  const tenantId = searchParams.get('tenantId')
+// ── GET /api/members?tenantId=&lineUid= ──────────────────────────────────────
+// Dashboard 用：需要後台登入，只能查自己 tenant 的會員
 
-  if (!tenantId) {
-    return NextResponse.json({ error: 'tenantId is required' }, { status: 400 })
+export async function GET(req: NextRequest) {
+  const auth = await requireDashboardAuth()
+  if (!isDashboardAuth(auth)) return auth
+
+  const { searchParams } = req.nextUrl
+  const tenantId = searchParams.get('tenantId')
+  const lineUid = searchParams.get('lineUid')
+
+  // 只允許查詢自己 tenant
+  const resolvedTenantId = auth.tenantId
+  if (tenantId && tenantId !== resolvedTenantId) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  const supabase = createSupabaseAdminClient()
+
   if (lineUid) {
-    const member = await getMemberByLineUid(tenantId, lineUid)
+    const { data: member } = await supabase
+      .from('members')
+      .select('*')
+      .eq('tenant_id', resolvedTenantId)
+      .eq('line_uid', lineUid)
+      .single()
+
     if (!member) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     }
     return NextResponse.json(member)
   }
 
-  // List members by tenant
   const search = searchParams.get('search') ?? undefined
   const tier = searchParams.get('tier') ?? undefined
   const limit = searchParams.get('limit') ? Number(searchParams.get('limit')) : undefined
   const offset = searchParams.get('offset') ? Number(searchParams.get('offset')) : undefined
 
-  const result = await getMembersByTenant(tenantId, { search, tier, limit, offset })
+  const result = await getMembersByTenant(resolvedTenantId, { search, tier, limit, offset })
   return NextResponse.json(result)
 }
 
+// ── POST /api/members ─────────────────────────────────────────────────────────
+// LIFF 用：需要 LINE ID Token，lineUid 從驗證後的 token 取出
+
 export async function POST(req: NextRequest) {
-  // 1. 驗證 LINE ID Token，從中取出真實 lineUid
+  // 1. 驗證 LINE ID Token
+  if (!LIFF_ID) {
+    // LIFF_ID 未設定時直接 500，不允許靜默略過安全檢查
+    return NextResponse.json(
+      { error: 'Server configuration error: LIFF_ID not set' },
+      { status: 500 }
+    )
+  }
+
   const token = extractBearerToken(req)
   if (!token) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -49,7 +73,7 @@ export async function POST(req: NextRequest) {
   let lineUid: string
   try {
     const payload = await verifyLineIdToken(token)
-    lineUid = payload.sub // server 自己取，不信任 body 傳來的 lineUid
+    lineUid = payload.sub
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Invalid token'
     return NextResponse.json({ error: message }, { status: 401 })
@@ -63,19 +87,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'tenantId is required' }, { status: 400 })
     }
 
+    // ── Input validation ──────────────────────────────────────────────────────
+    if (!name || typeof name !== 'string' || name.trim().length < 1 || name.length > 100) {
+      return NextResponse.json({ error: '姓名不可為空且長度不超過 100 字' }, { status: 400 })
+    }
+    if (!phone || typeof phone !== 'string' || !/^[0-9+\-\s]{7,20}$/.test(phone.trim())) {
+      return NextResponse.json({ error: '手機號碼格式不正確' }, { status: 400 })
+    }
+    if (birthday && !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) {
+      return NextResponse.json({ error: '生日格式應為 YYYY-MM-DD' }, { status: 400 })
+    }
+
     const supabase = createSupabaseAdminClient()
 
     // 2. 驗證 tenantId 必須屬於本 LIFF 對應的 tenant
-    if (LIFF_ID) {
-      const { data: liffTenant } = await supabase
-        .from('tenants')
-        .select('id')
-        .eq('liff_id', LIFF_ID)
-        .single()
+    const { data: liffTenant } = await supabase
+      .from('tenants')
+      .select('id')
+      .eq('liff_id', LIFF_ID)
+      .single()
 
-      if (!liffTenant || liffTenant.id !== tenantId) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
+    if (!liffTenant || liffTenant.id !== tenantId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     // 3. 防止重複註冊
@@ -95,9 +128,9 @@ export async function POST(req: NextRequest) {
 
     const memberData: Omit<Member, 'id' | 'created_at'> = {
       tenant_id: tenantId,
-      line_uid: lineUid, // 來自 LINE 驗證，非 client body
-      name: name ?? null,
-      phone: phone ?? null,
+      line_uid: lineUid, // 來自驗證後的 token，不信任 client body
+      name: name.trim(),
+      phone: phone.trim(),
       birthday: birthday ?? null,
       tier: 'basic',
       points: 0,

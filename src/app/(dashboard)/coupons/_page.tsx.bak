@@ -1,4 +1,0 @@
-// This file is intentionally left without a page component.
-// The coupon management page has been moved to /dashboard/coupons
-// See: src/app/dashboard/coupons/page.tsx
-export {}

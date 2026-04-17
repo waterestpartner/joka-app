@@ -1,16 +1,17 @@
 # HANDOFF.md — AI 交接記錄
 
 > 給下一個接手的 AI 看。說明目前完成了什麼、還缺什麼、以及下一步該做什麼。
-> 最後更新：2026-04-16
+> 最後更新：2026-04-17
 
 ---
 
 ## 專案概述
 
-**專案名稱**：JOKA — LINE LIFF 白牌會員管理系統  
-**架構**：Next.js 15 App Router + TypeScript + Supabase + LINE LIFF  
-**專案路徑**：`/Users/user/Documents/videcoding/joka/joka-app/`  
+**專案名稱**：JOKA — LINE LIFF 白牌會員管理系統
+**架構**：Next.js App Router + TypeScript + Supabase + LINE LIFF
+**專案路徑**：`/Users/user/Documents/videcoding/joka/joka-app/`
 **詳細規格**：請讀 `CLAUDE.md`（專案根目錄）
+**安全架構**：請讀 `docs/security-model.md`
 
 ---
 
@@ -20,19 +21,13 @@
 
 | 項目 | 狀態 | 備註 |
 |------|------|------|
-| Next.js 專案初始化 | ✅ 完成 | `joka-app/` 目錄，依賴已安裝 |
-| `.env.local` 建立 | ✅ 完成 | 真實 key 已填入 |
-| Supabase 專案建立 | ✅ 完成 | 見下方連線資訊 |
-| LINE LIFF 建立 | ✅ 完成 | LIFF ID 已設定 |
-| LINE Messaging API 設定 | ✅ 完成 | Channel Secret / Token 已設定 |
-
-### ❌ 尚未完成
-
-| 項目 | 狀態 | 說明 |
-|------|------|------|
-| Supabase 資料庫 Schema | ❌ 未執行 | SQL 已備好，使用者尚未在 Supabase 執行 |
-| 第一筆 tenant 資料 | ❌ 未建立 | 等 Schema 執行完才能做 |
-| 所有 src 檔案實作 | ❌ 空白 | 結構已建立，內容都是 placeholder 註解 |
+| Next.js 專案初始化 | ✅ | `joka-app/` 目錄，依賴已安裝 |
+| `.env.local` 建立 | ✅ | 真實 key 已填入 |
+| Supabase 專案建立 | ✅ | 資料庫 Schema 已執行 |
+| LINE LIFF 建立 | ✅ | LIFF ID 已設定，Channel 已 Published |
+| LINE Messaging API 設定 | ✅ | Channel Secret / Token 已設定 |
+| Vercel 部署 | ✅ | main branch 自動 deploy |
+| 所有頁面實作 | ✅ | LIFF + Dashboard 全部完成 |
 
 ---
 
@@ -44,104 +39,73 @@
 Supabase URL    : https://diyfqyhhzdeoqcklprcz.supabase.co
 Supabase Ref ID : diyfqyhhzdeoqcklprcz
 LINE LIFF ID    : 2009815478-cInFjOQe
+LIFF URL        : https://liff.line.me/2009815478-cInFjOQe
 ```
 
 ---
 
-## 資料庫狀態
+## 安全架構（重要！）
 
-**目前：空的，一張表都沒有。**
+### 兩套 Auth 系統並存
 
-需要在 Supabase Dashboard → SQL Editor 執行以下 SQL（按順序）：
+| 使用者 | 驗證方式 | Supabase Client |
+|--------|----------|-----------------|
+| Dashboard 管理者 | Supabase Auth（email/password）+ cookie session | `createSupabaseServerClient()` |
+| LIFF 會員（LINE） | LINE ID Token（JWT），Server 端打 LINE API 驗證 | `createSupabaseAdminClient()` |
 
-1. 建立所有資料表（tenants → tenant_users → members → point_transactions → coupons → member_coupons → tier_settings）
-2. 對每張表啟用 RLS
-3. 建立 RLS Policy
-4. 最後建立 `get_tenant_id_for_user()` function（必須在 tenant_users 存在後才能建）
+### 關鍵原則
+1. **LIFF 路由**：一律用 `createSupabaseAdminClient()`（service role），RLS 不適用
+2. **lineUid 只從 token 取**：`verifyLineIdToken(token).sub`，不信任 body/query
+3. **Dashboard 路由**：一律用 `requireDashboardAuth()` helper 驗身分，詳見 `src/lib/auth-helpers.ts`
+4. **tenantId 必須驗證**：LIFF 的 tenantId 反查 LIFF_ID；Dashboard 從 session 取，不接受 body 傳來的值
 
-**完整 SQL 在哪裡**：詢問使用者，或根據 `CLAUDE.md` 的資料庫結構章節重新產生。
+---
 
-建立順序很重要（有 foreign key 依賴）：
+## 重要檔案清單
+
+### 核心 lib
 ```
-tenants → tenant_users → members → point_transactions → coupons → member_coupons → tier_settings
+src/lib/supabase-server.ts   — Dashboard 用（anon + cookie session）
+src/lib/supabase-admin.ts    — LIFF 用（service role，繞過 RLS）
+src/lib/auth-helpers.ts      — requireDashboardAuth()：Dashboard 路由統一 auth helper
+src/lib/line-auth.ts         — verifyLineIdToken()、extractBearerToken()
+src/lib/liff.ts              — LIFF SDK 初始化、getIDToken()
 ```
 
-function `get_tenant_id_for_user()` 必須最後建立。
+### API 路由安全一覽
+```
+GET  /api/tenants?liffId=    — 公開（僅回傳最小欄位）
+GET  /api/tenants?slug=/id=  — Dashboard auth required
+PATCH /api/tenants           — Dashboard auth + tenant ownership
+GET  /api/members            — Dashboard auth required
+POST /api/members            — LINE ID Token（LIFF 註冊）
+GET  /api/members/me         — LINE ID Token（LIFF 查自己）
+DELETE /api/members/[id]     — Dashboard auth + tenant ownership
+GET  /api/points             — Token（LIFF）或 Dashboard auth
+POST /api/points             — Dashboard auth（補點）
+GET  /api/coupons            — Token（LIFF）或 Dashboard auth
+POST /api/coupons create     — Dashboard auth
+POST /api/coupons issue      — Dashboard auth
+POST /api/coupons redeem     — LINE ID Token + ownership check
+```
 
 ---
 
-## 程式碼狀態
+## Supabase RLS 政策
 
-### 檔案結構已建立，但內容都是空的 placeholder
+RLS 政策 SQL 在 `supabase/rls-policies.sql`，若尚未執行，請在 Supabase Dashboard → SQL Editor 執行。
 
-以下檔案只有一行註解，**需要實作**：
-
-#### `src/lib/`
-- `supabase.ts` — 需要實作 Supabase client（browser + server 兩個版本）
-- `liff.ts` — 需要實作 LIFF 初始化
-- `utils.ts` — 工具函式（目前不急）
-
-#### `src/types/`
-- `member.ts` — Member, PointTransaction 型別
-- `coupon.ts` — Coupon, MemberCoupon 型別
-- `tenant.ts` — Tenant, TenantUser, TierSetting 型別
-
-#### `src/repositories/`
-- `memberRepository.ts` — getMemberByLineUid, createMember, updateMember, getMembersByTenant
-- `couponRepository.ts` — getCouponsByTenant, createCoupon, getMemberCoupons, issueCoupon, redeemCoupon
-- `pointRepository.ts` — getPointsByMember, addPointTransaction（只能 INSERT）
-- `tenantRepository.ts` — getTenantBySlug, getTenantById, updateTenant
-
-#### `src/hooks/`
-- `useLiff.ts` — LIFF 狀態（isReady, profile, lineUid）
-- `useTenant.ts` — 當前 tenant 資訊
-
-#### `src/components/`
-- `liff/MemberCard.tsx` — 會員卡 UI（顯示等級、點數、QR Code）
-- `liff/QrCodeDisplay.tsx` — QR Code 顯示元件
-- `dashboard/MemberTable.tsx` — 後台會員列表
-- `dashboard/PointScanner.tsx` — 掃碼集點介面（平板用）
-- `ui/` — 完全空白，需要建立 Button, Card, Input 等基礎元件
-
-#### `src/app/` 頁面（全部是 placeholder）
-- `(liff)/layout.tsx` — 需要加入 LIFF 初始化邏輯
-- `(liff)/member-card/page.tsx`
-- `(liff)/points/page.tsx`
-- `(liff)/coupons/page.tsx`
-- `(liff)/register/page.tsx`
-- `(dashboard)/layout.tsx` — 需要加入登入驗證
-- `(dashboard)/login/page.tsx` — Email 登入表單
-- `(dashboard)/overview/page.tsx`
-- `(dashboard)/members/page.tsx`
-- `(dashboard)/coupons/page.tsx`
-- `(dashboard)/settings/page.tsx`
-- `p/[slug]/page.tsx` — 品牌落地頁
-- `api/members/route.ts`
-- `api/points/route.ts`
-- `api/coupons/route.ts`
-- `api/line-webhook/route.ts`
+**重要**：`point_transactions` 沒有 UPDATE/DELETE 政策 — 資料庫層面不可修改點數紀錄。
 
 ---
 
-## 建議的下一步順序
+## 已知待解事項
 
-1. **使用者先在 Supabase 執行 Schema SQL**（沒有這步，後面全卡住）
-2. 實作 `src/lib/supabase.ts`（建立 browser client 和 server client）
-3. 實作 `src/types/`（所有 TypeScript 型別）
-4. 實作 `src/repositories/`（從 tenantRepository 開始）
-5. 實作後台登入（`/dashboard/login`）+ Supabase Auth 整合
-6. 實作 `useLiff.ts` + LIFF layout 初始化
-7. 依序實作各頁面
-
----
-
-## 架構原則（必讀，不可違反）
-
-1. **所有 DB 操作只能在 `src/repositories/`**，頁面不直接呼叫 Supabase
-2. **LIFF 相關必須是 `'use client'`**，Server Component 沒有 `window`
-3. **每張資料表都有 `tenant_id`**，RLS 強制隔離
-4. **`point_transactions` 只能 INSERT**，不能 UPDATE/DELETE
-5. **`SUPABASE_SERVICE_ROLE_KEY` 只能在 server 端用**，不可加 `NEXT_PUBLIC_`
+| 項目 | 優先度 | 說明 |
+|------|--------|------|
+| LINE Webhook 多租戶路由 | 中 | 目前 webhook 使用單一 `LINE_CHANNEL_SECRET`，多租戶場景需改為依 tenant 查對應 secret |
+| LINE Token 快取 | 低 | 同一 token 短時間內重複打 LINE verify API，未來可加 5 分鐘快取優化效能 |
+| Dashboard 操作 log | 中 | 目前刪除會員等操作沒有 audit log |
 
 ---
 
@@ -161,10 +125,11 @@ function `get_tenant_id_for_user()` 必須最後建立。
 
 ---
 
-## 給接手 AI 的提示
+## 架構原則（不可違反）
 
-- 讀 `CLAUDE.md` 了解完整規格與資料夾結構
-- 讀這份 `HANDOFF.md` 了解目前進度
-- **不要**直接在頁面裡呼叫 Supabase，一律通過 repository
-- Supabase SSR 套件需要區分 browser client（`createBrowserClient`）和 server client（`createServerClient`）
-- 如果使用者還沒執行 Schema SQL，先催他做，否則一切都跑不起來
+1. **所有 DB 操作只能在 server-side（API routes / repositories）**，前台不直接呼叫 Supabase
+2. **LIFF 相關必須是 `'use client'`**，Server Component 沒有 `window`
+3. **每張資料表都有 `tenant_id`**，永遠帶入 tenant 條件查詢
+4. **`point_transactions` 只能 INSERT**，不能 UPDATE/DELETE
+5. **`SUPABASE_SERVICE_ROLE_KEY` 只能在 server 端**，不可加 `NEXT_PUBLIC_`
+6. **lineUid 只從驗證後的 LINE token 取**，不信任任何 client 傳來的值

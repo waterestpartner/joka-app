@@ -5,21 +5,29 @@ import {
   getPointsByMember,
   addPointTransaction,
 } from '@/repositories/pointRepository'
-import { getMemberByLineUid, getMemberById } from '@/repositories/memberRepository'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { verifyLineIdToken, extractBearerToken } from '@/lib/line-auth'
+import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import type { PointTransactionType } from '@/types/member'
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = req.nextUrl
-  const tenantId = searchParams.get('tenantId')
-  const memberId = searchParams.get('memberId')
+const LIFF_ID = (process.env.NEXT_PUBLIC_LIFF_ID ?? '').trim()
 
-  // LIFF 呼叫：使用 Authorization header 的 LINE ID Token
+// ── GET /api/points ───────────────────────────────────────────────────────────
+// LIFF：Authorization: Bearer <token>
+// Dashboard：?tenantId=&memberId=（需後台登入）
+
+export async function GET(req: NextRequest) {
   const token = extractBearerToken(req)
 
   if (token) {
-    // LIFF path — 驗 token 取出 lineUid，只能查自己的點數
+    // LIFF path
+    if (!LIFF_ID) {
+      return NextResponse.json(
+        { error: 'Server configuration error: LIFF_ID not set' },
+        { status: 500 }
+      )
+    }
+
     let lineUid: string
     try {
       const payload = await verifyLineIdToken(token)
@@ -31,12 +39,23 @@ export async function GET(req: NextRequest) {
 
     try {
       const supabase = createSupabaseAdminClient()
+
+      // 確認本 LIFF 對應的 tenant，防止跨租戶
+      const { data: liffTenant } = await supabase
+        .from('tenants')
+        .select('id')
+        .eq('liff_id', LIFF_ID)
+        .single()
+
+      if (!liffTenant) {
+        return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+      }
+
       const { data: member } = await supabase
         .from('members')
         .select('id, tenant_id, points')
         .eq('line_uid', lineUid)
-        .order('created_at', { ascending: false })
-        .limit(1)
+        .eq('tenant_id', liffTenant.id) // tenant 限定
         .single()
 
       if (!member) {
@@ -57,21 +76,37 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Dashboard / server-to-server path — 使用 tenantId + memberId query params
-  if (!tenantId || !memberId) {
-    return NextResponse.json(
-      { error: 'tenantId and memberId are required (or use Authorization header)' },
-      { status: 400 }
-    )
+  // Dashboard path
+  const auth = await requireDashboardAuth()
+  if (!isDashboardAuth(auth)) return auth
+
+  const { searchParams } = req.nextUrl
+  const memberId = searchParams.get('memberId')
+  const tenantId = searchParams.get('tenantId')
+
+  if (!memberId) {
+    return NextResponse.json({ error: 'memberId is required' }, { status: 400 })
+  }
+
+  // 只允許查詢自己 tenant
+  if (tenantId && tenantId !== auth.tenantId) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   try {
-    const member = await getMemberById(tenantId, memberId)
+    const supabase = createSupabaseAdminClient()
+    const { data: member } = await supabase
+      .from('members')
+      .select('id, points')
+      .eq('id', memberId)
+      .eq('tenant_id', auth.tenantId)
+      .single()
+
     if (!member) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     }
 
-    const points = await getPointsByMember(tenantId, memberId)
+    const points = await getPointsByMember(auth.tenantId, memberId)
     return NextResponse.json({ points, member: { points: member.points } })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error'
@@ -79,16 +114,27 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// ── POST /api/points ──────────────────────────────────────────────────────────
+// Dashboard 用：需要後台登入，只能操作自己 tenant 的會員點數
+
 export async function POST(req: NextRequest) {
+  const auth = await requireDashboardAuth()
+  if (!isDashboardAuth(auth)) return auth
+
   try {
     const body = await req.json()
-    const { tenantId, memberId, type, amount, note } = body
+    const { memberId, type, amount, note, tenantId } = body
 
-    if (!tenantId || !memberId || !type || amount === undefined) {
+    if (!memberId || !type || amount === undefined) {
       return NextResponse.json(
-        { error: 'tenantId, memberId, type, and amount are required' },
+        { error: 'memberId, type, and amount are required' },
         { status: 400 }
       )
+    }
+
+    // 禁止指定其他 tenant
+    if (tenantId && tenantId !== auth.tenantId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const validTypes: PointTransactionType[] = ['earn', 'spend', 'expire', 'manual']
@@ -96,11 +142,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid transaction type' }, { status: 400 })
     }
 
+    // amount 數值驗證：必須是有限數、非零、不超過合理範圍
+    const numAmount = Number(amount)
+    if (!Number.isFinite(numAmount) || numAmount === 0 || Math.abs(numAmount) > 1_000_000) {
+      return NextResponse.json(
+        { error: 'Invalid amount: must be a finite non-zero number ≤ 1,000,000' },
+        { status: 400 }
+      )
+    }
+
+    // 確認 member 屬於此 tenant（ownership check）
+    const supabase = createSupabaseAdminClient()
+    const { data: member } = await supabase
+      .from('members')
+      .select('id')
+      .eq('id', memberId)
+      .eq('tenant_id', auth.tenantId)
+      .single()
+
+    if (!member) {
+      return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+    }
+
     const transaction = await addPointTransaction({
-      tenant_id: tenantId,
+      tenant_id: auth.tenantId,
       member_id: memberId,
       type: type as PointTransactionType,
-      amount: Number(amount),
+      amount: numAmount,
       note: note ?? null,
     })
 

@@ -8,21 +8,29 @@ import {
   issueCoupon,
   redeemCoupon,
 } from '@/repositories/couponRepository'
-import { getMemberByLineUid } from '@/repositories/memberRepository'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { verifyLineIdToken, extractBearerToken } from '@/lib/line-auth'
+import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import type { CouponType } from '@/types/coupon'
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = req.nextUrl
-  const tenantId = searchParams.get('tenantId')
-  const memberId = searchParams.get('memberId')
+const LIFF_ID = (process.env.NEXT_PUBLIC_LIFF_ID ?? '').trim()
 
-  // LIFF 呼叫：使用 Authorization header 的 LINE ID Token
+// ── GET /api/coupons ──────────────────────────────────────────────────────────
+// LIFF：Authorization: Bearer <token>（查自己的優惠券）
+// Dashboard：?tenantId=（需後台登入）
+
+export async function GET(req: NextRequest) {
   const token = extractBearerToken(req)
 
   if (token) {
-    // LIFF path — 驗 token 取出 lineUid，只能查自己的優惠券
+    // LIFF path
+    if (!LIFF_ID) {
+      return NextResponse.json(
+        { error: 'Server configuration error: LIFF_ID not set' },
+        { status: 500 }
+      )
+    }
+
     let lineUid: string
     try {
       const payload = await verifyLineIdToken(token)
@@ -34,17 +42,29 @@ export async function GET(req: NextRequest) {
 
     try {
       const supabase = createSupabaseAdminClient()
+
+      // 確認本 LIFF 對應的 tenant，防止跨租戶
+      const { data: liffTenant } = await supabase
+        .from('tenants')
+        .select('id')
+        .eq('liff_id', LIFF_ID)
+        .single()
+
+      if (!liffTenant) {
+        return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+      }
+
       const { data: member } = await supabase
         .from('members')
         .select('id, tenant_id')
         .eq('line_uid', lineUid)
-        .order('created_at', { ascending: false })
-        .limit(1)
+        .eq('tenant_id', liffTenant.id) // tenant 限定
         .single()
 
       if (!member) {
         return NextResponse.json({ error: 'Member not found' }, { status: 404 })
       }
+
       const coupons = await getMemberCoupons(
         member.tenant_id as string,
         member.id as string
@@ -56,31 +76,38 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Dashboard / server-to-server path — 使用 tenantId query param
-  if (!tenantId) {
-    return NextResponse.json(
-      { error: 'tenantId is required (or use Authorization header)' },
-      { status: 400 }
-    )
+  // Dashboard path
+  const auth = await requireDashboardAuth()
+  if (!isDashboardAuth(auth)) return auth
+
+  const { searchParams } = req.nextUrl
+  const memberId = searchParams.get('memberId')
+  const tenantId = searchParams.get('tenantId')
+
+  // 只允許查詢自己的 tenant
+  if (tenantId && tenantId !== auth.tenantId) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   try {
-    // Member coupons via memberId
     if (memberId) {
       const status = searchParams.get('status') ?? undefined
-      const coupons = await getMemberCoupons(tenantId, memberId, status)
+      const coupons = await getMemberCoupons(auth.tenantId, memberId, status)
       return NextResponse.json({ coupons })
     }
 
-    // All tenant coupons
     const activeOnly = searchParams.get('activeOnly') === 'true'
-    const coupons = await getCouponsByTenant(tenantId, activeOnly)
+    const coupons = await getCouponsByTenant(auth.tenantId, activeOnly)
     return NextResponse.json({ coupons })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error'
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
+
+// ── POST /api/coupons ─────────────────────────────────────────────────────────
+// create / issue：Dashboard 用（需後台登入）
+// redeem：LIFF 用（需 LINE ID Token + ownership check）
 
 export async function POST(req: NextRequest) {
   try {
@@ -93,15 +120,26 @@ export async function POST(req: NextRequest) {
 
     switch (action) {
       case 'create': {
-        const { tenantId, name, type, value, targetTier, expireAt } = body
-        if (!tenantId || !name || !type || value === undefined) {
+        // Dashboard only
+        const auth = await requireDashboardAuth()
+        if (!isDashboardAuth(auth)) return auth
+
+        const { name, type, value, targetTier, expireAt, tenantId } = body
+
+        if (!name || !type || value === undefined) {
           return NextResponse.json(
-            { error: 'tenantId, name, type, and value are required' },
+            { error: 'name, type, and value are required' },
             { status: 400 }
           )
         }
+
+        // 只允許在自己的 tenant 建立
+        if (tenantId && tenantId !== auth.tenantId) {
+          return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        }
+
         const coupon = await createCoupon({
-          tenant_id: tenantId,
+          tenant_id: auth.tenantId,
           name,
           type: type as CouponType,
           value: Number(value),
@@ -113,19 +151,32 @@ export async function POST(req: NextRequest) {
       }
 
       case 'issue': {
-        const { tenantId, memberId, couponId } = body
-        if (!tenantId || !memberId || !couponId) {
+        // Dashboard only
+        const auth = await requireDashboardAuth()
+        if (!isDashboardAuth(auth)) return auth
+
+        const { memberId, couponId, tenantId } = body
+
+        if (!memberId || !couponId) {
           return NextResponse.json(
-            { error: 'tenantId, memberId, and couponId are required' },
+            { error: 'memberId and couponId are required' },
             { status: 400 }
           )
         }
-        const memberCoupon = await issueCoupon(tenantId, memberId, couponId)
+
+        // 只允許在自己的 tenant 發行
+        if (tenantId && tenantId !== auth.tenantId) {
+          return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        }
+
+        const memberCoupon = await issueCoupon(auth.tenantId, memberId, couponId)
         return NextResponse.json(memberCoupon, { status: 201 })
       }
 
       case 'redeem': {
+        // LIFF only — 驗 LINE ID Token + ownership check
         const { memberCouponId } = body
+
         if (!memberCouponId) {
           return NextResponse.json(
             { error: 'memberCouponId is required' },
@@ -133,7 +184,6 @@ export async function POST(req: NextRequest) {
           )
         }
 
-        // 驗 token，確認核銷者就是這張券的持有人
         const redeemToken = extractBearerToken(req)
         if (!redeemToken) {
           return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -150,7 +200,7 @@ export async function POST(req: NextRequest) {
 
         const supabase = createSupabaseAdminClient()
 
-        // 查這張券，同時確認 member.line_uid 符合已驗證的 lineUid
+        // 查這張券，同時 JOIN member 確認 line_uid（ownership check）
         const { data: couponRecord } = await supabase
           .from('member_coupons')
           .select('tenant_id, member:members!inner(line_uid)')
@@ -161,7 +211,6 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: 'Coupon not found' }, { status: 404 })
         }
 
-        // ownership check
         const memberData = couponRecord.member as
           | { line_uid: string }
           | { line_uid: string }[]
@@ -169,6 +218,7 @@ export async function POST(req: NextRequest) {
         const ownerUid = Array.isArray(memberData)
           ? memberData[0]?.line_uid
           : memberData?.line_uid
+
         if (ownerUid !== redeemLineUid) {
           return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
