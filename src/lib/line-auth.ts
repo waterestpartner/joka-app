@@ -70,19 +70,25 @@ export async function verifyLineAccessToken(
 }
 
 /**
- * 統一入口：自動判斷 token 類型並驗證，回傳 { sub: lineUid }。
+ * 統一入口：自動選擇正確的驗證方式，回傳 { sub: lineUid }。
  *
- * - 格式為 JWT（三段 base64，含 header.payload.sig）→ ID Token 驗證
- * - 其他格式 → Access Token 驗證
+ * 策略：先嘗試 ID Token 驗證（需 openid scope），
+ * 若 LINE 回傳錯誤（如 openid scope 未啟用、token 為 access token 格式）
+ * 則 fallback 至 Access Token 驗證（只需 profile scope）。
+ *
+ * 不依賴 regex 猜測 token 格式，因為 LINE access token 在某些版本下
+ * 也可能包含點號（.），導致誤判為 JWT。
  */
 export async function verifyLineToken(
   token: string
 ): Promise<Pick<LineTokenPayload, 'sub'>> {
-  const isJwt = /^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/.test(token)
-  if (isJwt) {
-    return verifyLineIdToken(token)
+  try {
+    return await verifyLineIdToken(token)
+  } catch {
+    // ID Token 驗證失敗（openid scope 未啟用、或 token 非 ID Token）
+    // fallback：以 Access Token 方式驗證
+    return verifyLineAccessToken(token)
   }
-  return verifyLineAccessToken(token)
 }
 
 /**

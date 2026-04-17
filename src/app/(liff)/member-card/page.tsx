@@ -52,7 +52,9 @@ export default function MemberCardPage() {
           return
         }
         if (!memberRes.ok) {
-          throw new Error('無法取得會員資料')
+          const errBody = await memberRes.json().catch(() => null)
+          const apiMsg = (errBody as { error?: string } | null)?.error
+          throw new Error(apiMsg ?? `HTTP ${memberRes.status} 無法取得會員資料`)
         }
         const json: MemberMeResponse = await memberRes.json()
         setData(json)
