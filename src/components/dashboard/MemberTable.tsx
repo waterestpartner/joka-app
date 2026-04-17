@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Member } from '@/types/member'
 import { formatDate, formatPoints, getTierDisplayName } from '@/lib/utils'
 
@@ -28,9 +29,35 @@ function TierBadge({ tier }: { tier: string }) {
 }
 
 export default function MemberTable({ members, onAddPoints, onViewMember }: Props) {
+  const router = useRouter()
   const [search, setSearch] = useState('')
+  const [localMembers, setLocalMembers] = useState<Member[]>(members)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const filtered = members.filter((m) => {
+  async function handleDelete(memberId: string, memberName: string | null) {
+    const displayName = memberName?.trim() || '此會員'
+    if (!window.confirm(`確定要刪除會員「${displayName}」？\n\n此操作無法復原，包含點數與優惠券紀錄都會一併刪除。`)) return
+
+    setDeletingId(memberId)
+    try {
+      const res = await fetch(`/api/members/${memberId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        alert(json.error ?? '刪除失敗，請稍後再試。')
+        return
+      }
+      // 從本地列表移除，不需要等 server refresh
+      setLocalMembers((prev) => prev.filter((m) => m.id !== memberId))
+      // 同步 server component 計數
+      router.refresh()
+    } catch {
+      alert('刪除時發生網路錯誤，請稍後再試。')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const filtered = localMembers.filter((m) => {
     if (!search.trim()) return true
     const q = search.toLowerCase()
     return (
@@ -67,7 +94,7 @@ export default function MemberTable({ members, onAddPoints, onViewMember }: Prop
           />
         </div>
         <span className="text-sm text-zinc-400">
-          {filtered.length} / {members.length} 位
+          {filtered.length} / {localMembers.length} 位
         </span>
       </div>
 
@@ -133,6 +160,13 @@ export default function MemberTable({ members, onAddPoints, onViewMember }: Prop
                         className="rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-100 hover:border-zinc-300 transition-colors"
                       >
                         詳情
+                      </button>
+                      <button
+                        onClick={() => handleDelete(member.id, member.name)}
+                        disabled={deletingId === member.id}
+                        className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 hover:border-red-300 transition-colors disabled:opacity-40 whitespace-nowrap"
+                      >
+                        {deletingId === member.id ? '刪除中…' : '刪除'}
                       </button>
                     </div>
                   </td>
