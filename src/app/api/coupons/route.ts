@@ -13,6 +13,55 @@ import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import type { CouponType } from '@/types/coupon'
 
+// ── PATCH /api/coupons ────────────────────────────────────────────────────────
+// Dashboard：更新優惠券（名稱、類型、折扣值、等級、到期日、啟停用）
+
+export async function PATCH(req: NextRequest) {
+  const auth = await requireDashboardAuth()
+  if (!isDashboardAuth(auth)) return auth
+
+  try {
+    const body = await req.json() as Record<string, unknown>
+    const { id, ...rawUpdates } = body
+
+    if (!id || typeof id !== 'string') {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 })
+    }
+
+    // Whitelist updatable fields to prevent mass-assignment
+    const ALLOWED = ['name', 'type', 'value', 'target_tier', 'expire_at', 'is_active'] as const
+    const safeUpdates: Record<string, unknown> = {}
+    for (const key of ALLOWED) {
+      if (key in rawUpdates) safeUpdates[key] = rawUpdates[key]
+    }
+
+    if (Object.keys(safeUpdates).length === 0) {
+      return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
+    }
+
+    const supabase = createSupabaseAdminClient()
+    const { data, error } = await supabase
+      .from('coupons')
+      .update(safeUpdates)
+      .eq('id', id)
+      .eq('tenant_id', auth.tenantId) // ownership check
+      .select()
+      .single()
+
+    if (error || !data) {
+      return NextResponse.json(
+        { error: 'Coupon not found or update failed' },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json(data)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Internal server error'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
 const LIFF_ID = (process.env.NEXT_PUBLIC_LIFF_ID ?? '').trim()
 
 // ── GET /api/coupons ──────────────────────────────────────────────────────────
