@@ -221,11 +221,11 @@ export async function POST(req: NextRequest) {
 
         const memberCoupon = await issueCoupon(auth.tenantId, memberId, couponId)
 
-        // 推播通知（fire-and-forget，失敗不影響主流程）
+        // 推播通知（fire-and-forget，用店家自己的 LINE@ token）
         ;(async () => {
           try {
             const supabase = createSupabaseAdminClient()
-            const [{ data: mem }, { data: cpn }] = await Promise.all([
+            const [{ data: mem }, { data: cpn }, { data: ten }] = await Promise.all([
               supabase
                 .from('members')
                 .select('line_uid')
@@ -237,11 +237,18 @@ export async function POST(req: NextRequest) {
                 .select('name')
                 .eq('id', couponId)
                 .single(),
+              supabase
+                .from('tenants')
+                .select('channel_access_token')
+                .eq('id', auth.tenantId)
+                .single(),
             ])
+            const channelToken = (ten?.channel_access_token as string) ?? ''
             if (mem?.line_uid && cpn?.name) {
               await pushTextMessage(
                 mem.line_uid as string,
-                `🎟 您獲得了一張優惠券：${cpn.name as string}！`
+                `🎟 您獲得了一張優惠券：${cpn.name as string}！`,
+                channelToken
               )
             }
           } catch (err) {

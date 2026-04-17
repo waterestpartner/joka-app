@@ -1,25 +1,25 @@
 // LINE Messaging API — 向指定 LINE 用戶推播文字訊息
 //
-// 需要在 Vercel 設定環境變數：
-//   LINE_CHANNEL_ACCESS_TOKEN  （來自 LINE Developers → Messaging API 頻道）
+// 每個租戶使用自己的 LINE Official Account（Messaging API channel）
+// 所需的 channel_access_token 儲存於 tenants.channel_access_token（DB）
 //
-// 注意：此 token 與 LIFF 使用的 LINE Login 頻道不同。
-//       會員必須已將 LINE Official Account 加為好友，否則推播會靜默失敗。
-//
-// 若環境變數未設定，所有推播會靜默跳過，不影響主要業務邏輯。
+// 會員必須已將該店家的 LINE Official Account 加為好友，否則推播靜默失敗。
 
 /**
  * 推播文字訊息給單一 LINE 用戶。
+ * @param lineUserId  目標用戶的 LINE UID
+ * @param text        訊息內容
+ * @param channelAccessToken  租戶自己的 LINE Messaging API Channel Access Token
+ *
  * 失敗時只記錄 console.error，不拋出例外，不阻斷呼叫端流程。
  */
 export async function pushTextMessage(
   lineUserId: string,
-  text: string
+  text: string,
+  channelAccessToken: string
 ): Promise<void> {
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
-
-  if (!token) {
-    // 環境變數未設定 → 靜默跳過（不阻斷業務流程）
+  if (!channelAccessToken) {
+    // 店家尚未設定自己的 Channel Access Token → 靜默跳過
     return
   }
 
@@ -33,7 +33,7 @@ export async function pushTextMessage(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${channelAccessToken}`,
       },
       body: JSON.stringify({
         to: lineUserId,

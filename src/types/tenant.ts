@@ -10,6 +10,7 @@ export interface Tenant {
   primary_color: string
   line_channel_id: string | null
   line_channel_secret: string | null
+  channel_access_token: string | null   // 店家自己的 LINE Messaging API token（推播用）
   liff_id: string | null
   created_at: string
 }

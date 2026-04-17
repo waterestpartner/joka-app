@@ -158,14 +158,21 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // 確認 member 屬於此 tenant（ownership check），同時取得 line_uid 與目前點數供推播用
+    // 確認 member 屬於此 tenant，同時取得 tenant 的 channel_access_token 供推播用
     const supabase = createSupabaseAdminClient()
-    const { data: member } = await supabase
-      .from('members')
-      .select('id, line_uid, points')
-      .eq('id', memberId)
-      .eq('tenant_id', auth.tenantId)
-      .single()
+    const [{ data: member }, { data: tenant }] = await Promise.all([
+      supabase
+        .from('members')
+        .select('id, line_uid, points')
+        .eq('id', memberId)
+        .eq('tenant_id', auth.tenantId)
+        .single(),
+      supabase
+        .from('tenants')
+        .select('channel_access_token')
+        .eq('id', auth.tenantId)
+        .single(),
+    ])
 
     if (!member) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 })
@@ -179,7 +186,7 @@ export async function POST(req: NextRequest) {
       note: note ?? null,
     })
 
-    // 推播通知（fire-and-forget，失敗不影響主流程）
+    // 推播通知（fire-and-forget，用店家自己的 LINE@ token）
     const lineUid = member.line_uid as string
     const currentPoints = member.points as number
     const newTotal = Math.max(0, currentPoints + numAmount)
@@ -187,7 +194,8 @@ export async function POST(req: NextRequest) {
       numAmount > 0
         ? `感謝消費！您獲得了 ${numAmount} 點，目前累積 ${newTotal} 點 🎉`
         : `您的點數已調整 ${numAmount} 點，目前累積 ${newTotal} 點。`
-    pushTextMessage(lineUid, pushText).catch((err) =>
+    const channelToken = (tenant?.channel_access_token as string) ?? ''
+    pushTextMessage(lineUid, pushText, channelToken).catch((err) =>
       console.error('[line-push] points notification failed:', err)
     )
 

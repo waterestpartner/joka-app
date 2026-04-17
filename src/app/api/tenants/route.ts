@@ -10,13 +10,14 @@ import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import type { Tenant } from '@/types/tenant'
 
-// 回傳給 Dashboard 的 tenant（去除 channel secret）
+// 回傳給 Dashboard 的 tenant（去除所有敏感 token）
+// channel_access_token 改為回傳 boolean flag，讓前端顯示「已設定 / 未設定」
 function sanitizeTenant(
   tenant: Tenant
-): Omit<Tenant, 'line_channel_secret'> {
+): Omit<Tenant, 'line_channel_secret' | 'channel_access_token'> & { channel_access_token_set: boolean } {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { line_channel_secret, ...safe } = tenant
-  return safe
+  const { line_channel_secret, channel_access_token, ...safe } = tenant
+  return { ...safe, channel_access_token_set: !!channel_access_token }
 }
 
 // 回傳給 LIFF bootstrap 的最小欄位（公開可讀，不含任何 channel 資訊）
@@ -28,11 +29,18 @@ export async function GET(req: NextRequest) {
   const id = searchParams.get('id')
   const liffId = searchParams.get('liffId')
 
+  // 無參數 → Dashboard 品牌設定頁使用：回傳登入者自己的 tenant
   if (!slug && !id && !liffId) {
-    return NextResponse.json(
-      { error: 'slug, id, or liffId is required' },
-      { status: 400 }
-    )
+    const auth = await requireDashboardAuth()
+    if (!isDashboardAuth(auth)) return auth
+    try {
+      const tenant = await getTenantById(auth.tenantId)
+      if (!tenant) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+      return NextResponse.json(sanitizeTenant(tenant))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Internal server error'
+      return NextResponse.json({ error: message }, { status: 500 })
+    }
   }
 
   try {
@@ -97,8 +105,9 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // 禁止透過此 API 修改敏感欄位
+    // 禁止修改以下欄位（只能透過專門流程變更）
     delete updateFields.line_channel_secret
+    // channel_access_token 允許由管理者在品牌設定頁更新
 
     const updated = await updateTenant(id, updateFields as Partial<Tenant>)
 
