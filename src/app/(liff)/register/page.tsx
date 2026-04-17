@@ -11,7 +11,7 @@ export default function RegisterPage() {
   const searchParams = useSearchParams()
   const tenantId = searchParams.get('tenantId') ?? ''
 
-  const { isReady, lineUid, profile } = useLiff()
+  const { isReady, idToken, profile } = useLiff()
 
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -29,17 +29,20 @@ export default function RegisterPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!lineUid) return
+    if (!idToken) return
 
     setSubmitting(true)
     setSubmitError(null)
 
     try {
+      // lineUid は server 側で token から取得するため、body には含めない
       const res = await fetch('/api/members', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
         body: JSON.stringify({
-          lineUid,
           name,
           phone,
           birthday: birthday || null,
@@ -143,7 +146,7 @@ export default function RegisterPage() {
 
         <button
           type="submit"
-          disabled={submitting || !lineUid}
+          disabled={submitting || !idToken}
           className="mt-2 w-full rounded-xl bg-green-500 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-60 active:bg-green-600"
         >
           {submitting ? '送出中…' : '加入會員'}

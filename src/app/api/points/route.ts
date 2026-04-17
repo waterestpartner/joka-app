@@ -7,75 +7,71 @@ import {
 } from '@/repositories/pointRepository'
 import { getMemberByLineUid, getMemberById } from '@/repositories/memberRepository'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
+import { verifyLineIdToken, extractBearerToken } from '@/lib/line-auth'
 import type { PointTransactionType } from '@/types/member'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const tenantId = searchParams.get('tenantId')
   const memberId = searchParams.get('memberId')
-  const lineUid = searchParams.get('lineUid')
 
-  if (!tenantId && !lineUid && !memberId) {
+  // LIFF 呼叫：使用 Authorization header 的 LINE ID Token
+  const token = extractBearerToken(req)
+
+  if (token) {
+    // LIFF path — 驗 token 取出 lineUid，只能查自己的點數
+    let lineUid: string
+    try {
+      const payload = await verifyLineIdToken(token)
+      lineUid = payload.sub
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Invalid token'
+      return NextResponse.json({ error: message }, { status: 401 })
+    }
+
+    try {
+      const supabase = createSupabaseAdminClient()
+      const { data: member } = await supabase
+        .from('members')
+        .select('id, tenant_id, points')
+        .eq('line_uid', lineUid)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (!member) {
+        return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+      }
+
+      const points = await getPointsByMember(
+        member.tenant_id as string,
+        member.id as string
+      )
+      return NextResponse.json({
+        points,
+        member: { points: member.points as number },
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Internal server error'
+      return NextResponse.json({ error: message }, { status: 500 })
+    }
+  }
+
+  // Dashboard / server-to-server path — 使用 tenantId + memberId query params
+  if (!tenantId || !memberId) {
     return NextResponse.json(
-      { error: 'tenantId and (memberId or lineUid) are required' },
+      { error: 'tenantId and memberId are required (or use Authorization header)' },
       { status: 400 }
     )
   }
 
   try {
-    let resolvedMemberId = memberId
-    let resolvedTenantId = tenantId
-
-    if (lineUid) {
-      // lineUid provided — need tenantId to look up member, or search across tenants
-      if (!tenantId) {
-        // Fallback: find member by lineUid without tenantId
-        // Admin client needed — LIFF users have no Supabase session (RLS blocks anon reads)
-        const supabase = createSupabaseAdminClient()
-        const { data: member } = await supabase
-          .from('members')
-          .select('id, tenant_id, points')
-          .eq('line_uid', lineUid)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single()
-
-        if (!member) {
-          return NextResponse.json({ error: 'Member not found' }, { status: 404 })
-        }
-        resolvedMemberId = member.id
-        resolvedTenantId = member.tenant_id
-
-        const points = await getPointsByMember(resolvedTenantId!, resolvedMemberId!)
-        return NextResponse.json({
-          points,
-          member: { points: member.points as number },
-        })
-      }
-
-      const member = await getMemberByLineUid(tenantId, lineUid)
-      if (!member) {
-        return NextResponse.json({ error: 'Member not found' }, { status: 404 })
-      }
-      resolvedMemberId = member.id
-
-      const points = await getPointsByMember(tenantId, resolvedMemberId)
-      return NextResponse.json({ points, member: { points: member.points } })
-    }
-
-    if (!resolvedTenantId || !resolvedMemberId) {
-      return NextResponse.json(
-        { error: 'tenantId and memberId are required' },
-        { status: 400 }
-      )
-    }
-
-    const member = await getMemberById(resolvedTenantId, resolvedMemberId)
+    const member = await getMemberById(tenantId, memberId)
     if (!member) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     }
 
-    const points = await getPointsByMember(resolvedTenantId, resolvedMemberId)
+    const points = await getPointsByMember(tenantId, memberId)
     return NextResponse.json({ points, member: { points: member.points } })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error'

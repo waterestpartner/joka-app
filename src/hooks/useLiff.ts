@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import {
   initializeLiff,
   getLiffProfile,
+  getLiffIdToken,
   isLiffLoggedIn,
   liffLogin,
 } from '@/lib/liff'
@@ -22,12 +23,15 @@ interface UseLiffReturn {
   profile: LiffProfile | null
   error: string | null
   lineUid: string | null
+  /** LINE ID Token (JWT)。透過 Authorization: Bearer 傳給 API 進行身分驗證。 */
+  idToken: string | null
 }
 
 export function useLiff(): UseLiffReturn {
   const [isReady, setIsReady] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [profile, setProfile] = useState<LiffProfile | null>(null)
+  const [idToken, setIdToken] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -47,6 +51,9 @@ export function useLiff(): UseLiffReturn {
           liffLogin()
           return
         }
+
+        // getIDToken() is synchronous and available right after init+login
+        setIdToken(getLiffIdToken())
 
         const userProfile = await getLiffProfile()
         if (cancelled) return
@@ -75,5 +82,6 @@ export function useLiff(): UseLiffReturn {
     profile,
     error,
     lineUid: profile?.userId ?? null,
+    idToken,
   }
 }

@@ -92,3 +92,16 @@ export function isInLineClient(): boolean {
     return false
   }
 }
+
+/**
+ * Returns the LINE ID Token (JWT) for the currently logged-in user.
+ * Returns null if the user is not logged in or the token is unavailable.
+ * Use this token in API requests as `Authorization: Bearer <token>`.
+ */
+export function getLiffIdToken(): string | null {
+  try {
+    return liff.getIDToken()
+  } catch {
+    return null
+  }
+}

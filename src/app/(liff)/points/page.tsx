@@ -20,7 +20,7 @@ interface PointsResponse {
 }
 
 export default function PointsPage() {
-  const { isReady, lineUid } = useLiff()
+  const { isReady, idToken } = useLiff()
 
   const [totalPoints, setTotalPoints] = useState(0)
   const [transactions, setTransactions] = useState<PointTransaction[]>([])
@@ -28,11 +28,13 @@ export default function PointsPage() {
   const [fetchError, setFetchError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!isReady || !lineUid) return
+    if (!isReady || !idToken) return
 
     async function fetchPoints() {
       try {
-        const res = await fetch(`/api/points?lineUid=${lineUid}`)
+        const res = await fetch('/api/points', {
+          headers: { Authorization: `Bearer ${idToken}` },
+        })
         if (!res.ok) throw new Error('無法取得點數記錄')
         const json: PointsResponse = await res.json()
         setTotalPoints(json.member.points)
@@ -45,7 +47,7 @@ export default function PointsPage() {
     }
 
     fetchPoints()
-  }, [isReady, lineUid])
+  }, [isReady, idToken])
 
   if (loading) {
     return (

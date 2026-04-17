@@ -42,7 +42,7 @@ function formatCouponValue(coupon: Coupon): string {
 }
 
 export default function CouponsPage() {
-  const { isReady, lineUid } = useLiff()
+  const { isReady, idToken } = useLiff()
 
   const [coupons, setCoupons] = useState<MemberCouponWithCoupon[]>([])
   const [loading, setLoading] = useState(true)
@@ -50,11 +50,13 @@ export default function CouponsPage() {
   const [redeeming, setRedeeming] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!isReady || !lineUid) return
+    if (!isReady || !idToken) return
 
     async function fetchCoupons() {
       try {
-        const res = await fetch(`/api/coupons?lineUid=${lineUid}`)
+        const res = await fetch('/api/coupons', {
+          headers: { Authorization: `Bearer ${idToken}` },
+        })
         if (!res.ok) throw new Error('無法取得優惠券')
         const json: { coupons: MemberCouponWithCoupon[] } = await res.json()
         setCoupons(json.coupons)
@@ -66,14 +68,17 @@ export default function CouponsPage() {
     }
 
     fetchCoupons()
-  }, [isReady, lineUid])
+  }, [isReady, idToken])
 
   async function handleRedeem(memberCouponId: string) {
     setRedeeming(memberCouponId)
     try {
       const res = await fetch('/api/coupons', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken ?? ''}`,
+        },
         body: JSON.stringify({ action: 'redeem', memberCouponId }),
       })
       if (!res.ok) throw new Error('核銷失敗')

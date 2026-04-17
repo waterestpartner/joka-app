@@ -6,6 +6,7 @@ import {
   getMembersByTenant,
 } from '@/repositories/memberRepository'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
+import { verifyLineIdToken, extractBearerToken } from '@/lib/line-auth'
 import type { Member } from '@/types/member'
 
 // .trim() 防止 env var 夾帶換行
@@ -39,22 +40,32 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // 1. 驗證 LINE ID Token，從中取出真實 lineUid
+  const token = extractBearerToken(req)
+  if (!token) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  let lineUid: string
+  try {
+    const payload = await verifyLineIdToken(token)
+    lineUid = payload.sub // server 自己取，不信任 body 傳來的 lineUid
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Invalid token'
+    return NextResponse.json({ error: message }, { status: 401 })
+  }
+
   try {
     const body = await req.json()
-    const { lineUid, name, phone, birthday, tenantId } = body
+    const { name, phone, birthday, tenantId } = body
 
-    if (!lineUid || !tenantId) {
-      return NextResponse.json(
-        { error: 'lineUid and tenantId are required' },
-        { status: 400 }
-      )
+    if (!tenantId) {
+      return NextResponse.json({ error: 'tenantId is required' }, { status: 400 })
     }
 
     const supabase = createSupabaseAdminClient()
 
-    // Security: verify that the submitted tenantId actually belongs to the LIFF
-    // configured for this deployment.  This prevents a malicious caller from
-    // injecting members into a different tenant by guessing its ID.
+    // 2. 驗證 tenantId 必須屬於本 LIFF 對應的 tenant
     if (LIFF_ID) {
       const { data: liffTenant } = await supabase
         .from('tenants')
@@ -67,7 +78,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Prevent duplicate registration for the same LINE user in this tenant
+    // 3. 防止重複註冊
     const { data: existing } = await supabase
       .from('members')
       .select('id')
@@ -84,7 +95,7 @@ export async function POST(req: NextRequest) {
 
     const memberData: Omit<Member, 'id' | 'created_at'> = {
       tenant_id: tenantId,
-      line_uid: lineUid,
+      line_uid: lineUid, // 來自 LINE 驗證，非 client body
       name: name ?? null,
       phone: phone ?? null,
       birthday: birthday ?? null,

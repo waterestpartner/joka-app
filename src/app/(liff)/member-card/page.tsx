@@ -18,20 +18,22 @@ const LIFF_ID = (process.env.NEXT_PUBLIC_LIFF_ID ?? '').trim()
 
 export default function MemberCardPage() {
   const router = useRouter()
-  const { isReady, lineUid } = useLiff()
+  const { isReady, idToken } = useLiff()
 
   const [data, setData] = useState<MemberMeResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!isReady || !lineUid) return
+    if (!isReady || !idToken) return
 
     async function fetchMember() {
       try {
-        // 同時查詢：會員資料 + 透過 LIFF ID 取得 tenant
+        // 同時查詢：會員資料（帶 ID Token 驗身）+ 透過 LIFF ID 取得 tenant
         const [memberRes, tenantRes] = await Promise.all([
-          fetch(`/api/members/me?lineUid=${lineUid}`),
+          fetch('/api/members/me', {
+            headers: { Authorization: `Bearer ${idToken}` },
+          }),
           fetch(`/api/tenants?liffId=${LIFF_ID}`),
         ])
 
@@ -56,7 +58,7 @@ export default function MemberCardPage() {
     }
 
     fetchMember()
-  }, [isReady, lineUid, router])
+  }, [isReady, idToken, router])
 
   if (loading) {
     return (

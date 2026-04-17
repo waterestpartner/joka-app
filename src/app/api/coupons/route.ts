@@ -10,18 +10,29 @@ import {
 } from '@/repositories/couponRepository'
 import { getMemberByLineUid } from '@/repositories/memberRepository'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
+import { verifyLineIdToken, extractBearerToken } from '@/lib/line-auth'
 import type { CouponType } from '@/types/coupon'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const tenantId = searchParams.get('tenantId')
   const memberId = searchParams.get('memberId')
-  const lineUid = searchParams.get('lineUid')
 
-  try {
-    // Member coupons via lineUid (no tenantId required — look up member first)
-    // Admin client needed — LIFF users have no Supabase session (RLS blocks anon reads)
-    if (lineUid && !tenantId) {
+  // LIFF 呼叫：使用 Authorization header 的 LINE ID Token
+  const token = extractBearerToken(req)
+
+  if (token) {
+    // LIFF path — 驗 token 取出 lineUid，只能查自己的優惠券
+    let lineUid: string
+    try {
+      const payload = await verifyLineIdToken(token)
+      lineUid = payload.sub
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Invalid token'
+      return NextResponse.json({ error: message }, { status: 401 })
+    }
+
+    try {
       const supabase = createSupabaseAdminClient()
       const { data: member } = await supabase
         .from('members')
@@ -34,24 +45,26 @@ export async function GET(req: NextRequest) {
       if (!member) {
         return NextResponse.json({ error: 'Member not found' }, { status: 404 })
       }
-      const coupons = await getMemberCoupons(member.tenant_id as string, member.id as string)
+      const coupons = await getMemberCoupons(
+        member.tenant_id as string,
+        member.id as string
+      )
       return NextResponse.json({ coupons })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Internal server error'
+      return NextResponse.json({ error: message }, { status: 500 })
     }
+  }
 
-    if (!tenantId) {
-      return NextResponse.json({ error: 'tenantId is required' }, { status: 400 })
-    }
+  // Dashboard / server-to-server path — 使用 tenantId query param
+  if (!tenantId) {
+    return NextResponse.json(
+      { error: 'tenantId is required (or use Authorization header)' },
+      { status: 400 }
+    )
+  }
 
-    // Member coupons via lineUid + tenantId
-    if (lineUid) {
-      const member = await getMemberByLineUid(tenantId, lineUid)
-      if (!member) {
-        return NextResponse.json({ error: 'Member not found' }, { status: 404 })
-      }
-      const coupons = await getMemberCoupons(tenantId, member.id)
-      return NextResponse.json({ coupons })
-    }
-
+  try {
     // Member coupons via memberId
     if (memberId) {
       const status = searchParams.get('status') ?? undefined
@@ -112,7 +125,7 @@ export async function POST(req: NextRequest) {
       }
 
       case 'redeem': {
-        const { tenantId, memberCouponId } = body
+        const { memberCouponId } = body
         if (!memberCouponId) {
           return NextResponse.json(
             { error: 'memberCouponId is required' },
@@ -120,26 +133,50 @@ export async function POST(req: NextRequest) {
           )
         }
 
-        // If tenantId not provided, look it up from the member_coupon record
-        // Admin client needed — LIFF users have no Supabase session
-        let resolvedTenantId = tenantId
-        if (!resolvedTenantId) {
-          const supabase = createSupabaseAdminClient()
-          const { data } = await supabase
-            .from('member_coupons')
-            .select('tenant_id')
-            .eq('id', memberCouponId)
-            .single()
-          if (!data) {
-            return NextResponse.json(
-              { error: 'Coupon not found' },
-              { status: 404 }
-            )
-          }
-          resolvedTenantId = data.tenant_id as string
+        // 驗 token，確認核銷者就是這張券的持有人
+        const redeemToken = extractBearerToken(req)
+        if (!redeemToken) {
+          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const result = await redeemCoupon(resolvedTenantId, memberCouponId)
+        let redeemLineUid: string
+        try {
+          const payload = await verifyLineIdToken(redeemToken)
+          redeemLineUid = payload.sub
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Invalid token'
+          return NextResponse.json({ error: message }, { status: 401 })
+        }
+
+        const supabase = createSupabaseAdminClient()
+
+        // 查這張券，同時確認 member.line_uid 符合已驗證的 lineUid
+        const { data: couponRecord } = await supabase
+          .from('member_coupons')
+          .select('tenant_id, member:members!inner(line_uid)')
+          .eq('id', memberCouponId)
+          .single()
+
+        if (!couponRecord) {
+          return NextResponse.json({ error: 'Coupon not found' }, { status: 404 })
+        }
+
+        // ownership check
+        const memberData = couponRecord.member as
+          | { line_uid: string }
+          | { line_uid: string }[]
+          | null
+        const ownerUid = Array.isArray(memberData)
+          ? memberData[0]?.line_uid
+          : memberData?.line_uid
+        if (ownerUid !== redeemLineUid) {
+          return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        }
+
+        const result = await redeemCoupon(
+          couponRecord.tenant_id as string,
+          memberCouponId
+        )
         if (!result) {
           return NextResponse.json(
             { error: 'Coupon could not be redeemed (already used or expired)' },
