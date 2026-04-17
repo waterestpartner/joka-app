@@ -7,6 +7,7 @@ import {
   initializeLiff,
   getLiffProfile,
   getLiffIdToken,
+  getLiffAccessToken,
   isLiffLoggedIn,
   liffLogin,
 } from '@/lib/liff'
@@ -23,7 +24,11 @@ interface UseLiffReturn {
   profile: LiffProfile | null
   error: string | null
   lineUid: string | null
-  /** LINE ID Token (JWT)。透過 Authorization: Bearer 傳給 API 進行身分驗證。 */
+  /**
+   * 用於 API 身分驗證的 LINE token。
+   * 優先使用 ID Token（需 openid scope），fallback 為 Access Token（只需 profile scope）。
+   * 透過 Authorization: Bearer <token> 傳給 API。
+   */
   idToken: string | null
 }
 
@@ -52,8 +57,9 @@ export function useLiff(): UseLiffReturn {
           return
         }
 
-        // getIDToken() is synchronous and available right after init+login
-        setIdToken(getLiffIdToken())
+        // 優先使用 ID Token（需 openid scope），若為 null 則 fallback 到 Access Token
+        // Access Token 只需 profile scope，幾乎在所有 LIFF 設定下都可用
+        setIdToken(getLiffIdToken() ?? getLiffAccessToken())
 
         const userProfile = await getLiffProfile()
         if (cancelled) return

@@ -94,13 +94,25 @@ export function isInLineClient(): boolean {
 }
 
 /**
- * Returns the LINE ID Token (JWT) for the currently logged-in user.
- * Returns null if the user is not logged in or the token is unavailable.
- * Use this token in API requests as `Authorization: Bearer <token>`.
+ * Returns the LINE ID Token (JWT). Requires `openid` scope on LINE Developers.
+ * Returns null if the scope is not set or the user is not logged in.
  */
 export function getLiffIdToken(): string | null {
   try {
     return liff.getIDToken()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Returns the LINE Access Token. Requires only `profile` scope (always available).
+ * Use this for API authentication when `openid` scope is not enabled.
+ * Server verifies by calling LINE's /v2/profile endpoint.
+ */
+export function getLiffAccessToken(): string | null {
+  try {
+    return liff.getAccessToken()
   } catch {
     return null
   }

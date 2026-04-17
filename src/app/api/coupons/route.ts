@@ -9,7 +9,7 @@ import {
   redeemCoupon,
 } from '@/repositories/couponRepository'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
-import { verifyLineIdToken, extractBearerToken } from '@/lib/line-auth'
+import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import type { CouponType } from '@/types/coupon'
 
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
 
     let lineUid: string
     try {
-      const payload = await verifyLineIdToken(token)
+      const payload = await verifyLineToken(token)
       lineUid = payload.sub
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Invalid token'
@@ -191,7 +191,7 @@ export async function POST(req: NextRequest) {
 
         let redeemLineUid: string
         try {
-          const payload = await verifyLineIdToken(redeemToken)
+          const payload = await verifyLineToken(redeemToken)
           redeemLineUid = payload.sub
         } catch (err) {
           const message = err instanceof Error ? err.message : 'Invalid token'

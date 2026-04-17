@@ -14,10 +14,8 @@ export interface LineTokenPayload {
 }
 
 /**
- * 透過 LINE 官方驗證 endpoint 確認 ID Token 是否合法。
- * Channel ID 從 NEXT_PUBLIC_LIFF_ID 自動提取（格式：{channelId}-{liffId}）。
- *
- * 回傳解碼後的 payload；若 token 無效或過期則 throw Error。
+ * 透過 LINE 官方 endpoint 驗證 ID Token（需 openid scope）。
+ * 回傳 payload，其中 `sub` 為 LINE user ID。
  */
 export async function verifyLineIdToken(
   idToken: string
@@ -33,7 +31,7 @@ export async function verifyLineIdToken(
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ id_token: idToken, client_id: channelId }),
-    cache: 'no-store', // token 每次都要新鮮驗證
+    cache: 'no-store',
   })
 
   if (!res.ok) {
@@ -47,6 +45,44 @@ export async function verifyLineIdToken(
   }
 
   return res.json() as Promise<LineTokenPayload>
+}
+
+/**
+ * 透過呼叫 LINE Profile API 驗證 Access Token（只需 profile scope）。
+ * 回傳與 LineTokenPayload 相容的物件，`sub` 為 LINE user ID。
+ *
+ * 當 LIFF 未啟用 openid scope、getIDToken() 為 null 時，改用此方法驗證。
+ */
+export async function verifyLineAccessToken(
+  accessToken: string
+): Promise<Pick<LineTokenPayload, 'sub'>> {
+  const res = await fetch('https://api.line.me/v2/profile', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: 'no-store',
+  })
+
+  if (!res.ok) {
+    throw new Error('LINE access token verification failed')
+  }
+
+  const profile = await res.json() as { userId: string; displayName: string }
+  return { sub: profile.userId }
+}
+
+/**
+ * 統一入口：自動判斷 token 類型並驗證，回傳 { sub: lineUid }。
+ *
+ * - 格式為 JWT（三段 base64，含 header.payload.sig）→ ID Token 驗證
+ * - 其他格式 → Access Token 驗證
+ */
+export async function verifyLineToken(
+  token: string
+): Promise<Pick<LineTokenPayload, 'sub'>> {
+  const isJwt = /^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/.test(token)
+  if (isJwt) {
+    return verifyLineIdToken(token)
+  }
+  return verifyLineAccessToken(token)
 }
 
 /**

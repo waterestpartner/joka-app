@@ -28,7 +28,13 @@ export default function PointsPage() {
   const [fetchError, setFetchError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!isReady || !idToken) return
+    if (!isReady) return
+
+    if (!idToken) {
+      setFetchError('無法取得 LINE 身分驗證，請關閉後重新開啟頁面')
+      setLoading(false)
+      return
+    }
 
     async function fetchPoints() {
       try {

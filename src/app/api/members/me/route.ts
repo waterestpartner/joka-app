@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
-import { verifyLineIdToken, extractBearerToken } from '@/lib/line-auth'
+import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import type { Member } from '@/types/member'
 import type { Tenant } from '@/types/tenant'
 
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
   let lineUid: string
   try {
-    const payload = await verifyLineIdToken(token)
+    const payload = await verifyLineToken(token)
     lineUid = payload.sub
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Invalid token'
