@@ -4,6 +4,10 @@
 
 import { useEffect, useState } from 'react'
 import { useLiff } from '@/hooks/useLiff'
+import {
+  useRealtimeMember,
+  useRealtimePointTransactions,
+} from '@/hooks/useRealtimeMember'
 import type { PointTransaction, PointTransactionType } from '@/types/member'
 import { formatDate, formatNumber } from '@/lib/utils'
 
@@ -16,12 +20,13 @@ const TYPE_LABEL: Record<PointTransactionType, string> = {
 
 interface PointsResponse {
   points: PointTransaction[]
-  member: { points: number }
+  member: { id: string; points: number }
 }
 
 export default function PointsPage() {
   const { isReady, idToken } = useLiff()
 
+  const [memberId, setMemberId] = useState<string | null>(null)
   const [totalPoints, setTotalPoints] = useState(0)
   const [transactions, setTransactions] = useState<PointTransaction[]>([])
   const [loading, setLoading] = useState(true)
@@ -43,6 +48,7 @@ export default function PointsPage() {
         })
         if (!res.ok) throw new Error('無法取得點數記錄')
         const json: PointsResponse = await res.json()
+        setMemberId(json.member.id)
         setTotalPoints(json.member.points)
         setTransactions(json.points)
       } catch (err) {
@@ -54,6 +60,17 @@ export default function PointsPage() {
 
     fetchPoints()
   }, [isReady, idToken])
+
+  // ── 即時訂閱：餘額變更 + 新交易 ──────────────────────────────────
+  useRealtimeMember(memberId, (next) => {
+    if (typeof next.points === 'number') setTotalPoints(next.points)
+  })
+  useRealtimePointTransactions(memberId, (tx) => {
+    // 避免重複插入（同一筆可能同時從 optimistic 與 realtime 進來）
+    setTransactions((prev) =>
+      prev.some((t) => t.id === tx.id) ? prev : [tx, ...prev]
+    )
+  })
 
   if (loading) {
     return (

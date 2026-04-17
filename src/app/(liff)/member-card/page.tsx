@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLiff } from '@/hooks/useLiff'
+import { useRealtimeMember } from '@/hooks/useRealtimeMember'
 import { MemberCard } from '@/components/liff/MemberCard'
 import type { Member } from '@/types/member'
 import type { Tenant } from '@/types/tenant'
@@ -67,6 +68,13 @@ export default function MemberCardPage() {
 
     fetchMember()
   }, [isReady, idToken, router])
+
+  // ── 即時訂閱：會員點數 / 等級變更時自動更新 ─────────────────────
+  useRealtimeMember(data?.member.id, (next) => {
+    setData((prev) =>
+      prev ? { ...prev, member: { ...prev.member, ...next } } : prev
+    )
+  })
 
   if (loading) {
     return (

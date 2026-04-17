@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from 'react'
 import { useLiff } from '@/hooks/useLiff'
+import { useRealtimeMemberCoupons } from '@/hooks/useRealtimeMember'
 import type { MemberCoupon } from '@/types/coupon'
 import type { Coupon, CouponType, MemberCouponStatus } from '@/types/coupon'
 import { formatDate } from '@/lib/utils'
@@ -44,6 +45,7 @@ function formatCouponValue(coupon: Coupon): string {
 export default function CouponsPage() {
   const { isReady, idToken } = useLiff()
 
+  const [memberId, setMemberId] = useState<string | null>(null)
   const [coupons, setCoupons] = useState<MemberCouponWithCoupon[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
@@ -64,7 +66,9 @@ export default function CouponsPage() {
           headers: { Authorization: `Bearer ${idToken}` },
         })
         if (!res.ok) throw new Error('無法取得優惠券')
-        const json: { coupons: MemberCouponWithCoupon[] } = await res.json()
+        const json: { memberId?: string; coupons: MemberCouponWithCoupon[] } =
+          await res.json()
+        if (json.memberId) setMemberId(json.memberId)
         setCoupons(json.coupons)
       } catch (err) {
         setFetchError(err instanceof Error ? err.message : '發生錯誤')
@@ -75,6 +79,21 @@ export default function CouponsPage() {
 
     fetchCoupons()
   }, [isReady, idToken])
+
+  // ── 即時訂閱：發券 / 狀態變更 → 重抓完整列表（需要 JOIN 到 coupons）
+  useRealtimeMemberCoupons(memberId, async () => {
+    if (!idToken) return
+    try {
+      const res = await fetch('/api/coupons', {
+        headers: { Authorization: `Bearer ${idToken}` },
+      })
+      if (!res.ok) return
+      const json: { coupons: MemberCouponWithCoupon[] } = await res.json()
+      setCoupons(json.coupons)
+    } catch {
+      // 抓取失敗不影響畫面，下次事件再試
+    }
+  })
 
   async function handleRedeem(memberCouponId: string) {
     setRedeeming(memberCouponId)

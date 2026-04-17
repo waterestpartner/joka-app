@@ -119,7 +119,7 @@ export async function GET(req: NextRequest) {
         member.tenant_id as string,
         member.id as string
       )
-      return NextResponse.json({ coupons })
+      return NextResponse.json({ memberId: member.id as string, coupons })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Internal server error'
       return NextResponse.json({ error: message }, { status: 500 })

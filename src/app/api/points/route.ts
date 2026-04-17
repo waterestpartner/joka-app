@@ -69,7 +69,10 @@ export async function GET(req: NextRequest) {
       )
       return NextResponse.json({
         points,
-        member: { points: member.points as number },
+        member: {
+          id: member.id as string,
+          points: member.points as number,
+        },
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Internal server error'
@@ -108,7 +111,10 @@ export async function GET(req: NextRequest) {
     }
 
     const points = await getPointsByMember(auth.tenantId, memberId)
-    return NextResponse.json({ points, member: { points: member.points } })
+    return NextResponse.json({
+      points,
+      member: { id: member.id, points: member.points },
+    })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error'
     return NextResponse.json({ error: message }, { status: 500 })
