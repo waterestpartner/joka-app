@@ -14,6 +14,8 @@ interface MemberMeResponse {
   tenant: Tenant
 }
 
+const LIFF_ID = (process.env.NEXT_PUBLIC_LIFF_ID ?? '').trim()
+
 export default function MemberCardPage() {
   const router = useRouter()
   const { isReady, lineUid } = useLiff()
@@ -27,15 +29,24 @@ export default function MemberCardPage() {
 
     async function fetchMember() {
       try {
-        const res = await fetch(`/api/members/me?lineUid=${lineUid}`)
-        if (res.status === 404) {
-          router.replace('/register')
+        // 同時查詢：會員資料 + 透過 LIFF ID 取得 tenant
+        const [memberRes, tenantRes] = await Promise.all([
+          fetch(`/api/members/me?lineUid=${lineUid}`),
+          fetch(`/api/tenants?liffId=${LIFF_ID}`),
+        ])
+
+        const tenantJson = tenantRes.ok ? await tenantRes.json() : null
+        const tenantId: string = tenantJson?.id ?? ''
+
+        if (memberRes.status === 404) {
+          // 尚未註冊 → 跳到註冊頁並帶入 tenantId
+          router.replace(`/register?tenantId=${tenantId}`)
           return
         }
-        if (!res.ok) {
+        if (!memberRes.ok) {
           throw new Error('無法取得會員資料')
         }
-        const json: MemberMeResponse = await res.json()
+        const json: MemberMeResponse = await memberRes.json()
         setData(json)
       } catch (err) {
         setFetchError(err instanceof Error ? err.message : '發生錯誤')

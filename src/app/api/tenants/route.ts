@@ -21,18 +21,33 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const slug = searchParams.get('slug')
   const id = searchParams.get('id')
+  const liffId = searchParams.get('liffId')
 
-  if (!slug && !id) {
+  if (!slug && !id && !liffId) {
     return NextResponse.json(
-      { error: 'slug or id is required' },
+      { error: 'slug, id, or liffId is required' },
       { status: 400 }
     )
   }
 
   try {
-    const tenant = slug
-      ? await getTenantBySlug(slug)
-      : await getTenantById(id!)
+    let tenant: Tenant | null = null
+
+    if (liffId) {
+      // 直接用 Supabase 查詢，無需 repository function
+      const { createSupabaseServerClient } = await import('@/lib/supabase-server')
+      const supabase = await createSupabaseServerClient()
+      const { data } = await supabase
+        .from('tenants')
+        .select('*')
+        .eq('liff_id', liffId)
+        .single()
+      tenant = data as Tenant | null
+    } else {
+      tenant = slug
+        ? await getTenantBySlug(slug)
+        : await getTenantById(id!)
+    }
 
     if (!tenant) {
       return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
