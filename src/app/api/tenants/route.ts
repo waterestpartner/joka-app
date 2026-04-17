@@ -34,9 +34,13 @@ export async function GET(req: NextRequest) {
     let tenant: Tenant | null = null
 
     if (liffId) {
-      // 直接用 Supabase 查詢，無需 repository function
-      const { createSupabaseServerClient } = await import('@/lib/supabase-server')
-      const supabase = await createSupabaseServerClient()
+      // liffId 查詢需要 service role key（RLS 不允許匿名讀取 tenants）
+      const { createServerClient } = await import('@supabase/ssr')
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { cookies: { getAll: () => [], setAll: () => {} } }
+      )
       const { data } = await supabase
         .from('tenants')
         .select('*')
