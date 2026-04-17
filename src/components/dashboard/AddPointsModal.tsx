@@ -12,21 +12,25 @@ interface Props {
 }
 
 export default function AddPointsModal({ member, onClose, onSuccess }: Props) {
+  // 'add' = 加點（正值）, 'deduct' = 扣點（負值）
+  const [mode, setMode] = useState<'add' | 'deduct'>('add')
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const numAmount = Number(amount)
+  const absAmount = Number(amount)
+  const signedAmount = mode === 'deduct' ? -Math.abs(absAmount) : Math.abs(absAmount)
   const preview =
-    amount !== '' && Number.isFinite(numAmount) && numAmount !== 0
-      ? member.points + numAmount
+    amount !== '' && Number.isFinite(absAmount) && absAmount > 0
+      ? member.points + signedAmount
       : null
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!Number.isFinite(numAmount) || numAmount === 0 || Math.abs(numAmount) > 1_000_000) {
-      setError('請輸入有效點數（±1 到 1,000,000）')
+
+    if (!Number.isFinite(absAmount) || absAmount <= 0 || absAmount > 1_000_000) {
+      setError('請輸入有效點數（1 到 1,000,000）')
       return
     }
 
@@ -40,17 +44,17 @@ export default function AddPointsModal({ member, onClose, onSuccess }: Props) {
         body: JSON.stringify({
           memberId: member.id,
           type: 'manual',
-          amount: numAmount,
+          amount: signedAmount,
           note: note.trim() || null,
         }),
       })
 
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
-        throw new Error((j as { error?: string }).error ?? '補點失敗')
+        throw new Error((j as { error?: string }).error ?? '操作失敗')
       }
 
-      onSuccess(member.points + numAmount)
+      onSuccess(member.points + signedAmount)
     } catch (err) {
       setError(err instanceof Error ? err.message : '發生錯誤')
       setSubmitting(false)
@@ -68,7 +72,7 @@ export default function AddPointsModal({ member, onClose, onSuccess }: Props) {
       >
         {/* Title */}
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-zinc-900">補點 / 扣點</h2>
+          <h2 className="text-lg font-bold text-zinc-900">點數調整</h2>
           <button
             onClick={onClose}
             className="text-zinc-400 hover:text-zinc-700 text-2xl leading-none transition-colors"
@@ -91,6 +95,37 @@ export default function AddPointsModal({ member, onClose, onSuccess }: Props) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Mode toggle: 加點 / 扣點 */}
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1.5">
+              操作類型
+            </label>
+            <div className="flex rounded-lg border border-zinc-300 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => { setMode('add'); setError(null) }}
+                className={`flex-1 py-2.5 text-sm font-semibold transition-colors ${
+                  mode === 'add'
+                    ? 'bg-[#06C755] text-white'
+                    : 'bg-white text-zinc-500 hover:bg-zinc-50'
+                }`}
+              >
+                ＋ 加點
+              </button>
+              <button
+                type="button"
+                onClick={() => { setMode('deduct'); setError(null) }}
+                className={`flex-1 py-2.5 text-sm font-semibold transition-colors border-l border-zinc-300 ${
+                  mode === 'deduct'
+                    ? 'bg-red-500 text-white'
+                    : 'bg-white text-zinc-500 hover:bg-zinc-50'
+                }`}
+              >
+                － 扣點
+              </button>
+            </div>
+          </div>
+
           {/* Amount */}
           <div>
             <label className="block text-sm font-medium text-zinc-700 mb-1.5">
@@ -98,12 +133,14 @@ export default function AddPointsModal({ member, onClose, onSuccess }: Props) {
             </label>
             <input
               type="number"
+              min="1"
+              step="1"
               value={amount}
               onChange={(e) => {
                 setAmount(e.target.value)
                 setError(null)
               }}
-              placeholder="正數加點，負數扣點（例：100 或 -50）"
+              placeholder="輸入點數（例：100）"
               autoFocus
               className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition"
             />
@@ -111,7 +148,9 @@ export default function AddPointsModal({ member, onClose, onSuccess }: Props) {
               <p className="mt-1 text-xs text-zinc-500">
                 操作後餘額：
                 <span
-                  className={`font-semibold ${preview >= 0 ? 'text-zinc-700' : 'text-red-600'}`}
+                  className={`font-semibold ${
+                    preview >= 0 ? 'text-zinc-700' : 'text-red-600'
+                  }`}
                 >
                   {formatPoints(preview)} pt
                 </span>
@@ -128,7 +167,7 @@ export default function AddPointsModal({ member, onClose, onSuccess }: Props) {
               type="text"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="例：消費 NT$500"
+              placeholder={mode === 'add' ? '例：消費 NT$500' : '例：點數修正'}
               className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition"
             />
           </div>
@@ -150,10 +189,16 @@ export default function AddPointsModal({ member, onClose, onSuccess }: Props) {
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
-              style={{ backgroundColor: '#06C755' }}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60 ${
+                mode === 'deduct' ? 'bg-red-500' : ''
+              }`}
+              style={mode === 'add' ? { backgroundColor: '#06C755' } : undefined}
             >
-              {submitting ? '處理中…' : '確認'}
+              {submitting
+                ? '處理中…'
+                : mode === 'add'
+                ? '確認加點'
+                : '確認扣點'}
             </button>
           </div>
         </form>
