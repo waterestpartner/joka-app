@@ -4,7 +4,8 @@
 
 import liff from '@line/liff'
 
-const LIFF_ID = process.env.NEXT_PUBLIC_LIFF_ID ?? ''
+// .trim() 避免 env var 夾帶換行/空白導致 LIFF SDK 回報 "Invalid LIFF ID"
+const LIFF_ID = (process.env.NEXT_PUBLIC_LIFF_ID ?? '').trim()
 
 let initialized = false
 
