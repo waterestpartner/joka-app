@@ -1,9 +1,12 @@
 import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { Tenant, TenantUser, TierSetting } from '@/types/tenant'
 
+// 公開落地頁用：slug 是 URL path，本來就是公開資訊
+// 用 admin client 繞過 RLS，讓未登入的訪客也能看到品牌落地頁
 export async function getTenantBySlug(slug: string): Promise<Tenant | null> {
   try {
-    const supabase = await createSupabaseServerClient()
+    const supabase = createSupabaseAdminClient()
     const { data, error } = await supabase
       .from('tenants')
       .select('*')
