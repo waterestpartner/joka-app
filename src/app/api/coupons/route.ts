@@ -9,6 +9,7 @@ import {
   redeemCoupon,
 } from '@/repositories/couponRepository'
 import { getMemberByLineUid } from '@/repositories/memberRepository'
+import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import type { CouponType } from '@/types/coupon'
 
 export async function GET(req: NextRequest) {
@@ -19,9 +20,9 @@ export async function GET(req: NextRequest) {
 
   try {
     // Member coupons via lineUid (no tenantId required — look up member first)
+    // Admin client needed — LIFF users have no Supabase session (RLS blocks anon reads)
     if (lineUid && !tenantId) {
-      const { createSupabaseServerClient } = await import('@/lib/supabase-server')
-      const supabase = await createSupabaseServerClient()
+      const supabase = createSupabaseAdminClient()
       const { data: member } = await supabase
         .from('members')
         .select('id, tenant_id')
@@ -120,10 +121,10 @@ export async function POST(req: NextRequest) {
         }
 
         // If tenantId not provided, look it up from the member_coupon record
+        // Admin client needed — LIFF users have no Supabase session
         let resolvedTenantId = tenantId
         if (!resolvedTenantId) {
-          const { createSupabaseServerClient } = await import('@/lib/supabase-server')
-          const supabase = await createSupabaseServerClient()
+          const supabase = createSupabaseAdminClient()
           const { data } = await supabase
             .from('member_coupons')
             .select('tenant_id')

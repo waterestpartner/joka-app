@@ -6,6 +6,7 @@ import {
   addPointTransaction,
 } from '@/repositories/pointRepository'
 import { getMemberByLineUid, getMemberById } from '@/repositories/memberRepository'
+import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import type { PointTransactionType } from '@/types/member'
 
 export async function GET(req: NextRequest) {
@@ -28,9 +29,9 @@ export async function GET(req: NextRequest) {
     if (lineUid) {
       // lineUid provided — need tenantId to look up member, or search across tenants
       if (!tenantId) {
-        // Fallback: find member by lineUid without tenantId using supabase directly
-        const { createSupabaseServerClient } = await import('@/lib/supabase-server')
-        const supabase = await createSupabaseServerClient()
+        // Fallback: find member by lineUid without tenantId
+        // Admin client needed — LIFF users have no Supabase session (RLS blocks anon reads)
+        const supabase = createSupabaseAdminClient()
         const { data: member } = await supabase
           .from('members')
           .select('id, tenant_id, points')

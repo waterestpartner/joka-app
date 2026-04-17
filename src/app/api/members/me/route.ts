@@ -1,10 +1,10 @@
 // 我的會員資料 API（供 LIFF 前台使用）
-// GET /api/members/me?lineUid=xxx
-// Returns { member, tenant } by looking up the member via line_uid across all tenants,
-// or with an optional tenantId query param to scope the lookup.
+// GET /api/members/me?lineUid=xxx[&tenantId=xxx]
+// Returns { member, tenant } by looking up the member via line_uid.
+// Uses admin client to bypass RLS — LIFF users have no Supabase session.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import type { Member } from '@/types/member'
 import type { Tenant } from '@/types/tenant'
 
@@ -18,9 +18,9 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const supabase = await createSupabaseServerClient()
+    const supabase = createSupabaseAdminClient()
 
-    // Build member query
+    // Build member query — optionally scoped to a specific tenant
     let memberQuery = supabase
       .from('members')
       .select('*')
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     }
 
-    // Fetch associated tenant
+    // Fetch associated tenant — exclude sensitive fields
     const { data: tenant, error: tenantError } = await supabase
       .from('tenants')
       .select('id, name, slug, logo_url, primary_color, line_channel_id, liff_id, created_at')

@@ -6,6 +6,7 @@ import {
   getTenantById,
   updateTenant,
 } from '@/repositories/tenantRepository'
+import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import type { Tenant } from '@/types/tenant'
 
 // Omit sensitive field before returning to client
@@ -34,13 +35,8 @@ export async function GET(req: NextRequest) {
     let tenant: Tenant | null = null
 
     if (liffId) {
-      // liffId 查詢需要 service role key（RLS 不允許匿名讀取 tenants）
-      const { createServerClient } = await import('@supabase/ssr')
-      const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        { cookies: { getAll: () => [], setAll: () => {} } }
-      )
+      // liffId 查詢需要 admin client（RLS 不允許匿名讀取 tenants）
+      const supabase = createSupabaseAdminClient()
       const { data } = await supabase
         .from('tenants')
         .select('*')
