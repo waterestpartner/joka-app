@@ -129,6 +129,7 @@ export async function POST(req: NextRequest) {
     const memberData: Omit<Member, 'id' | 'created_at'> = {
       tenant_id: tenantId,
       line_uid: lineUid, // 來自驗證後的 token，不信任 client body
+      line_uid_oa: null,  // 由 webhook follow 事件填入
       name: name.trim(),
       phone: phone.trim(),
       birthday: birthday ?? null,

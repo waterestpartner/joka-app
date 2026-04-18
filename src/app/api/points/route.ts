@@ -1,6 +1,6 @@
 // 點數 API 路由
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import {
   getPointsByMember,
   addPointTransaction,
@@ -163,7 +163,7 @@ export async function POST(req: NextRequest) {
     const [{ data: member }, { data: tenant }] = await Promise.all([
       supabase
         .from('members')
-        .select('id, line_uid, points')
+        .select('id, line_uid, line_uid_oa, points')
         .eq('id', memberId)
         .eq('tenant_id', auth.tenantId)
         .single(),
@@ -186,8 +186,10 @@ export async function POST(req: NextRequest) {
       note: note ?? null,
     })
 
-    // 推播通知（await 確保在 Vercel serverless function 回應前完成）
-    const lineUid = member.line_uid as string
+    // 推播通知：after() 確保在回應送出後才執行，不阻塞 API 回應
+    // line_uid_oa 是透過 webhook 取得的店家 OA UID（LINE Provider 相同），
+    // 若尚未設定則退回使用 LIFF UID（line_uid）
+    const pushUid = (member.line_uid_oa as string | null) ?? (member.line_uid as string)
     const currentPoints = member.points as number
     const newTotal = Math.max(0, currentPoints + numAmount)
     const pushText =
@@ -195,7 +197,7 @@ export async function POST(req: NextRequest) {
         ? `感謝消費！您獲得了 ${numAmount} 點，目前累積 ${newTotal} 點 🎉`
         : `您的點數已調整 ${numAmount} 點，目前累積 ${newTotal} 點。`
     const channelToken = (tenant?.channel_access_token as string) ?? ''
-    await pushTextMessage(lineUid, pushText, channelToken)
+    after(() => pushTextMessage(pushUid, pushText, channelToken))
 
     return NextResponse.json(transaction, { status: 201 })
   } catch (err) {

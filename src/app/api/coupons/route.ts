@@ -1,6 +1,6 @@
 // 優惠券 API 路由
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import {
   getCouponsByTenant,
   getMemberCoupons,
@@ -221,38 +221,44 @@ export async function POST(req: NextRequest) {
 
         const memberCoupon = await issueCoupon(auth.tenantId, memberId, couponId)
 
-        // 推播通知（await 確保在 Vercel serverless function 回應前完成）
-        try {
-          const supabase = createSupabaseAdminClient()
-          const [{ data: mem }, { data: cpn }, { data: ten }] = await Promise.all([
-            supabase
-              .from('members')
-              .select('line_uid')
-              .eq('id', memberId)
-              .eq('tenant_id', auth.tenantId)
-              .single(),
-            supabase
-              .from('coupons')
-              .select('name')
-              .eq('id', couponId)
-              .single(),
-            supabase
-              .from('tenants')
-              .select('channel_access_token')
-              .eq('id', auth.tenantId)
-              .single(),
-          ])
-          const channelToken = (ten?.channel_access_token as string) ?? ''
-          if (mem?.line_uid && cpn?.name) {
-            await pushTextMessage(
-              mem.line_uid as string,
-              `🎟 您獲得了一張優惠券：${cpn.name as string}！`,
-              channelToken
-            )
+        // 推播通知：after() 確保在回應送出後才執行，不阻塞 API 回應
+        const tenantIdForPush = auth.tenantId
+        after(async () => {
+          try {
+            const supabase = createSupabaseAdminClient()
+            const [{ data: mem }, { data: cpn }, { data: ten }] = await Promise.all([
+              supabase
+                .from('members')
+                // line_uid_oa 是透過 webhook 取得的店家 OA UID
+                .select('line_uid, line_uid_oa')
+                .eq('id', memberId)
+                .eq('tenant_id', tenantIdForPush)
+                .single(),
+              supabase
+                .from('coupons')
+                .select('name')
+                .eq('id', couponId)
+                .single(),
+              supabase
+                .from('tenants')
+                .select('channel_access_token')
+                .eq('id', tenantIdForPush)
+                .single(),
+            ])
+            const channelToken = (ten?.channel_access_token as string) ?? ''
+            // 優先使用 OA UID（webhook 取得），退回使用 LIFF UID
+            const pushUid = (mem?.line_uid_oa as string | null) ?? (mem?.line_uid as string)
+            if (pushUid && cpn?.name) {
+              await pushTextMessage(
+                pushUid,
+                `🎟 您獲得了一張優惠券：${cpn.name as string}！`,
+                channelToken
+              )
+            }
+          } catch (err) {
+            console.error('[line-push] coupon notification failed:', err)
           }
-        } catch (err) {
-          console.error('[line-push] coupon notification failed:', err)
-        }
+        })
 
         return NextResponse.json(memberCoupon, { status: 201 })
       }
