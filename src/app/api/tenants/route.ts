@@ -108,7 +108,14 @@ export async function PATCH(req: NextRequest) {
 
     // 禁止修改以下欄位（只能透過專門流程變更）
     delete updateFields.line_channel_secret
-    // channel_access_token 允許由管理者在品牌設定頁更新
+    // 允許更新的欄位白名單（防止 mass-assignment）
+    const ALLOWED_UPDATE_FIELDS = [
+      'name', 'logo_url', 'primary_color', 'liff_id',
+      'line_channel_id', 'channel_access_token', 'push_enabled',
+    ]
+    for (const key of Object.keys(updateFields)) {
+      if (!ALLOWED_UPDATE_FIELDS.includes(key)) delete updateFields[key]
+    }
 
     // 若這次請求有更新 channel_access_token → 自動從 LINE Messaging API
     // 抓取 Bot 資訊（顯示名稱、大頭貼），用來帶入 tenant 的品牌欄位。

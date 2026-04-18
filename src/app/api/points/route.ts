@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
         .single(),
       supabase
         .from('tenants')
-        .select('channel_access_token')
+        .select('channel_access_token, push_enabled')
         .eq('id', auth.tenantId)
         .single(),
     ])
@@ -187,7 +187,9 @@ export async function POST(req: NextRequest) {
         ? `感謝消費！您獲得了 ${numAmount} 點，目前累積 ${newTotal} 點 🎉`
         : `您的點數已調整 ${numAmount} 點，目前累積 ${newTotal} 點。`
     const channelToken = (tenant?.channel_access_token as string) ?? ''
-    after(() => pushTextMessage(pushUid, pushText, channelToken))
+    if (tenant?.push_enabled) {
+      after(() => pushTextMessage(pushUid, pushText, channelToken))
+    }
 
     return NextResponse.json(transaction, { status: 201 })
   } catch (err) {

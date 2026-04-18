@@ -232,14 +232,14 @@ export async function POST(req: NextRequest) {
                 .single(),
               supabase
                 .from('tenants')
-                .select('channel_access_token')
+                .select('channel_access_token, push_enabled')
                 .eq('id', tenantIdForPush)
                 .single(),
             ])
             const channelToken = (ten?.channel_access_token as string) ?? ''
             // 使用 LIFF UID（同 Provider 架構下等同 OA UID）
             const pushUid = mem?.line_uid as string
-            if (pushUid && cpn?.name) {
+            if (ten?.push_enabled && pushUid && cpn?.name) {
               await pushTextMessage(
                 pushUid,
                 `🎟 您獲得了一張優惠券：${cpn.name as string}！`,
