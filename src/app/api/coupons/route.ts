@@ -221,40 +221,38 @@ export async function POST(req: NextRequest) {
 
         const memberCoupon = await issueCoupon(auth.tenantId, memberId, couponId)
 
-        // 推播通知（fire-and-forget，用店家自己的 LINE@ token）
-        ;(async () => {
-          try {
-            const supabase = createSupabaseAdminClient()
-            const [{ data: mem }, { data: cpn }, { data: ten }] = await Promise.all([
-              supabase
-                .from('members')
-                .select('line_uid')
-                .eq('id', memberId)
-                .eq('tenant_id', auth.tenantId)
-                .single(),
-              supabase
-                .from('coupons')
-                .select('name')
-                .eq('id', couponId)
-                .single(),
-              supabase
-                .from('tenants')
-                .select('channel_access_token')
-                .eq('id', auth.tenantId)
-                .single(),
-            ])
-            const channelToken = (ten?.channel_access_token as string) ?? ''
-            if (mem?.line_uid && cpn?.name) {
-              await pushTextMessage(
-                mem.line_uid as string,
-                `🎟 您獲得了一張優惠券：${cpn.name as string}！`,
-                channelToken
-              )
-            }
-          } catch (err) {
-            console.error('[line-push] coupon notification failed:', err)
+        // 推播通知（await 確保在 Vercel serverless function 回應前完成）
+        try {
+          const supabase = createSupabaseAdminClient()
+          const [{ data: mem }, { data: cpn }, { data: ten }] = await Promise.all([
+            supabase
+              .from('members')
+              .select('line_uid')
+              .eq('id', memberId)
+              .eq('tenant_id', auth.tenantId)
+              .single(),
+            supabase
+              .from('coupons')
+              .select('name')
+              .eq('id', couponId)
+              .single(),
+            supabase
+              .from('tenants')
+              .select('channel_access_token')
+              .eq('id', auth.tenantId)
+              .single(),
+          ])
+          const channelToken = (ten?.channel_access_token as string) ?? ''
+          if (mem?.line_uid && cpn?.name) {
+            await pushTextMessage(
+              mem.line_uid as string,
+              `🎟 您獲得了一張優惠券：${cpn.name as string}！`,
+              channelToken
+            )
           }
-        })()
+        } catch (err) {
+          console.error('[line-push] coupon notification failed:', err)
+        }
 
         return NextResponse.json(memberCoupon, { status: 201 })
       }

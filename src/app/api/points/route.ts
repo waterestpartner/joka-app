@@ -186,7 +186,7 @@ export async function POST(req: NextRequest) {
       note: note ?? null,
     })
 
-    // 推播通知（fire-and-forget，用店家自己的 LINE@ token）
+    // 推播通知（await 確保在 Vercel serverless function 回應前完成）
     const lineUid = member.line_uid as string
     const currentPoints = member.points as number
     const newTotal = Math.max(0, currentPoints + numAmount)
@@ -195,9 +195,7 @@ export async function POST(req: NextRequest) {
         ? `感謝消費！您獲得了 ${numAmount} 點，目前累積 ${newTotal} 點 🎉`
         : `您的點數已調整 ${numAmount} 點，目前累積 ${newTotal} 點。`
     const channelToken = (tenant?.channel_access_token as string) ?? ''
-    pushTextMessage(lineUid, pushText, channelToken).catch((err) =>
-      console.error('[line-push] points notification failed:', err)
-    )
+    await pushTextMessage(lineUid, pushText, channelToken)
 
     return NextResponse.json(transaction, { status: 201 })
   } catch (err) {
