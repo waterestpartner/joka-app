@@ -50,3 +50,60 @@ export async function pushTextMessage(
     console.error('[line-push] Network error:', err)
   }
 }
+
+// ── LINE Bot Info ────────────────────────────────────────────────────────────
+// 透過 Channel Access Token 查詢 LINE Official Account 的基本資訊
+// 用途：在品牌設定頁儲存 token 時，自動帶入 LINE@ 的顯示名稱與大頭貼
+//
+// API 文件：https://developers.line.biz/en/reference/messaging-api/#get-bot-info
+// 回傳欄位：
+//   userId       Bot user ID（以 U 開頭）
+//   basicId      LINE@ 基本 ID（以 @ 開頭，例：@abc1234z）
+//   premiumId    LINE@ Premium ID（若有付費升級）
+//   displayName  LINE@ 顯示名稱
+//   pictureUrl   LINE@ 大頭貼 URL（可能不存在）
+//   chatMode     chat | bot
+//   markAsReadMode  auto | manual
+
+export interface LineBotInfo {
+  userId: string
+  basicId: string
+  premiumId?: string
+  displayName: string
+  pictureUrl?: string
+  chatMode?: 'chat' | 'bot'
+  markAsReadMode?: 'auto' | 'manual'
+}
+
+/**
+ * 取得 LINE Official Account 的基本資訊。
+ * @param channelAccessToken  租戶的 LINE Messaging API Channel Access Token
+ * @returns Bot 資訊；失敗則回 null（不拋例外）
+ */
+export async function fetchLineBotInfo(
+  channelAccessToken: string
+): Promise<LineBotInfo | null> {
+  if (!channelAccessToken) return null
+
+  try {
+    const res = await fetch('https://api.line.me/v2/bot/info', {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${channelAccessToken}`,
+      },
+      cache: 'no-store',
+    })
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      console.error('[line-bot-info] API error:', res.status, body)
+      return null
+    }
+
+    const data = (await res.json()) as LineBotInfo
+    return data
+  } catch (err) {
+    console.error('[line-bot-info] Network error:', err)
+    return null
+  }
+}

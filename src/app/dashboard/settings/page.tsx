@@ -24,12 +24,20 @@ const DEFAULT_SETTINGS: TenantSettings = {
   channel_access_token_set: false,
 }
 
+interface LineBotSynced {
+  displayName?: string
+  pictureUrl?: string
+  basicId?: string
+}
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<TenantSettings>(DEFAULT_SETTINGS)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [lineBotSynced, setLineBotSynced] = useState<LineBotSynced | null>(null)
 
   useEffect(() => {
     async function loadSettings() {
@@ -67,6 +75,37 @@ export default function SettingsPage() {
     setError(null)
   }
 
+  async function handleSyncLineBot() {
+    setSyncing(true)
+    setSuccess(false)
+    setError(null)
+    setLineBotSynced(null)
+    try {
+      const res = await fetch('/api/tenants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync-line-bot' }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data?.error ?? `HTTP ${res.status}`)
+      }
+      setSettings((prev) => ({
+        ...prev,
+        name: typeof data?.name === 'string' ? data.name : prev.name,
+        logo_url: typeof data?.logo_url === 'string' ? data.logo_url : prev.logo_url,
+      }))
+      if (data?.line_bot_synced) {
+        setLineBotSynced(data.line_bot_synced as LineBotSynced)
+      }
+      setSuccess(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '同步失敗，請稍後再試。')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!settings.id) {
@@ -102,9 +141,21 @@ export default function SettingsPage() {
         throw new Error(body?.error ?? `HTTP ${res.status}`)
       }
 
-      // 儲存成功後若有填 token，標記為已設定
-      if (settings.channel_access_token.trim()) {
-        setSettings((prev) => ({ ...prev, channel_access_token: '', channel_access_token_set: true }))
+      const data = await res.json().catch(() => ({}))
+
+      // 儲存成功後若有填 token，標記為已設定；若後端有回傳 line_bot_synced，
+      // 以 LINE@ 回來的名稱 / 大頭貼覆蓋表單（使用者看到的就是真實 LINE@ 資訊）
+      setSettings((prev) => ({
+        ...prev,
+        name: typeof data?.name === 'string' ? data.name : prev.name,
+        logo_url: typeof data?.logo_url === 'string' ? data.logo_url : prev.logo_url,
+        channel_access_token: '',
+        channel_access_token_set:
+          settings.channel_access_token.trim().length > 0 || prev.channel_access_token_set,
+      }))
+
+      if (data?.line_bot_synced) {
+        setLineBotSynced(data.line_bot_synced as LineBotSynced)
       }
       setSuccess(true)
     } catch (err) {
@@ -208,6 +259,54 @@ export default function SettingsPage() {
                     LINE Developers → Messaging API Channel → Messaging API → Channel access token
                     （長期 token，用於向客人推播加點/優惠券通知）
                   </p>
+
+                  {/* 手動從 LINE@ 同步品牌名稱 / 大頭貼 */}
+                  {settings.channel_access_token_set && (
+                    <div className="mt-3 flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handleSyncLineBot}
+                        disabled={syncing}
+                        className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {syncing ? '同步中…' : '↻ 從 LINE@ 同步品牌名稱與 Logo'}
+                      </button>
+                      <span className="text-xs text-zinc-400">
+                        會覆蓋目前的品牌名稱與 Logo
+                      </span>
+                    </div>
+                  )}
+
+                  {/* 上一次同步到的 LINE@ 資訊 */}
+                  {lineBotSynced && (
+                    <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3">
+                      <p className="text-xs font-semibold text-green-800 mb-2">
+                        ✓ 已從 LINE@ 同步資訊
+                      </p>
+                      <div className="flex items-center gap-3">
+                        {lineBotSynced.pictureUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={lineBotSynced.pictureUrl}
+                            alt="LINE@ 大頭貼"
+                            className="h-10 w-10 rounded-full object-cover border border-green-300 bg-white"
+                          />
+                        )}
+                        <div className="text-xs text-green-900 space-y-0.5">
+                          <p>
+                            <span className="text-green-700">顯示名稱：</span>
+                            <span className="font-medium">{lineBotSynced.displayName ?? '—'}</span>
+                          </p>
+                          {lineBotSynced.basicId && (
+                            <p>
+                              <span className="text-green-700">LINE@ ID：</span>
+                              <span className="font-mono">{lineBotSynced.basicId}</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

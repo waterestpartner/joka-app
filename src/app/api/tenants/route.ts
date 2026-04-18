@@ -8,6 +8,7 @@ import {
 } from '@/repositories/tenantRepository'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { fetchLineBotInfo } from '@/lib/line-messaging'
 import type { Tenant } from '@/types/tenant'
 
 // 回傳給 Dashboard 的 tenant（去除所有敏感 token）
@@ -109,6 +110,32 @@ export async function PATCH(req: NextRequest) {
     delete updateFields.line_channel_secret
     // channel_access_token 允許由管理者在品牌設定頁更新
 
+    // 若這次請求有更新 channel_access_token → 自動從 LINE Messaging API
+    // 抓取 Bot 資訊（顯示名稱、大頭貼），用來帶入 tenant 的品牌欄位。
+    // 使用者若已自行填寫 name / logo_url，則以使用者輸入為準（不覆蓋）。
+    let syncedBot: { displayName?: string; pictureUrl?: string; basicId?: string } | null = null
+    if (typeof updateFields.channel_access_token === 'string' && updateFields.channel_access_token.trim()) {
+      const botInfo = await fetchLineBotInfo(updateFields.channel_access_token.trim())
+      if (botInfo) {
+        syncedBot = {
+          displayName: botInfo.displayName,
+          pictureUrl: botInfo.pictureUrl,
+          basicId: botInfo.basicId,
+        }
+        // 若前端沒送 name / logo_url（或送空字串），用 LINE@ 的值填入
+        const nameProvided =
+          typeof updateFields.name === 'string' && updateFields.name.trim().length > 0
+        const logoProvided =
+          typeof updateFields.logo_url === 'string' && updateFields.logo_url.trim().length > 0
+        if (!nameProvided && botInfo.displayName) {
+          updateFields.name = botInfo.displayName
+        }
+        if (!logoProvided && botInfo.pictureUrl) {
+          updateFields.logo_url = botInfo.pictureUrl
+        }
+      }
+    }
+
     const updated = await updateTenant(id, updateFields as Partial<Tenant>)
 
     if (!updated) {
@@ -118,7 +145,70 @@ export async function PATCH(req: NextRequest) {
       )
     }
 
-    return NextResponse.json(sanitizeTenant(updated))
+    // 回傳 sanitize 過的 tenant + 本次同步到的 LINE@ 資訊（給前端顯示）
+    return NextResponse.json({
+      ...sanitizeTenant(updated),
+      line_bot_synced: syncedBot,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Internal server error'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
+// ── POST /api/tenants ────────────────────────────────────────────────────────
+// action: 'sync-line-bot' — 用目前已儲存的 channel_access_token 重新抓取
+// LINE@ 的顯示名稱 / 大頭貼 / Basic ID，並覆蓋 tenant.name / logo_url。
+// 用途：使用者只改了 LINE@ 名稱或圖片時，不需要重輸 token 也能同步。
+
+export async function POST(req: NextRequest) {
+  try {
+    const auth = await requireDashboardAuth()
+    if (!isDashboardAuth(auth)) return auth
+
+    const body = await req.json().catch(() => ({}))
+    const { action } = body ?? {}
+
+    if (action !== 'sync-line-bot') {
+      return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
+    }
+
+    const tenant = await getTenantById(auth.tenantId)
+    if (!tenant) {
+      return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+    }
+    if (!tenant.channel_access_token) {
+      return NextResponse.json(
+        { error: '尚未設定 Channel Access Token，無法同步。' },
+        { status: 400 }
+      )
+    }
+
+    const botInfo = await fetchLineBotInfo(tenant.channel_access_token)
+    if (!botInfo) {
+      return NextResponse.json(
+        { error: '無法從 LINE API 取得 Bot 資訊，請確認 Token 是否正確。' },
+        { status: 502 }
+      )
+    }
+
+    const updated = await updateTenant(auth.tenantId, {
+      name: botInfo.displayName,
+      logo_url: botInfo.pictureUrl ?? tenant.logo_url,
+    })
+
+    if (!updated) {
+      return NextResponse.json({ error: 'Update failed' }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      ...sanitizeTenant(updated),
+      line_bot_synced: {
+        displayName: botInfo.displayName,
+        pictureUrl: botInfo.pictureUrl,
+        basicId: botInfo.basicId,
+      },
+    })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error'
     return NextResponse.json({ error: message }, { status: 500 })
