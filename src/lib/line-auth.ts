@@ -1,12 +1,17 @@
-// LINE ID Token 驗證工具
+// LINE Token 驗證工具
 // 只在 server-side 使用（API routes）
+//
+// 架構說明：
+//   - 每個 tenant 有自己的 LIFF App，liffId 格式 = {loginChannelId}-{hash}
+//   - ID Token 驗證需要該 tenant 的 loginChannelId（從 liffId 提取）
+//   - 若 tenant 尚未設定 liff_id，fallback 到 Access Token 驗證（只需 profile scope）
 
 export interface LineTokenPayload {
   iss: string       // https://access.line.me
   sub: string       // LINE user ID（= lineUid）
   aud: string       // channel ID
-  exp: number       // 過期時間（Unix timestamp）
-  iat: number       // 簽發時間
+  exp: number
+  iat: number
   nonce?: string
   name?: string
   picture?: string
@@ -14,17 +19,24 @@ export interface LineTokenPayload {
 }
 
 /**
- * 透過 LINE 官方 endpoint 驗證 ID Token（需 openid scope）。
- * 回傳 payload，其中 `sub` 為 LINE user ID。
+ * 從 tenant 的 LIFF ID 提取 Login Channel ID。
+ * LIFF ID 格式：{channelId}-{randomSuffix}
+ */
+export function extractChannelIdFromLiffId(liffId: string): string {
+  return liffId.split('-')[0] ?? ''
+}
+
+/**
+ * 用 LINE 官方 endpoint 驗證 ID Token（需 openid scope）。
+ * @param idToken  LINE ID Token
+ * @param channelId  tenant 的 Login Channel ID（從 liff_id 提取）
  */
 export async function verifyLineIdToken(
-  idToken: string
+  idToken: string,
+  channelId: string
 ): Promise<LineTokenPayload> {
-  const liffId = (process.env.NEXT_PUBLIC_LIFF_ID ?? '').trim()
-  const channelId = liffId.split('-')[0]
-
   if (!channelId) {
-    throw new Error('NEXT_PUBLIC_LIFF_ID is not configured')
+    throw new Error('channelId is required for ID token verification')
   }
 
   const res = await fetch('https://api.line.me/oauth2/v2.1/verify', {
@@ -37,8 +49,7 @@ export async function verifyLineIdToken(
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     const msg =
-      (body as { error_description?: string; error?: string })
-        .error_description ??
+      (body as { error_description?: string; error?: string }).error_description ??
       (body as { error?: string }).error ??
       'LINE token verification failed'
     throw new Error(msg)
@@ -48,10 +59,8 @@ export async function verifyLineIdToken(
 }
 
 /**
- * 透過呼叫 LINE Profile API 驗證 Access Token（只需 profile scope）。
- * 回傳與 LineTokenPayload 相容的物件，`sub` 為 LINE user ID。
- *
- * 當 LIFF 未啟用 openid scope、getIDToken() 為 null 時，改用此方法驗證。
+ * 用 LINE Profile API 驗證 Access Token（只需 profile scope）。
+ * 當 LIFF 未啟用 openid scope 或 getIDToken() 為 null 時使用。
  */
 export async function verifyLineAccessToken(
   accessToken: string
@@ -72,28 +81,30 @@ export async function verifyLineAccessToken(
 /**
  * 統一入口：自動選擇正確的驗證方式，回傳 { sub: lineUid }。
  *
- * 策略：先嘗試 ID Token 驗證（需 openid scope），
- * 若 LINE 回傳錯誤（如 openid scope 未啟用、token 為 access token 格式）
- * 則 fallback 至 Access Token 驗證（只需 profile scope）。
- *
- * 不依賴 regex 猜測 token 格式，因為 LINE access token 在某些版本下
- * 也可能包含點號（.），導致誤判為 JWT。
+ * @param token    LINE ID Token 或 Access Token
+ * @param liffId   tenant 的 LIFF ID（用來提取 Login Channel ID）。
+ *                 若未提供，直接走 Access Token 驗證。
  */
 export async function verifyLineToken(
-  token: string
+  token: string,
+  liffId?: string
 ): Promise<Pick<LineTokenPayload, 'sub'>> {
-  try {
-    return await verifyLineIdToken(token)
-  } catch {
-    // ID Token 驗證失敗（openid scope 未啟用、或 token 非 ID Token）
-    // fallback：以 Access Token 方式驗證
-    return verifyLineAccessToken(token)
+  if (liffId) {
+    const channelId = extractChannelIdFromLiffId(liffId)
+    if (channelId) {
+      try {
+        return await verifyLineIdToken(token, channelId)
+      } catch {
+        // ID Token 驗證失敗（可能是 Access Token，或 openid scope 未啟用）
+        // fallback 到 Access Token 驗證
+      }
+    }
   }
+  return verifyLineAccessToken(token)
 }
 
 /**
  * 從 Request 的 Authorization header 取出 Bearer token。
- * 格式不符（或 header 不存在）時回傳 null。
  */
 export function extractBearerToken(req: {
   headers: { get(name: string): string | null }

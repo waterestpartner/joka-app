@@ -11,10 +11,8 @@ import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { pushTextMessage } from '@/lib/line-messaging'
 import type { PointTransactionType } from '@/types/member'
 
-const LIFF_ID = (process.env.NEXT_PUBLIC_LIFF_ID ?? '').trim()
-
 // ── GET /api/points ───────────────────────────────────────────────────────────
-// LIFF：Authorization: Bearer <token>
+// LIFF：Authorization: Bearer <token> + ?tenantSlug=
 // Dashboard：?tenantId=&memberId=（需後台登入）
 
 export async function GET(req: NextRequest) {
@@ -22,57 +20,50 @@ export async function GET(req: NextRequest) {
 
   if (token) {
     // LIFF path
-    if (!LIFF_ID) {
-      return NextResponse.json(
-        { error: 'Server configuration error: LIFF_ID not set' },
-        { status: 500 }
-      )
-    }
-
-    let lineUid: string
-    try {
-      const payload = await verifyLineToken(token)
-      lineUid = payload.sub
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Invalid token'
-      return NextResponse.json({ error: message }, { status: 401 })
+    const tenantSlug = req.nextUrl.searchParams.get('tenantSlug')
+    if (!tenantSlug) {
+      return NextResponse.json({ error: 'tenantSlug is required' }, { status: 400 })
     }
 
     try {
       const supabase = createSupabaseAdminClient()
 
-      // 確認本 LIFF 對應的 tenant，防止跨租戶
-      const { data: liffTenant } = await supabase
+      // 從 tenantSlug 取得 tenant（含 liff_id 供驗 token 用）
+      const { data: tenant } = await supabase
         .from('tenants')
-        .select('id')
-        .eq('liff_id', LIFF_ID)
+        .select('id, liff_id')
+        .eq('slug', tenantSlug)
         .single()
 
-      if (!liffTenant) {
+      if (!tenant) {
         return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+      }
+
+      // 驗 LINE token（用 tenant 的 liff_id）
+      let lineUid: string
+      try {
+        const payload = await verifyLineToken(token, tenant.liff_id ?? undefined)
+        lineUid = payload.sub
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Invalid token'
+        return NextResponse.json({ error: message }, { status: 401 })
       }
 
       const { data: member } = await supabase
         .from('members')
         .select('id, tenant_id, points')
         .eq('line_uid', lineUid)
-        .eq('tenant_id', liffTenant.id) // tenant 限定
+        .eq('tenant_id', tenant.id)
         .single()
 
       if (!member) {
         return NextResponse.json({ error: 'Member not found' }, { status: 404 })
       }
 
-      const points = await getPointsByMember(
-        member.tenant_id as string,
-        member.id as string
-      )
+      const points = await getPointsByMember(member.tenant_id as string, member.id as string)
       return NextResponse.json({
         points,
-        member: {
-          id: member.id as string,
-          points: member.points as number,
-        },
+        member: { id: member.id as string, points: member.points as number },
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Internal server error'
@@ -163,7 +154,7 @@ export async function POST(req: NextRequest) {
     const [{ data: member }, { data: tenant }] = await Promise.all([
       supabase
         .from('members')
-        .select('id, line_uid, line_uid_oa, points')
+        .select('id, line_uid, points')
         .eq('id', memberId)
         .eq('tenant_id', auth.tenantId)
         .single(),
@@ -187,9 +178,8 @@ export async function POST(req: NextRequest) {
     })
 
     // 推播通知：after() 確保在回應送出後才執行，不阻塞 API 回應
-    // line_uid_oa 是透過 webhook 取得的店家 OA UID（LINE Provider 相同），
-    // 若尚未設定則退回使用 LIFF UID（line_uid）
-    const pushUid = (member.line_uid_oa as string | null) ?? (member.line_uid as string)
+    // 使用 LIFF UID（同 Provider 架構下等同 OA UID）
+    const pushUid = member.line_uid as string
     const currentPoints = member.points as number
     const newTotal = Math.max(0, currentPoints + numAmount)
     const pushText =

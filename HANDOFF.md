@@ -17,6 +17,63 @@
 
 ## 版本紀錄
 
+### v0.4.0（2026-04-18）— Per-tenant LIFF 架構（Phase 1）
+
+**架構決策**
+JOKA 不擁有任何 LINE 資源。每個商家在自己的 LINE Provider 下建立 LIFF + OA，
+LIFF UID = OA UID（同 Provider），push 通知不再有跨 Provider UID 問題。
+
+**URL 結構（新）**
+```
+LIFF 入口：/t/{tenantSlug}/member-card | /points | /coupons | /register
+Dashboard：/dashboard/*（不變）
+根路徑：/ → redirect to /dashboard/login
+```
+
+**商家 LIFF Endpoint URL 設定方式**
+LINE Developers → LINE Login Channel → LIFF App → Endpoint URL:
+`https://joka-app.vercel.app/t/{tenantSlug}/member-card`
+
+**新增/修改檔案**
+- `src/contexts/TenantLiffContext.tsx` — NEW：LIFF + tenant 狀態 Context
+- `src/components/liff/TenantLiffShell.tsx` — NEW：LIFF init + 底部導航 Client Component
+- `src/app/(liff)/t/[tenantSlug]/layout.tsx` — NEW：Server Component，讀 DB 取 liff_id
+- `src/app/(liff)/t/[tenantSlug]/member-card/page.tsx` — NEW（取代舊頁）
+- `src/app/(liff)/t/[tenantSlug]/points/page.tsx` — NEW
+- `src/app/(liff)/t/[tenantSlug]/coupons/page.tsx` — NEW
+- `src/app/(liff)/t/[tenantSlug]/register/page.tsx` — NEW
+- `src/hooks/useLiff.ts` — 改為 re-export from TenantLiffContext
+- `src/lib/liff.ts` — `initializeLiff(liffId: string)` 動態 liffId
+- `src/lib/line-auth.ts` — `verifyLineToken(token, liffId?)` per-tenant 驗 token
+- `src/app/api/members/me/route.ts` — 用 `?tenantSlug=` 取代 LIFF_ID env
+- `src/app/api/members/route.ts` — POST 用 `tenantSlug` from body 取代 tenantId
+- `src/app/api/points/route.ts` — LIFF GET 用 `?tenantSlug=`
+- `src/app/api/coupons/route.ts` — LIFF GET 用 `?tenantSlug=`
+- `src/app/(liff)/layout.tsx` — 簡化為 passthrough
+- `src/app/page.tsx` — redirect to /dashboard/login
+
+**已移除**
+- `src/app/api/webhook/[tenantId]/route.ts` — 不需要（同 Provider 架構不需 webhook UID）
+- `supabase/add_line_uid_oa.sql` — 不需要
+- `NEXT_PUBLIC_LIFF_ID` 環境變數 — 已廢棄（不刪 .env.local 舊值不影響，但可清除）
+- DB: `members.line_uid_oa` 欄位、`pending_webhook_follows` 表 — 已 DROP
+
+**⚠️ 舊 LIFF 頁面（未刪除，待確認無人使用後可移除）**
+```
+src/app/(liff)/member-card/page.tsx   ← 可刪
+src/app/(liff)/points/page.tsx        ← 可刪
+src/app/(liff)/coupons/page.tsx       ← 可刪
+src/app/(liff)/register/page.tsx      ← 可刪
+```
+
+**商家 onboarding 新流程**
+1. 商家在 LINE Developers 建立自己的 Provider（若無）
+2. 建立 Messaging API Channel → 填入 channel secret + access token
+3. 建立 LINE Login Channel → 建 LIFF App
+   - Endpoint URL: `https://joka-app.vercel.app/t/{slug}/member-card`
+4. 填入 LIFF ID 到 JOKA Dashboard 品牌設定
+5. 完成 ✅
+
 ### v0.3.0（2026-04-18）— LINE Webhook UID 捕捉 + after() 推播優化
 
 **問題背景**
@@ -195,7 +252,6 @@ POST /api/coupons action=create        — Dashboard auth
 POST /api/coupons action=issue         — Dashboard auth（after() push）
 POST /api/coupons action=redeem        — LINE ID Token + ownership check
 PATCH /api/coupons                     — Dashboard auth + whitelist 欄位保護
-POST /api/webhook/[tenantId]           — LINE 簽名驗證（X-Line-Signature）；公開端點
 ```
 
 ---
@@ -214,14 +270,14 @@ supabase/add_line_uid_oa.sql           — line_uid_oa 欄位 + pending_webhook_
 
 | 項目 | 優先度 | 說明 |
 |------|--------|------|
-| **執行 Supabase migration** | 🔴 高 | `supabase/add_line_uid_oa.sql` 必須在 SQL Editor 手動執行，否則 webhook 和 push 無法正常工作 |
-| **LINE Developers webhook 設定** | 🔴 高 | 店家進 LINE Developers → Messaging API Channel → Webhook URL 填入 `https://joka-app.vercel.app/api/webhook/{tenantId}`，並勾選 Use webhook |
-| **跨 Provider UID 連結流程** | 🟡 中 | `pending_webhook_follows` 暫存的 OA UID 目前沒有 LIFF 端的連結入口（`/api/webhook/[tenantId]/link` 尚未實作）。長期根本解：確保每個店家的 LIFF 和 OA 在同一個 LINE Provider |
-| 數據總覽頁實作 | 高 | `/dashboard/overview` 是 placeholder，需做基本統計數字 |
-| 會員等級自動升降級 | 中 | 加點後依 tier_settings 自動升等，目前等級不會自動更新 |
-| 點數過期機制 | 中 | Cron job 定期寫入 type=expire 的 point_transactions |
+| **挖趣ERP onboarding（新流程）** | 🔴 高 | 請 waterest 在 LINE Developers 建 LINE Login Channel + LIFF，Endpoint URL 設為 `https://joka-app.vercel.app/t/joka-test/member-card`，再把 LIFF ID 填入 JOKA Dashboard |
+| **刪除舊 LIFF 頁面** | 🟡 中 | `src/app/(liff)/member-card/`, `points/`, `coupons/`, `register/` 可以刪除（確認無流量後） |
+| **Dashboard Onboarding 精靈** | 🟡 中 | `/dashboard/setup` 引導商家設定 LINE，含即時驗證 token 正確性 |
+| 數據總覽頁實作 | 中 | `/dashboard/overview` 是 placeholder |
+| 會員等級自動升降級 | 中 | 加點後依 tier_settings 自動升等 |
+| 點數過期機制 | 低 | Cron job 定期寫入 type=expire |
 | Dashboard 操作 audit log | 低 | 刪除/補點等操作目前沒有記錄 |
-| LINE Token 驗證快取 | 低 | 同一 token 短時間重複打 LINE verify API，可加快取優化 |
+| LINE Token 驗證快取 | 低 | 同一 token 短時間重複打 LINE verify API |
 
 ---
 

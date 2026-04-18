@@ -7,10 +7,7 @@ import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import type { Member } from '@/types/member'
 
-// .trim() 防止 env var 夾帶換行
-const LIFF_ID = (process.env.NEXT_PUBLIC_LIFF_ID ?? '').trim()
-
-// ── GET /api/members?tenantId=&lineUid= ──────────────────────────────────────
+// ── GET /api/members ──────────────────────────────────────────────────────────
 // Dashboard 用：需要後台登入，只能查自己 tenant 的會員
 
 export async function GET(req: NextRequest) {
@@ -21,7 +18,6 @@ export async function GET(req: NextRequest) {
   const tenantId = searchParams.get('tenantId')
   const lineUid = searchParams.get('lineUid')
 
-  // 只允許查詢自己 tenant
   const resolvedTenantId = auth.tenantId
   if (tenantId && tenantId !== resolvedTenantId) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -36,10 +32,7 @@ export async function GET(req: NextRequest) {
       .eq('tenant_id', resolvedTenantId)
       .eq('line_uid', lineUid)
       .single()
-
-    if (!member) {
-      return NextResponse.json({ error: 'Member not found' }, { status: 404 })
-    }
+    if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     return NextResponse.json(member)
   }
 
@@ -53,38 +46,21 @@ export async function GET(req: NextRequest) {
 }
 
 // ── POST /api/members ─────────────────────────────────────────────────────────
-// LIFF 用：需要 LINE ID Token，lineUid 從驗證後的 token 取出
+// LIFF 用：需要 LINE token，tenantSlug 從 body 取（對應 URL /t/{slug}/...）
+// lineUid 從驗證後的 token 取出，不信任 client body
 
 export async function POST(req: NextRequest) {
-  // 1. 驗證 LINE ID Token
-  if (!LIFF_ID) {
-    // LIFF_ID 未設定時直接 500，不允許靜默略過安全檢查
-    return NextResponse.json(
-      { error: 'Server configuration error: LIFF_ID not set' },
-      { status: 500 }
-    )
-  }
-
   const token = extractBearerToken(req)
   if (!token) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  let lineUid: string
-  try {
-    const payload = await verifyLineToken(token)
-    lineUid = payload.sub
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Invalid token'
-    return NextResponse.json({ error: message }, { status: 401 })
-  }
-
   try {
     const body = await req.json()
-    const { name, phone, birthday, tenantId } = body
+    const { name, phone, birthday, tenantSlug } = body
 
-    if (!tenantId) {
-      return NextResponse.json({ error: 'tenantId is required' }, { status: 400 })
+    if (!tenantSlug) {
+      return NextResponse.json({ error: 'tenantSlug is required' }, { status: 400 })
     }
 
     // ── Input validation ──────────────────────────────────────────────────────
@@ -100,36 +76,42 @@ export async function POST(req: NextRequest) {
 
     const supabase = createSupabaseAdminClient()
 
-    // 2. 驗證 tenantId 必須屬於本 LIFF 對應的 tenant
-    const { data: liffTenant } = await supabase
+    // 1. 從 tenantSlug 取得 tenant（含 liff_id 供驗 token 用）
+    const { data: tenant } = await supabase
       .from('tenants')
-      .select('id')
-      .eq('liff_id', LIFF_ID)
+      .select('id, liff_id')
+      .eq('slug', tenantSlug)
       .single()
 
-    if (!liffTenant || liffTenant.id !== tenantId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!tenant) {
+      return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+    }
+
+    // 2. 驗 LINE token（用 tenant 的 liff_id 提取 channel_id）
+    let lineUid: string
+    try {
+      const payload = await verifyLineToken(token, tenant.liff_id ?? undefined)
+      lineUid = payload.sub
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Invalid token'
+      return NextResponse.json({ error: message }, { status: 401 })
     }
 
     // 3. 防止重複註冊
     const { data: existing } = await supabase
       .from('members')
       .select('id')
-      .eq('tenant_id', tenantId)
+      .eq('tenant_id', tenant.id)
       .eq('line_uid', lineUid)
       .maybeSingle()
 
     if (existing) {
-      return NextResponse.json(
-        { error: 'Member already registered' },
-        { status: 409 }
-      )
+      return NextResponse.json({ error: 'Member already registered' }, { status: 409 })
     }
 
     const memberData: Omit<Member, 'id' | 'created_at'> = {
-      tenant_id: tenantId,
-      line_uid: lineUid, // 來自驗證後的 token，不信任 client body
-      line_uid_oa: null,  // 由 webhook follow 事件填入
+      tenant_id: tenant.id,
+      line_uid: lineUid,
       name: name.trim(),
       phone: phone.trim(),
       birthday: birthday ?? null,

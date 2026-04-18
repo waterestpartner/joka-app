@@ -1,12 +1,13 @@
-// 我的會員資料 API（供 LIFF 前台使用）
 // GET /api/members/me
-// Header: Authorization: Bearer <LINE_ID_TOKEN>
+// 查詢 LIFF 使用者自己的會員資料
 //
 // 安全設計：
-//   - 從 Authorization header 取 LINE ID Token
-//   - 呼叫 LINE 驗證 API 確認 token 合法，取出真實 lineUid（sub）
-//   - member lookup 限定在本 LIFF deployment 對應的 tenant（防跨租戶）
-//   - 不信任任何 query param
+//   - 從 Authorization header 取 LINE Token（ID Token 優先，fallback Access Token）
+//   - 用該 tenant 的 liff_id 驗 token，取出 lineUid（sub）
+//   - member lookup 限定 tenant，防跨租戶存取
+//
+// 查詢方式：
+//   - LIFF 前台：?tenantSlug=waterest（由 URL 取得，不信任用戶提供的 tenantId）
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -14,71 +15,58 @@ import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import type { Member } from '@/types/member'
 import type { Tenant } from '@/types/tenant'
 
-const LIFF_ID = (process.env.NEXT_PUBLIC_LIFF_ID ?? '').trim()
-
 export async function GET(req: NextRequest) {
-  if (!LIFF_ID) {
-    return NextResponse.json(
-      { error: 'Server configuration error: LIFF_ID not set' },
-      { status: 500 }
-    )
-  }
-
-  // 1. 取出並驗證 LINE ID Token
   const token = extractBearerToken(req)
   if (!token) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  let lineUid: string
-  try {
-    const payload = await verifyLineToken(token)
-    lineUid = payload.sub
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Invalid token'
-    return NextResponse.json({ error: message }, { status: 401 })
+  const { searchParams } = req.nextUrl
+  const tenantSlug = searchParams.get('tenantSlug')
+
+  if (!tenantSlug) {
+    return NextResponse.json({ error: 'tenantSlug is required' }, { status: 400 })
   }
 
   try {
     const supabase = createSupabaseAdminClient()
 
-    // 2. 確認本 LIFF 對應的 tenant
-    const { data: liffTenant } = await supabase
+    // 1. 取得此 tenant 的 liff_id（用於驗 token）
+    const { data: tenant } = await supabase
       .from('tenants')
-      .select('id')
-      .eq('liff_id', LIFF_ID)
+      .select('id, liff_id, name, slug, logo_url, primary_color, line_channel_id, created_at')
+      .eq('slug', tenantSlug)
       .single()
 
-    if (!liffTenant) {
+    if (!tenant) {
       return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
     }
 
-    // 3. 查詢此 LINE 用戶在這個 tenant 的會員資料（tenant 限定，防跨租戶）
+    // 2. 驗 LINE token（用 tenant 自己的 liff_id 提取 channel_id）
+    let lineUid: string
+    try {
+      const payload = await verifyLineToken(token, tenant.liff_id ?? undefined)
+      lineUid = payload.sub
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Invalid token'
+      return NextResponse.json({ error: message }, { status: 401 })
+    }
+
+    // 3. 查詢此 LINE 用戶在這個 tenant 的會員資料
     const { data: member, error: memberError } = await supabase
       .from('members')
       .select('*')
       .eq('line_uid', lineUid)
-      .eq('tenant_id', liffTenant.id)
+      .eq('tenant_id', tenant.id)
       .single()
 
     if (memberError || !member) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     }
 
-    // 4. 查詢所屬 tenant（不回傳敏感欄位）
-    const { data: tenant, error: tenantError } = await supabase
-      .from('tenants')
-      .select('id, name, slug, logo_url, primary_color, line_channel_id, liff_id, created_at')
-      .eq('id', (member as Member).tenant_id)
-      .single()
-
-    if (tenantError || !tenant) {
-      return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
-    }
-
     return NextResponse.json({
       member: member as Member,
-      tenant: tenant as Omit<Tenant, 'line_channel_secret'>,
+      tenant: tenant as Omit<Tenant, 'line_channel_secret' | 'channel_access_token'>,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error'

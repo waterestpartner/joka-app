@@ -63,10 +63,8 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-const LIFF_ID = (process.env.NEXT_PUBLIC_LIFF_ID ?? '').trim()
-
 // ── GET /api/coupons ──────────────────────────────────────────────────────────
-// LIFF：Authorization: Bearer <token>（查自己的優惠券）
+// LIFF：Authorization: Bearer <token> + ?tenantSlug=
 // Dashboard：?tenantId=（需後台登入）
 
 export async function GET(req: NextRequest) {
@@ -74,51 +72,45 @@ export async function GET(req: NextRequest) {
 
   if (token) {
     // LIFF path
-    if (!LIFF_ID) {
-      return NextResponse.json(
-        { error: 'Server configuration error: LIFF_ID not set' },
-        { status: 500 }
-      )
-    }
-
-    let lineUid: string
-    try {
-      const payload = await verifyLineToken(token)
-      lineUid = payload.sub
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Invalid token'
-      return NextResponse.json({ error: message }, { status: 401 })
+    const tenantSlug = req.nextUrl.searchParams.get('tenantSlug')
+    if (!tenantSlug) {
+      return NextResponse.json({ error: 'tenantSlug is required' }, { status: 400 })
     }
 
     try {
       const supabase = createSupabaseAdminClient()
 
-      // 確認本 LIFF 對應的 tenant，防止跨租戶
-      const { data: liffTenant } = await supabase
+      const { data: tenant } = await supabase
         .from('tenants')
-        .select('id')
-        .eq('liff_id', LIFF_ID)
+        .select('id, liff_id')
+        .eq('slug', tenantSlug)
         .single()
 
-      if (!liffTenant) {
+      if (!tenant) {
         return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+      }
+
+      let lineUid: string
+      try {
+        const payload = await verifyLineToken(token, tenant.liff_id ?? undefined)
+        lineUid = payload.sub
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Invalid token'
+        return NextResponse.json({ error: message }, { status: 401 })
       }
 
       const { data: member } = await supabase
         .from('members')
         .select('id, tenant_id')
         .eq('line_uid', lineUid)
-        .eq('tenant_id', liffTenant.id) // tenant 限定
+        .eq('tenant_id', tenant.id)
         .single()
 
       if (!member) {
         return NextResponse.json({ error: 'Member not found' }, { status: 404 })
       }
 
-      const coupons = await getMemberCoupons(
-        member.tenant_id as string,
-        member.id as string
-      )
+      const coupons = await getMemberCoupons(member.tenant_id as string, member.id as string)
       return NextResponse.json({ memberId: member.id as string, coupons })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Internal server error'
@@ -229,8 +221,7 @@ export async function POST(req: NextRequest) {
             const [{ data: mem }, { data: cpn }, { data: ten }] = await Promise.all([
               supabase
                 .from('members')
-                // line_uid_oa 是透過 webhook 取得的店家 OA UID
-                .select('line_uid, line_uid_oa')
+                .select('line_uid')
                 .eq('id', memberId)
                 .eq('tenant_id', tenantIdForPush)
                 .single(),
@@ -246,8 +237,8 @@ export async function POST(req: NextRequest) {
                 .single(),
             ])
             const channelToken = (ten?.channel_access_token as string) ?? ''
-            // 優先使用 OA UID（webhook 取得），退回使用 LIFF UID
-            const pushUid = (mem?.line_uid_oa as string | null) ?? (mem?.line_uid as string)
+            // 使用 LIFF UID（同 Provider 架構下等同 OA UID）
+            const pushUid = mem?.line_uid as string
             if (pushUid && cpn?.name) {
               await pushTextMessage(
                 pushUid,

@@ -1,41 +1,41 @@
 'use client'
 
-// LIFF 初始化邏輯集中在這裡
+// LIFF 初始化邏輯
+// 每個商家有自己的 LIFF（在自己的 LINE Provider 下），
+// liffId 由 Server Component 從 tenants.liff_id 讀取後傳入，
+// 不再使用全域 NEXT_PUBLIC_LIFF_ID 環境變數。
 
 import liff from '@line/liff'
 
-// .trim() 避免 env var 夾帶換行/空白導致 LIFF SDK 回報 "Invalid LIFF ID"
-const LIFF_ID = (process.env.NEXT_PUBLIC_LIFF_ID ?? '').trim()
-
-let initialized = false
+let initializedLiffId: string | null = null
 
 /**
- * Initialize the LIFF SDK. Safe to call multiple times — subsequent calls are
- * no-ops once initialization has completed.
+ * Initialize the LIFF SDK with the tenant's liff ID.
+ * Safe to call multiple times with the same ID — subsequent calls are no-ops.
+ * If called with a different ID, re-initializes.
  */
-export async function initializeLiff(): Promise<void> {
-  if (initialized) return
-
-  if (!LIFF_ID) {
-    throw new Error(
-      'NEXT_PUBLIC_LIFF_ID is not set. Please add it to your .env.local file.',
-    )
+export async function initializeLiff(liffId: string): Promise<void> {
+  if (!liffId) {
+    throw new Error('liffId is required')
   }
 
+  if (initializedLiffId === liffId) return
+
+  // Reset if switching tenant (edge case, but safe to handle)
+  initializedLiffId = null
+
   try {
-    await liff.init({ liffId: LIFF_ID })
-    initialized = true
+    await liff.init({ liffId })
+    initializedLiffId = liffId
   } catch (err) {
-    initialized = false
+    initializedLiffId = null
     throw err instanceof Error
       ? err
       : new Error('Failed to initialize LIFF: ' + String(err))
   }
 }
 
-/**
- * Fetch the current user's LINE profile.
- */
+/** Fetch the current user's LINE profile. */
 export async function getLiffProfile(): Promise<{
   userId: string
   displayName: string
@@ -49,9 +49,7 @@ export async function getLiffProfile(): Promise<{
   }
 }
 
-/**
- * Returns true when the user is authenticated inside LIFF.
- */
+/** Returns true when the user is authenticated inside LIFF. */
 export function isLiffLoggedIn(): boolean {
   try {
     return liff.isLoggedIn()
@@ -60,9 +58,7 @@ export function isLiffLoggedIn(): boolean {
   }
 }
 
-/**
- * Redirect the user to LINE Login.
- */
+/** Redirect the user to LINE Login. */
 export function liffLogin(): void {
   try {
     liff.login()
@@ -71,9 +67,7 @@ export function liffLogin(): void {
   }
 }
 
-/**
- * Log the user out of LIFF.
- */
+/** Log the user out of LIFF. */
 export function liffLogout(): void {
   try {
     liff.logout()
@@ -82,9 +76,7 @@ export function liffLogout(): void {
   }
 }
 
-/**
- * Returns true when the page is running inside the LINE app.
- */
+/** Returns true when the page is running inside the LINE app. */
 export function isInLineClient(): boolean {
   try {
     return liff.isInClient()
@@ -107,8 +99,6 @@ export function getLiffIdToken(): string | null {
 
 /**
  * Returns the LINE Access Token. Requires only `profile` scope (always available).
- * Use this for API authentication when `openid` scope is not enabled.
- * Server verifies by calling LINE's /v2/profile endpoint.
  */
 export function getLiffAccessToken(): string | null {
   try {
