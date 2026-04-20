@@ -199,9 +199,13 @@ export default function PushPage() {
   const charCount = message.length
 
   // ── Min datetime for scheduled_at (now + 1 minute) ───────────────────
-  const minDateTime = new Date(Date.now() + 60_000)
-    .toISOString()
-    .slice(0, 16)
+  // Use local time (not UTC) so the datetime-local input shows the correct
+  // minimum for users in Taiwan (UTC+8) and any other timezone.
+  const minDateTime = (() => {
+    const d = new Date(Date.now() + 60_000)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  })()
 
   return (
     <div className="space-y-8 max-w-2xl">

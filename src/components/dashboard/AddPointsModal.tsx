@@ -54,7 +54,9 @@ export default function AddPointsModal({ member, onClose, onSuccess }: Props) {
         throw new Error((j as { error?: string }).error ?? '操作失敗')
       }
 
-      onSuccess(member.points + signedAmount)
+      // Use server-returned newTotalPoints (clamped at 0) — not local calculation
+      const data = await res.json().catch(() => null) as { newTotalPoints?: number } | null
+      onSuccess(data?.newTotalPoints ?? Math.max(0, member.points + signedAmount))
     } catch (err) {
       setError(err instanceof Error ? err.message : '發生錯誤')
       setSubmitting(false)
