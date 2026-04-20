@@ -184,6 +184,35 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: '至少需要保留一個等級' }, { status: 400 })
   }
 
+  // 取得被刪等級的 tier key
+  const { data: target } = await supabase
+    .from('tier_settings')
+    .select('tier')
+    .eq('id', id)
+    .eq('tenant_id', auth.tenantId)
+    .single()
+
+  if (!target) return NextResponse.json({ error: '找不到該等級' }, { status: 404 })
+
+  // 找 min_points 最小的其他等級（作為降級目標）
+  const { data: fallback } = await supabase
+    .from('tier_settings')
+    .select('tier')
+    .eq('tenant_id', auth.tenantId)
+    .neq('id', id)
+    .order('min_points', { ascending: true })
+    .limit(1)
+    .single()
+
+  if (fallback) {
+    // 把持有被刪等級的會員全部移到最低等級
+    await supabase
+      .from('members')
+      .update({ tier: fallback.tier })
+      .eq('tenant_id', auth.tenantId)
+      .eq('tier', target.tier)
+  }
+
   const { error } = await supabase
     .from('tier_settings')
     .delete()
@@ -191,5 +220,5 @@ export async function DELETE(req: NextRequest) {
     .eq('tenant_id', auth.tenantId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, reassignedTo: fallback?.tier ?? null })
 }
