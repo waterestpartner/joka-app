@@ -430,19 +430,10 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        let redeemLineUid: string
-        try {
-          const payload = await verifyLineToken(redeemToken)
-          redeemLineUid = payload.sub
-        } catch (err) {
-          const message = err instanceof Error ? err.message : 'Invalid token'
-          return NextResponse.json({ error: message }, { status: 401 })
-        }
+        const redeemSupabase = createSupabaseAdminClient()
 
-        const supabase = createSupabaseAdminClient()
-
-        // 查這張券，同時 JOIN member 確認 line_uid（ownership check）
-        const { data: couponRecord } = await supabase
+        // 先查這張券 + JOIN member（取 line_uid），同時取 tenant_id 供驗 token
+        const { data: couponRecord } = await redeemSupabase
           .from('member_coupons')
           .select('tenant_id, member:members!inner(line_uid)')
           .eq('id', memberCouponId)
@@ -450,6 +441,25 @@ export async function POST(req: NextRequest) {
 
         if (!couponRecord) {
           return NextResponse.json({ error: 'Coupon not found' }, { status: 404 })
+        }
+
+        // 取 tenant 的 liff_id，確保 ID Token 用正確的 channelId 驗證
+        const { data: redeemTenant } = await redeemSupabase
+          .from('tenants')
+          .select('liff_id')
+          .eq('id', couponRecord.tenant_id)
+          .single()
+
+        let redeemLineUid: string
+        try {
+          const payload = await verifyLineToken(
+            redeemToken,
+            redeemTenant?.liff_id ?? undefined
+          )
+          redeemLineUid = payload.sub
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Invalid token'
+          return NextResponse.json({ error: message }, { status: 401 })
         }
 
         const memberData = couponRecord.member as
