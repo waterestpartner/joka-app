@@ -1,7 +1,9 @@
 // /api/push — 推播 API
 //
-// POST: 向所有（或指定）會員發送 LINE 推播，並記錄到 push_logs
-// GET:  取得此租戶的推播紀錄（最新 20 筆）
+// GET  /api/push                   → 取得此租戶的推播紀錄（最新 20 筆）
+// GET  /api/push?count=true        → 回傳各等級的會員人數 { all, byTier: { basic: N, ... } }
+// POST /api/push                   → 向指定目標發送 LINE 推播，並記錄到 push_logs
+//       body: { message, target: 'all' | '<tier_key>' }
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
@@ -10,11 +12,31 @@ import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { pushTextMessageBatch } from '@/lib/line-messaging'
 import type { PushLog } from '@/types/push'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const auth = await requireDashboardAuth()
   if (!isDashboardAuth(auth)) return auth
 
   const supabase = createSupabaseAdminClient()
+
+  // ?count=true → 回傳各等級人數供前端預覽
+  if (req.nextUrl.searchParams.get('count') === 'true') {
+    const { data: members } = await supabase
+      .from('members')
+      .select('tier')
+      .eq('tenant_id', auth.tenantId)
+      .not('line_uid', 'is', null)
+
+    const all = (members ?? []).length
+    const byTier: Record<string, number> = {}
+    for (const m of members ?? []) {
+      const t = (m.tier as string) ?? 'basic'
+      byTier[t] = (byTier[t] ?? 0) + 1
+    }
+
+    return NextResponse.json({ all, byTier })
+  }
+
+  // 預設：推播紀錄
   const { data, error } = await supabase
     .from('push_logs')
     .select('*')
@@ -22,10 +44,7 @@ export async function GET() {
     .order('created_at', { ascending: false })
     .limit(20)
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data as PushLog[])
 }
 
@@ -42,9 +61,8 @@ export async function POST(req: NextRequest) {
 
   // 1. 取得租戶 channel_access_token
   const tenant = await getTenantById(auth.tenantId)
-  if (!tenant) {
-    return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
-  }
+  if (!tenant) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+
   if (!tenant.channel_access_token) {
     return NextResponse.json(
       { error: '尚未設定 Channel Access Token，無法推播。請先至品牌設定頁填入。' },
@@ -55,7 +73,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '此租戶已停用推播功能。' }, { status: 400 })
   }
 
-  // 2. 取得目標會員的 line_uid
+  // 2. 取得目標會員的 line_uid（依 target 篩選等級）
   const supabase = createSupabaseAdminClient()
   let memberQuery = supabase
     .from('members')
@@ -63,19 +81,20 @@ export async function POST(req: NextRequest) {
     .eq('tenant_id', auth.tenantId)
     .not('line_uid', 'is', null)
 
-  // 未來可在此根據 target 加條件篩選（如：只推有點數的）
-  const { data: members, error: memberError } = await memberQuery
-
-  if (memberError) {
-    return NextResponse.json({ error: memberError.message }, { status: 500 })
+  if (target !== 'all') {
+    memberQuery = memberQuery.eq('tier', target)
   }
 
-  const lineUserIds = (members ?? [])
-    .map((m) => m.line_uid as string)
-    .filter(Boolean)
+  const { data: members, error: memberError } = await memberQuery
+  if (memberError) return NextResponse.json({ error: memberError.message }, { status: 500 })
+
+  const lineUserIds = (members ?? []).map((m) => m.line_uid as string).filter(Boolean)
 
   if (lineUserIds.length === 0) {
-    return NextResponse.json({ error: '目前沒有可推播的會員（需有 LINE UID）。' }, { status: 400 })
+    return NextResponse.json(
+      { error: target === 'all' ? '目前沒有可推播的會員（需有 LINE UID）。' : `「${target}」等級目前沒有會員。` },
+      { status: 400 }
+    )
   }
 
   // 3. 批次推播
@@ -100,11 +119,5 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
 
-  return NextResponse.json({
-    ok: true,
-    sentToCount: lineUserIds.length,
-    successCount,
-    failCount,
-    log,
-  })
+  return NextResponse.json({ ok: true, sentToCount: lineUserIds.length, successCount, failCount, log })
 }

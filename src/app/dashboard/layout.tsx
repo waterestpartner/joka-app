@@ -15,6 +15,7 @@ const navLinks = [
   { href: '/dashboard/scan', label: '掃碼集點' },
   { href: '/dashboard/push', label: '推播訊息' },
   { href: '/dashboard/coupons', label: '優惠券' },
+  { href: '/dashboard/tiers', label: '等級設定' },
   { href: '/dashboard/settings', label: '品牌設定' },
 ]
 
