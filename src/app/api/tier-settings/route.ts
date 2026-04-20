@@ -57,6 +57,19 @@ export async function POST(req: NextRequest) {
 
     const supabase = createSupabaseAdminClient()
 
+    // 檢查 min_points 是否已被其他等級使用
+    const { data: existingSame } = await supabase
+      .from('tier_settings')
+      .select('tier_display_name')
+      .eq('tenant_id', auth.tenantId)
+      .eq('min_points', min_points)
+      .limit(1)
+    if (existingSame && existingSame.length > 0) {
+      return NextResponse.json({
+        error: `升等門檻 ${min_points} pt 已被「${existingSame[0].tier_display_name}」使用,請設定不同的門檻。`,
+      }, { status: 400 })
+    }
+
     // 後端自動產生 tier 識別碼，處理碰撞重試
     let tierKey = generateTierKey()
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -117,6 +130,23 @@ export async function PATCH(req: NextRequest) {
     }
 
     const supabase = createSupabaseAdminClient()
+
+    // 若有修改 min_points,檢查是否與其他等級重複
+    if ('min_points' in safeUpdates) {
+      const { data: existingSame } = await supabase
+        .from('tier_settings')
+        .select('id, tier_display_name')
+        .eq('tenant_id', auth.tenantId)
+        .eq('min_points', safeUpdates.min_points as number)
+        .neq('id', id)
+        .limit(1)
+      if (existingSame && existingSame.length > 0) {
+        return NextResponse.json({
+          error: `升等門檻 ${safeUpdates.min_points} pt 已被「${existingSame[0].tier_display_name}」使用,請設定不同的門檻。`,
+        }, { status: 400 })
+      }
+    }
+
     const { data, error } = await supabase
       .from('tier_settings')
       .update(safeUpdates)
