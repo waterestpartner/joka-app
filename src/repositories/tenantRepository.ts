@@ -82,6 +82,83 @@ export async function getTierSettings(tenantId: string): Promise<TierSetting[]> 
   }
 }
 
+// ── Admin-only functions (bypass RLS) ────────────────────────────────────────
+
+export async function getAllTenants(): Promise<
+  (Tenant & { member_count: number })[]
+> {
+  try {
+    const supabase = createSupabaseAdminClient()
+    const { data: tenants, error } = await supabase
+      .from('tenants')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (error || !tenants) return []
+
+    // 抓各租戶的會員數
+    const { data: memberCounts } = await supabase
+      .from('members')
+      .select('tenant_id')
+
+    const countMap: Record<string, number> = {}
+    for (const row of memberCounts ?? []) {
+      const id = row.tenant_id as string
+      countMap[id] = (countMap[id] ?? 0) + 1
+    }
+
+    return (tenants as Tenant[]).map((t) => ({
+      ...t,
+      member_count: countMap[t.id] ?? 0,
+    }))
+  } catch {
+    return []
+  }
+}
+
+export async function createTenant(data: {
+  name: string
+  slug: string
+  adminEmail: string
+  primaryColor?: string
+}): Promise<Tenant | null> {
+  try {
+    const supabase = createSupabaseAdminClient()
+
+    // 1. 建立 tenant row
+    const { data: tenant, error: tenantError } = await supabase
+      .from('tenants')
+      .insert({
+        name: data.name,
+        slug: data.slug,
+        primary_color: data.primaryColor ?? '#06C755',
+        push_enabled: true,
+      })
+      .select()
+      .single()
+
+    if (tenantError || !tenant) {
+      console.error('[createTenant] tenant error:', tenantError)
+      return null
+    }
+
+    // 2. 建立 tenant_users row（讓 adminEmail 可以登入這個 tenant 的 dashboard）
+    const { error: userError } = await supabase.from('tenant_users').insert({
+      tenant_id: tenant.id,
+      email: data.adminEmail,
+      role: 'owner',
+    })
+
+    if (userError) {
+      console.error('[createTenant] tenant_users error:', userError)
+      // 不 rollback tenant，讓 admin 手動補
+    }
+
+    return tenant as Tenant
+  } catch {
+    return null
+  }
+}
+
 export async function upsertTierSettings(
   tenantId: string,
   settings: Omit<TierSetting, 'id' | 'tenant_id' | 'created_at'>[]

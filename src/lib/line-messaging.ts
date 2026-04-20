@@ -51,6 +51,49 @@ export async function pushTextMessage(
   }
 }
 
+/**
+ * 批次推播文字訊息給多位 LINE 用戶。
+ * @returns { successCount, failCount } 成功與失敗的數量
+ */
+export async function pushTextMessageBatch(
+  lineUserIds: string[],
+  text: string,
+  channelAccessToken: string
+): Promise<{ successCount: number; failCount: number }> {
+  let successCount = 0
+  let failCount = 0
+
+  for (const userId of lineUserIds) {
+    try {
+      const res = await fetch('https://api.line.me/v2/bot/message/push', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${channelAccessToken}`,
+        },
+        body: JSON.stringify({
+          to: userId,
+          messages: [{ type: 'text', text }],
+        }),
+        cache: 'no-store',
+      })
+
+      if (res.ok) {
+        successCount++
+      } else {
+        const body = await res.json().catch(() => ({}))
+        console.error(`[line-push-batch] failed for ${userId}:`, res.status, body)
+        failCount++
+      }
+    } catch (err) {
+      console.error(`[line-push-batch] network error for ${userId}:`, err)
+      failCount++
+    }
+  }
+
+  return { successCount, failCount }
+}
+
 // ── LINE Bot Info ────────────────────────────────────────────────────────────
 // 透過 Channel Access Token 查詢 LINE Official Account 的基本資訊
 // 用途：在品牌設定頁儲存 token 時，自動帶入 LINE@ 的顯示名稱與大頭貼

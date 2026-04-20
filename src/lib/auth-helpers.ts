@@ -10,6 +10,10 @@ export interface DashboardAuth {
   tenantId: string
 }
 
+export interface AdminAuth {
+  email: string
+}
+
 /**
  * 驗證 Dashboard 管理者的身分：
  *   1. 確認 Supabase Auth session 有效（已登入後台）
@@ -53,4 +57,36 @@ export function isDashboardAuth(
   result: DashboardAuth | NextResponse
 ): result is DashboardAuth {
   return 'tenantId' in result
+}
+
+/**
+ * 驗證 JOKA 超管身分：
+ *   1. 確認 Supabase Auth session 有效
+ *   2. 確認 email === JOKA_ADMIN_EMAIL 環境變數
+ *
+ * 成功回傳 { email }。
+ * 失敗回傳 NextResponse（401 / 403）。
+ */
+export async function requireAdminAuth(): Promise<AdminAuth | NextResponse> {
+  const authClient = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await authClient.auth.getUser()
+
+  if (!user?.email) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const adminEmail = process.env.JOKA_ADMIN_EMAIL
+  if (!adminEmail || user.email !== adminEmail) {
+    return NextResponse.json({ error: 'Forbidden: admin only' }, { status: 403 })
+  }
+
+  return { email: user.email }
+}
+
+export function isAdminAuth(
+  result: AdminAuth | NextResponse
+): result is AdminAuth {
+  return 'email' in result && !('tenantId' in result)
 }

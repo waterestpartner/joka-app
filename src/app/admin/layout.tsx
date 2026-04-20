@@ -9,16 +9,7 @@ async function signOutAction() {
   redirect('/dashboard/login')
 }
 
-const navLinks = [
-  { href: '/dashboard/overview', label: '數據總覽' },
-  { href: '/dashboard/members', label: '會員管理' },
-  { href: '/dashboard/scan', label: '掃碼集點' },
-  { href: '/dashboard/push', label: '推播訊息' },
-  { href: '/dashboard/coupons', label: '優惠券' },
-  { href: '/dashboard/settings', label: '品牌設定' },
-]
-
-export default async function DashboardLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode
@@ -28,21 +19,36 @@ export default async function DashboardLayout({
     data: { user },
   } = await supabase.auth.getUser()
 
-  // No authenticated user — render children only (login page handles its own UI)
+  // 未登入 → 導向 dashboard login
   if (!user) {
+    redirect('/dashboard/login')
+  }
+
+  const adminEmail = process.env.JOKA_ADMIN_EMAIL
+  // 非超管 → 403
+  if (!adminEmail || user.email !== adminEmail) {
     return (
-      <div className="min-h-screen bg-zinc-50 flex flex-col">
-        {children}
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50">
+        <div className="text-center space-y-3">
+          <div className="text-5xl">🚫</div>
+          <h1 className="text-2xl font-bold text-zinc-900">存取被拒</h1>
+          <p className="text-zinc-500">只有 JOKA 超管才能進入此頁面。</p>
+          <Link
+            href="/dashboard/overview"
+            className="inline-block mt-4 text-sm text-[#06C755] hover:underline"
+          >
+            返回 Dashboard
+          </Link>
+        </div>
       </div>
     )
   }
 
-  // Authenticated — render full sidebar layout
   return (
     <div className="min-h-screen flex bg-zinc-50">
       {/* Sidebar */}
       <aside className="w-64 flex-shrink-0 bg-white border-r border-zinc-200 flex flex-col">
-        {/* Logo area */}
+        {/* Logo */}
         <div className="h-16 flex items-center px-6 border-b border-zinc-200">
           <span
             className="text-xl font-bold tracking-tight"
@@ -50,23 +56,22 @@ export default async function DashboardLayout({
           >
             JOKA
           </span>
-          <span className="ml-2 text-sm text-zinc-500">管理後台</span>
+          <span className="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
+            超管
+          </span>
         </div>
 
-        {/* Navigation */}
+        {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
-            >
-              {link.label}
-            </Link>
-          ))}
+          <Link
+            href="/admin/tenants"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
+          >
+            🏪 租戶管理
+          </Link>
         </nav>
 
-        {/* User area + logout */}
+        {/* User info */}
         <div className="border-t border-zinc-200 p-4 space-y-2">
           <p className="text-xs text-zinc-500 truncate px-1">{user.email}</p>
           <form action={signOutAction}>
@@ -80,7 +85,7 @@ export default async function DashboardLayout({
         </div>
       </aside>
 
-      {/* Main content */}
+      {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
         <main className="flex-1 p-8 overflow-auto">{children}</main>
       </div>
