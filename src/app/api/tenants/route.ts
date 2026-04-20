@@ -11,14 +11,21 @@ import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { fetchLineBotInfo } from '@/lib/line-messaging'
 import type { Tenant } from '@/types/tenant'
 
-// 回傳給 Dashboard 的 tenant（去除所有敏感 token）
-// channel_access_token 改為回傳 boolean flag，讓前端顯示「已設定 / 未設定」
+// 回傳給 Dashboard 的 tenant（去除所有敏感 token 的原始值）
+// 敏感欄位改為回傳 boolean flag，讓前端顯示「已設定 / 未設定」
 function sanitizeTenant(
   tenant: Tenant
-): Omit<Tenant, 'line_channel_secret' | 'channel_access_token'> & { channel_access_token_set: boolean } {
+): Omit<Tenant, 'line_channel_secret' | 'channel_access_token'> & {
+  channel_access_token_set: boolean
+  line_channel_secret_set: boolean
+} {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { line_channel_secret, channel_access_token, ...safe } = tenant
-  return { ...safe, channel_access_token_set: !!channel_access_token }
+  return {
+    ...safe,
+    channel_access_token_set: !!channel_access_token,
+    line_channel_secret_set: !!line_channel_secret,
+  }
 }
 
 // 回傳給 LIFF bootstrap 的最小欄位（公開可讀，不含任何 channel 資訊）
@@ -112,6 +119,7 @@ export async function PATCH(req: NextRequest) {
     const ALLOWED_UPDATE_FIELDS = [
       'name', 'logo_url', 'primary_color', 'liff_id',
       'line_channel_id', 'channel_access_token', 'push_enabled',
+      'line_channel_secret',
     ]
     for (const key of Object.keys(updateFields)) {
       if (!ALLOWED_UPDATE_FIELDS.includes(key)) delete updateFields[key]

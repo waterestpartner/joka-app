@@ -4,11 +4,14 @@ import { useState, useEffect } from 'react'
 
 interface TenantSettings {
   id: string
+  slug: string
   name: string
   logo_url: string
   primary_color: string
   liff_id: string
   line_channel_id: string
+  line_channel_secret: string       // 輸入新 secret 才儲存，空白代表不變更
+  line_channel_secret_set: boolean  // 從 API 回傳：目前是否已設定
   channel_access_token: string      // 輸入新 token 才儲存，空白代表不變更
   channel_access_token_set: boolean // 從 API 回傳：目前是否已設定
   push_enabled: boolean             // 自動推播開關
@@ -16,14 +19,25 @@ interface TenantSettings {
 
 const DEFAULT_SETTINGS: TenantSettings = {
   id: '',
+  slug: '',
   name: '',
   logo_url: '',
   primary_color: '#06C755',
   liff_id: '',
   line_channel_id: '',
+  line_channel_secret: '',
+  line_channel_secret_set: false,
   channel_access_token: '',
   channel_access_token_set: false,
   push_enabled: true,
+}
+
+/** 從 NEXT_PUBLIC_APP_URL 或相對路徑計算出完整 App 網址 */
+function getAppBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    return window.location.origin
+  }
+  return process.env.NEXT_PUBLIC_APP_URL ?? ''
 }
 
 interface LineBotSynced {
@@ -51,12 +65,15 @@ export default function SettingsPage() {
           if (data) {
             setSettings({
               id: data.id ?? '',
+              slug: data.slug ?? '',
               name: data.name ?? '',
               logo_url: data.logo_url ?? '',
               primary_color: data.primary_color ?? '#06C755',
               liff_id: data.liff_id ?? '',
               line_channel_id: data.line_channel_id ?? '',
-              channel_access_token: '',           // 永遠不顯示舊 token（安全）
+              line_channel_secret: '',              // 永遠不顯示舊 secret（安全）
+              line_channel_secret_set: data.line_channel_secret_set ?? false,
+              channel_access_token: '',             // 永遠不顯示舊 token（安全）
               channel_access_token_set: data.channel_access_token_set ?? false,
               push_enabled: data.push_enabled ?? true,
             })
@@ -129,7 +146,10 @@ export default function SettingsPage() {
         line_channel_id: settings.line_channel_id,
         push_enabled: settings.push_enabled,
       }
-      // channel_access_token 有填才更新，空白不覆蓋舊值
+      // 敏感欄位有填才更新，空白不覆蓋舊值
+      if (settings.line_channel_secret.trim()) {
+        payload.line_channel_secret = settings.line_channel_secret.trim()
+      }
       if (settings.channel_access_token.trim()) {
         payload.channel_access_token = settings.channel_access_token.trim()
       }
@@ -153,6 +173,9 @@ export default function SettingsPage() {
         ...prev,
         name: typeof data?.name === 'string' ? data.name : prev.name,
         logo_url: typeof data?.logo_url === 'string' ? data.logo_url : prev.logo_url,
+        line_channel_secret: '',
+        line_channel_secret_set:
+          settings.line_channel_secret.trim().length > 0 || prev.line_channel_secret_set,
         channel_access_token: '',
         channel_access_token_set:
           settings.channel_access_token.trim().length > 0 || prev.channel_access_token_set,
@@ -227,17 +250,84 @@ export default function SettingsPage() {
               <h2 className="text-sm font-semibold text-zinc-900 mb-1">LINE 整合</h2>
               <p className="text-xs text-zinc-400 mb-4">以下資訊從 LINE Developers Console 取得</p>
               <div className="space-y-4">
+
+                {/* ── 唯讀：Webhook URL（貼到 LINE Developers Console） ── */}
+                {settings.slug && (
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-3">
+                    <p className="text-xs font-semibold text-blue-800">📋 需填入 LINE Developers Console 的設定</p>
+
+                    <div>
+                      <p className="text-xs font-medium text-blue-700 mb-1">Webhook URL</p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 rounded-lg bg-white border border-blue-200 px-3 py-2 text-xs font-mono text-blue-900 select-all break-all">
+                          {getAppBaseUrl()}/api/line-webhook/{settings.slug}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => navigator.clipboard.writeText(`${getAppBaseUrl()}/api/line-webhook/${settings.slug}`)}
+                          className="shrink-0 rounded-lg border border-blue-300 bg-white px-2.5 py-2 text-xs font-medium text-blue-700 hover:bg-blue-50 transition"
+                        >
+                          複製
+                        </button>
+                      </div>
+                      <p className="mt-1 text-xs text-blue-600">Messaging API Channel → Webhook settings → Webhook URL</p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-medium text-blue-700 mb-1">LIFF Endpoint URL（會員註冊頁）</p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 rounded-lg bg-white border border-blue-200 px-3 py-2 text-xs font-mono text-blue-900 select-all break-all">
+                          {getAppBaseUrl()}/t/{settings.slug}/register
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => navigator.clipboard.writeText(`${getAppBaseUrl()}/t/${settings.slug}/register`)}
+                          className="shrink-0 rounded-lg border border-blue-300 bg-white px-2.5 py-2 text-xs font-medium text-blue-700 hover:bg-blue-50 transition"
+                        >
+                          複製
+                        </button>
+                      </div>
+                      <p className="mt-1 text-xs text-blue-600">LIFF App → Endpoint URL</p>
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <label htmlFor="liff_id" className="block text-sm font-medium text-zinc-700 mb-1.5">LIFF ID</label>
                   <input id="liff_id" name="liff_id" type="text" value={settings.liff_id} onChange={handleChange} placeholder="1234567890-abcdefgh"
                     className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition" />
-                  <p className="mt-1 text-xs text-zinc-400">LINE Login Channel → LIFF → LIFF ID</p>
+                  <p className="mt-1 text-xs text-zinc-400">Messaging API Channel → LIFF → LIFF ID</p>
                 </div>
 
                 <div>
                   <label htmlFor="line_channel_id" className="block text-sm font-medium text-zinc-700 mb-1.5">LINE Channel ID</label>
                   <input id="line_channel_id" name="line_channel_id" type="text" value={settings.line_channel_id} onChange={handleChange} placeholder="1234567890"
                     className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition" />
+                  <p className="mt-1 text-xs text-zinc-400">Messaging API Channel → Basic settings → Channel ID</p>
+                </div>
+
+                {/* Channel Secret — Webhook 驗簽用 */}
+                <div>
+                  <label htmlFor="line_channel_secret" className="block text-sm font-medium text-zinc-700 mb-1.5">
+                    Channel Secret
+                    {settings.line_channel_secret_set && (
+                      <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 border border-green-200">
+                        ✓ 已設定
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    id="line_channel_secret"
+                    name="line_channel_secret"
+                    type="password"
+                    value={settings.line_channel_secret}
+                    onChange={handleChange}
+                    placeholder={settings.line_channel_secret_set ? '輸入新 Secret 以更新（留空不變更）' : '貼上 Channel Secret'}
+                    className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition"
+                  />
+                  <p className="mt-1 text-xs text-zinc-400">
+                    Messaging API Channel → Basic settings → Channel secret（用於驗證 LINE Webhook 簽章）
+                  </p>
                 </div>
 
                 {/* Channel Access Token — 推播通知用 */}
