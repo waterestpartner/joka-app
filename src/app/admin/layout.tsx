@@ -24,7 +24,7 @@ export default async function AdminLayout({
     redirect('/dashboard/login')
   }
 
-  const adminEmail = process.env.JOKA_ADMIN_EMAIL
+  const adminEmail = process.env.JOKA_ADMIN_EMAIL?.trim()
   // 非超管 → 403
   if (!adminEmail || user.email !== adminEmail) {
     return (

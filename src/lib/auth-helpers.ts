@@ -77,7 +77,7 @@ export async function requireAdminAuth(): Promise<AdminAuth | NextResponse> {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const adminEmail = process.env.JOKA_ADMIN_EMAIL
+  const adminEmail = process.env.JOKA_ADMIN_EMAIL?.trim()
   if (!adminEmail || user.email !== adminEmail) {
     return NextResponse.json({ error: 'Forbidden: admin only' }, { status: 403 })
   }
