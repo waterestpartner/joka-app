@@ -2,6 +2,7 @@ import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { getTenantById } from '@/repositories/tenantRepository'
 import { formatNumber } from '@/lib/utils'
+import type { PushLog } from '@/types/push'
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -19,6 +20,15 @@ async function getTenantIdForUser(email: string): Promise<string | null> {
 function monthStart(): string {
   const now = new Date()
   return new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+}
+
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString('zh-TW', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 // ── sub-components ─────────────────────────────────────────────────────────────
@@ -68,8 +78,8 @@ function TierBar({
           style={{ width: `${pct}%`, backgroundColor: color }}
         />
       </div>
-      <span className="w-12 text-right text-zinc-500 tabular-nums shrink-0">
-        {count} <span className="text-zinc-300">({pct}%)</span>
+      <span className="w-20 text-right text-zinc-500 tabular-nums shrink-0 text-xs">
+        {count} 人 ({pct}%)
       </span>
     </div>
   )
@@ -106,11 +116,12 @@ export default async function OverviewPage() {
     { count: totalMembers },
     { count: newMembers },
     { count: pointTxCount },
-    pointSumRes,
+    pointSumRes,     // 本月點數加總
     { count: pushCount },
     couponRes,
     memberTierRes,
     tierSettingsRes,
+    recentLogsRes,   // 最近推播紀錄
   ] = await Promise.all([
     getTenantById(tenantId),
 
@@ -127,20 +138,21 @@ export default async function OverviewPage() {
       .eq('tenant_id', tenantId)
       .gte('created_at', since),
 
-    // 本月集點次數（加點 transaction）
+    // 本月集點次數（加點 transaction，amount > 0）
+    // 注意：欄位是 amount，不是 points
     admin
       .from('point_transactions')
       .select('*', { count: 'exact', head: true })
       .eq('tenant_id', tenantId)
-      .gt('points', 0)
+      .gt('amount', 0)
       .gte('created_at', since),
 
-    // 本月發出點數總計
+    // 本月發出點數總計（欄位是 amount）
     admin
       .from('point_transactions')
-      .select('points')
+      .select('amount')
       .eq('tenant_id', tenantId)
-      .gt('points', 0)
+      .gt('amount', 0)
       .gte('created_at', since),
 
     // 本月推播次數
@@ -168,19 +180,28 @@ export default async function OverviewPage() {
       .select('tier, tier_display_name, min_points')
       .eq('tenant_id', tenantId)
       .order('min_points', { ascending: true }),
+
+    // 最近 5 筆推播紀錄
+    admin
+      .from('push_logs')
+      .select('id, message, target, sent_to_count, success_count, fail_count, created_at')
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false })
+      .limit(5),
   ])
 
   // ── derived stats ──────────────────────────────────────────────────────────
 
   const totalPts: number =
     (pointSumRes.data ?? []).reduce(
-      (acc, row) => acc + ((row.points as number) ?? 0),
+      (acc, row) => acc + ((row.amount as number) ?? 0),
       0
     )
 
   const couponList = couponRes.data ?? []
-  const couponIssued = couponList.length
+  const couponActive = couponList.filter((c) => c.status === 'active').length
   const couponUsed = couponList.filter((c) => c.status === 'used').length
+  const couponTotal = couponList.length
 
   // tier distribution
   const members = memberTierRes.data ?? []
@@ -189,6 +210,14 @@ export default async function OverviewPage() {
   for (const m of members) {
     const t = (m.tier as string) ?? 'unknown'
     tierCount[t] = (tierCount[t] ?? 0) + 1
+  }
+
+  const recentLogs = (recentLogsRes.data ?? []) as PushLog[]
+
+  // tier display name lookup
+  const tierNameMap: Record<string, string> = {}
+  for (const ts of tierSettings) {
+    tierNameMap[ts.tier as string] = ts.tier_display_name as string
   }
 
   // bar colors (cycle through a palette)
@@ -233,7 +262,7 @@ export default async function OverviewPage() {
         />
       </div>
 
-      {/* ── Second row ── */}
+      {/* ── Second row: tier distribution + coupon stats ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* 等級分佈 */}
@@ -245,14 +274,14 @@ export default async function OverviewPage() {
             <div className="space-y-3">
               {tierSettings.map((ts, idx) => (
                 <TierBar
-                  key={ts.tier}
-                  name={ts.tier_display_name}
-                  count={tierCount[ts.tier] ?? 0}
-                  total={totalMembers ?? 1}
+                  key={ts.tier as string}
+                  name={ts.tier_display_name as string}
+                  count={tierCount[ts.tier as string] ?? 0}
+                  total={totalMembers ?? 0}
                   color={COLORS[idx % COLORS.length]}
                 />
               ))}
-              {/* 孤兒等級（tier 不在 tier_settings 裡）*/}
+              {/* 孤兒等級（tier 不在 tier_settings 裡） */}
               {Object.entries(tierCount)
                 .filter(([t]) => !tierSettings.find((ts) => ts.tier === t))
                 .map(([t, cnt]) => (
@@ -260,7 +289,7 @@ export default async function OverviewPage() {
                     key={t}
                     name={`${t} (已刪)`}
                     count={cnt}
-                    total={totalMembers ?? 1}
+                    total={totalMembers ?? 0}
                     color="#d1d5db"
                   />
                 ))}
@@ -273,9 +302,9 @@ export default async function OverviewPage() {
           <h2 className="text-sm font-semibold text-zinc-900 mb-4">優惠券</h2>
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-zinc-600">已兌換（持有中）</span>
+              <span className="text-sm text-zinc-600">持有中（可使用）</span>
               <span className="text-2xl font-bold text-zinc-900 tabular-nums">
-                {formatNumber(couponIssued - couponUsed)}
+                {formatNumber(couponActive)}
               </span>
             </div>
             <div className="flex justify-between items-center">
@@ -287,24 +316,78 @@ export default async function OverviewPage() {
             <div className="pt-2 border-t border-zinc-100 flex justify-between items-center">
               <span className="text-xs text-zinc-400">核銷率</span>
               <span className="text-sm font-semibold text-zinc-700">
-                {couponIssued === 0
+                {couponTotal === 0
                   ? '—'
-                  : `${Math.round((couponUsed / couponIssued) * 100)}%`}
+                  : `${Math.round((couponUsed / couponTotal) * 100)}%`}
               </span>
             </div>
-            {/* bar */}
-            {couponIssued > 0 && (
+            {couponTotal > 0 && (
               <div className="rounded-full bg-zinc-100 h-2 overflow-hidden">
                 <div
                   className="h-full rounded-full bg-[#06C755] transition-all"
                   style={{
-                    width: `${Math.round((couponUsed / couponIssued) * 100)}%`,
+                    width: `${Math.round((couponUsed / couponTotal) * 100)}%`,
                   }}
                 />
               </div>
             )}
           </div>
         </div>
+      </div>
+
+      {/* ── Recent push logs (Feature B) ── */}
+      <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-zinc-100">
+          <h2 className="text-sm font-semibold text-zinc-900">最近推播紀錄</h2>
+        </div>
+        {recentLogs.length === 0 ? (
+          <div className="px-6 py-8 text-sm text-zinc-400">尚無推播紀錄</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-zinc-50 border-b border-zinc-100">
+                <th className="text-left px-6 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider w-2/5">訊息</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">對象</th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">發送</th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">成功</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">時間</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100">
+              {recentLogs.map((log) => (
+                <tr key={log.id} className="hover:bg-zinc-50 transition-colors">
+                  <td className="px-6 py-3">
+                    <p className="text-zinc-900 line-clamp-1">{log.message}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="rounded-full bg-zinc-100 text-zinc-600 px-2.5 py-0.5 text-xs font-medium">
+                      {log.target === 'all'
+                        ? '全部'
+                        : (tierNameMap[log.target] ?? log.target)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-center text-zinc-700 font-medium tabular-nums">
+                    {log.sent_to_count}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {log.fail_count > 0 ? (
+                      <span className="text-amber-600 font-medium tabular-nums">
+                        {log.success_count}/{log.sent_to_count}
+                      </span>
+                    ) : (
+                      <span className="text-emerald-600 font-medium tabular-nums">
+                        {log.success_count}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-zinc-500 whitespace-nowrap text-xs">
+                    {formatDateTime(log.created_at)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   )

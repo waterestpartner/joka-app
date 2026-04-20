@@ -3,25 +3,35 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Member } from '@/types/member'
-import { formatDate, formatPoints, getTierDisplayName } from '@/lib/utils'
+import { formatDate, formatPoints } from '@/lib/utils'
 import AddPointsModal from './AddPointsModal'
 import MemberDetailPanel from './MemberDetailPanel'
 
-// ── Tier badge ─────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-const TIER_BADGE: Record<string, { bg: string; text: string }> = {
-  gold: { bg: 'bg-amber-100', text: 'text-amber-700' },
-  silver: { bg: 'bg-blue-100', text: 'text-blue-700' },
-  basic: { bg: 'bg-zinc-100', text: 'text-zinc-600' },
+interface TierSetting {
+  tier: string
+  tier_display_name: string
 }
 
-function TierBadge({ tier }: { tier: string }) {
-  const style = TIER_BADGE[tier] ?? TIER_BADGE.basic
+// ── Tier badge ─────────────────────────────────────────────────────────────────
+
+const STATIC_BADGE: Record<string, { bg: string; text: string }> = {
+  gold:   { bg: 'bg-amber-100', text: 'text-amber-700' },
+  silver: { bg: 'bg-blue-100',  text: 'text-blue-700'  },
+  basic:  { bg: 'bg-zinc-100',  text: 'text-zinc-600'  },
+}
+const FALLBACK_BADGE = { bg: 'bg-zinc-100', text: 'text-zinc-600' }
+
+function TierBadge({ tier, tierSettings }: { tier: string; tierSettings: TierSetting[] }) {
+  const style = STATIC_BADGE[tier] ?? FALLBACK_BADGE
+  const displayName =
+    tierSettings.find((ts) => ts.tier === tier)?.tier_display_name ?? tier
   return (
     <span
       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${style.bg} ${style.text}`}
     >
-      {getTierDisplayName(tier)}
+      {displayName}
     </span>
   )
 }
@@ -30,9 +40,10 @@ function TierBadge({ tier }: { tier: string }) {
 
 interface Props {
   members: Member[]
+  tierSettings: TierSetting[]
 }
 
-export default function MemberTable({ members }: Props) {
+export default function MemberTable({ members, tierSettings }: Props) {
   const router = useRouter()
 
   const [localMembers, setLocalMembers] = useState<Member[]>(members)
@@ -161,7 +172,7 @@ export default function MemberTable({ members }: Props) {
                       {member.phone ?? '—'}
                     </td>
                     <td className="px-4 py-3">
-                      <TierBadge tier={member.tier} />
+                      <TierBadge tier={member.tier} tierSettings={tierSettings} />
                     </td>
                     <td className="px-4 py-3 text-right text-zinc-700 tabular-nums font-medium">
                       {formatPoints(member.points)}

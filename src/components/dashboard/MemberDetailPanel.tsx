@@ -3,11 +3,18 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Member, PointTransaction } from '@/types/member'
 import type { MemberCoupon, Coupon } from '@/types/coupon'
-import { formatDate, formatPoints, formatNumber, getTierDisplayName } from '@/lib/utils'
+import { formatDate, formatPoints, formatNumber } from '@/lib/utils'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type MemberCouponWithCoupon = MemberCoupon & { coupon: Coupon }
+
+interface TierSetting {
+  id: string
+  tier: string
+  tier_display_name: string
+  min_points: number
+}
 
 // ── Display helpers ───────────────────────────────────────────────────────────
 
@@ -41,6 +48,7 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
   const [points, setPoints] = useState<PointTransaction[]>([])
   const [memberCoupons, setMemberCoupons] = useState<MemberCouponWithCoupon[]>([])
   const [availableCoupons, setAvailableCoupons] = useState<Coupon[]>([])
+  const [tiers, setTiers] = useState<TierSetting[]>([])
   const [loading, setLoading] = useState(true)
 
   // Issue-coupon sub-form
@@ -53,10 +61,11 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [ptRes, mcRes, cRes] = await Promise.all([
+      const [ptRes, mcRes, cRes, tierRes] = await Promise.all([
         fetch(`/api/points?memberId=${member.id}`),
         fetch(`/api/coupons?memberId=${member.id}`),
         fetch('/api/coupons?activeOnly=true'),
+        fetch('/api/tier-settings'),
       ])
 
       if (ptRes.ok) {
@@ -71,10 +80,18 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
         const d = await cRes.json()
         setAvailableCoupons((d.coupons ?? []) as Coupon[])
       }
+      if (tierRes.ok) {
+        setTiers((await tierRes.json()) as TierSetting[])
+      }
     } finally {
       setLoading(false)
     }
   }, [member.id])
+
+  // 用 tier key 查顯示名稱，找不到就直接顯示 key
+  function tierDisplayName(tierKey: string): string {
+    return tiers.find((t) => t.tier === tierKey)?.tier_display_name ?? tierKey
+  }
 
   useEffect(() => {
     loadData()
@@ -122,7 +139,8 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
     }
   }
 
-  const tierStyle = TIER_BADGE[member.tier] ?? TIER_BADGE.basic
+  // 動態等級用固定 fallback 樣式
+  const tierStyle = TIER_BADGE[member.tier] ?? { bg: 'bg-zinc-100', text: 'text-zinc-600' }
 
   return (
     <>
@@ -162,7 +180,8 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
               <span
                 className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${tierStyle.bg} ${tierStyle.text}`}
               >
-                {getTierDisplayName(member.tier)}
+                {/* 從 tier_settings 動態查顯示名稱，loading 中暫時顯示 key */}
+                {loading ? member.tier : tierDisplayName(member.tier)}
               </span>
             </div>
 

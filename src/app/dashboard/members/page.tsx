@@ -45,10 +45,15 @@ export default async function MembersPage({ searchParams }: Props) {
     )
   }
 
-  const { members, total } = await getMembersByTenant(tenantId, {
-    limit: PER_PAGE,
-    offset,
-  })
+  const supabaseAdmin = createSupabaseAdminClient()
+  const [{ members, total }, { data: tierSettings }] = await Promise.all([
+    getMembersByTenant(tenantId, { limit: PER_PAGE, offset }),
+    supabaseAdmin
+      .from('tier_settings')
+      .select('tier, tier_display_name')
+      .eq('tenant_id', tenantId)
+      .order('min_points', { ascending: true }),
+  ])
 
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
 
@@ -63,7 +68,7 @@ export default async function MembersPage({ searchParams }: Props) {
       </div>
 
       {/* Member table (client component for search / actions) */}
-      <MemberTable members={members} />
+      <MemberTable members={members} tierSettings={tierSettings ?? []} />
 
       {/* Pagination */}
       <Pagination
