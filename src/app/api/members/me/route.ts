@@ -12,8 +12,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
-import type { Member } from '@/types/member'
-import type { Tenant } from '@/types/tenant'
+import type { Member, PointTransaction } from '@/types/member'
+import type { Tenant, TierSetting } from '@/types/tenant'
 
 export async function GET(req: NextRequest) {
   const token = extractBearerToken(req)
@@ -64,9 +64,38 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     }
 
+    // 4. 平行取得：最近 3 筆點數異動 + 所有分級設定 + 可用優惠券數
+    const [
+      { data: recentTransactions },
+      { data: tierSettings },
+      { count: activeCouponsCount },
+    ] = await Promise.all([
+      supabase
+        .from('point_transactions')
+        .select('*')
+        .eq('tenant_id', tenant.id)
+        .eq('member_id', member.id)
+        .order('created_at', { ascending: false })
+        .limit(3),
+      supabase
+        .from('tier_settings')
+        .select('*')
+        .eq('tenant_id', tenant.id)
+        .order('min_points', { ascending: true }),
+      supabase
+        .from('member_coupons')
+        .select('*', { count: 'exact', head: true })
+        .eq('tenant_id', tenant.id)
+        .eq('member_id', member.id)
+        .eq('status', 'active'),
+    ])
+
     return NextResponse.json({
       member: member as Member,
       tenant: tenant as Omit<Tenant, 'line_channel_secret' | 'channel_access_token'>,
+      recentTransactions: (recentTransactions ?? []) as PointTransaction[],
+      tierSettings: (tierSettings ?? []) as TierSetting[],
+      activeCouponsCount: activeCouponsCount ?? 0,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error'
