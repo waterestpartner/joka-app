@@ -101,13 +101,46 @@ export async function GET(req: NextRequest) {
 
       const { data: member } = await supabase
         .from('members')
-        .select('id, tenant_id')
+        .select('id, tenant_id, points')
         .eq('line_uid', lineUid)
         .eq('tenant_id', tenant.id)
         .single()
 
       if (!member) {
         return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+      }
+
+      // ── mode=exchangeable：回傳可用點數兌換的優惠券清單 ──────────────
+      const mode = req.nextUrl.searchParams.get('mode')
+      if (mode === 'exchangeable') {
+        const { data: allExchangeable } = await supabase
+          .from('coupons')
+          .select('*')
+          .eq('tenant_id', tenant.id)
+          .eq('type', 'points_exchange')
+          .eq('is_active', true)
+          .order('value', { ascending: true })
+
+        const couponIds = (allExchangeable ?? []).map((c) => c.id as string)
+
+        const existingQuery =
+          couponIds.length > 0
+            ? supabase
+                .from('member_coupons')
+                .select('coupon_id')
+                .eq('member_id', member.id)
+                .in('coupon_id', couponIds)
+                .eq('status', 'active')
+            : null
+
+        const existing = existingQuery ? (await existingQuery).data : []
+        const ownedIds = new Set((existing ?? []).map((e) => e.coupon_id as string))
+        const exchangeableCoupons = (allExchangeable ?? []).filter((c) => !ownedIds.has(c.id as string))
+
+        return NextResponse.json({
+          memberPoints: (member.points as number) ?? 0,
+          exchangeableCoupons,
+        })
       }
 
       const coupons = await getMemberCoupons(member.tenant_id as string, member.id as string)
@@ -252,6 +285,133 @@ export async function POST(req: NextRequest) {
         })
 
         return NextResponse.json(memberCoupon, { status: 201 })
+      }
+
+      case 'exchange': {
+        // LIFF only — 消費者用點數兌換優惠券
+        // 驗 LINE ID Token，扣點數，發券
+        const { couponId: exchangeCouponId, tenantSlug: exchangeTenantSlug } = body
+
+        if (!exchangeCouponId || !exchangeTenantSlug) {
+          return NextResponse.json(
+            { error: 'couponId and tenantSlug are required' },
+            { status: 400 }
+          )
+        }
+
+        const exchangeToken = extractBearerToken(req)
+        if (!exchangeToken) {
+          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
+        const exchangeSupabase = createSupabaseAdminClient()
+
+        // 取得 tenant
+        const { data: exchangeTenant } = await exchangeSupabase
+          .from('tenants')
+          .select('id, liff_id, channel_access_token, push_enabled')
+          .eq('slug', exchangeTenantSlug)
+          .single()
+
+        if (!exchangeTenant) {
+          return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+        }
+
+        // 驗 token
+        let exchangeLineUid: string
+        try {
+          const payload = await verifyLineToken(exchangeToken, exchangeTenant.liff_id ?? undefined)
+          exchangeLineUid = payload.sub
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Invalid token'
+          return NextResponse.json({ error: message }, { status: 401 })
+        }
+
+        // 取得 member + coupon 平行查詢
+        const [{ data: exchangeMember }, { data: exchangeCoupon }] = await Promise.all([
+          exchangeSupabase
+            .from('members')
+            .select('id, points, line_uid')
+            .eq('line_uid', exchangeLineUid)
+            .eq('tenant_id', exchangeTenant.id)
+            .single(),
+          exchangeSupabase
+            .from('coupons')
+            .select('id, name, type, value, is_active, tenant_id')
+            .eq('id', exchangeCouponId)
+            .eq('tenant_id', exchangeTenant.id)
+            .single(),
+        ])
+
+        if (!exchangeMember) {
+          return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+        }
+        if (!exchangeCoupon) {
+          return NextResponse.json({ error: 'Coupon not found' }, { status: 404 })
+        }
+        if (exchangeCoupon.type !== 'points_exchange') {
+          return NextResponse.json({ error: 'This coupon is not exchangeable with points' }, { status: 400 })
+        }
+        if (!exchangeCoupon.is_active) {
+          return NextResponse.json({ error: 'Coupon is no longer available' }, { status: 400 })
+        }
+
+        const memberPoints = exchangeMember.points as number
+        const requiredPoints = exchangeCoupon.value as number
+
+        if (memberPoints < requiredPoints) {
+          return NextResponse.json(
+            { error: `點數不足，需要 ${requiredPoints} 點，目前只有 ${memberPoints} 點` },
+            { status: 400 }
+          )
+        }
+
+        // 檢查是否已持有（避免重複兌換）
+        const { data: existing } = await exchangeSupabase
+          .from('member_coupons')
+          .select('id, status')
+          .eq('member_id', exchangeMember.id)
+          .eq('coupon_id', exchangeCouponId)
+          .in('status', ['active'])
+          .limit(1)
+
+        if (existing && existing.length > 0) {
+          return NextResponse.json({ error: '您已擁有此優惠券，使用後才能再次兌換' }, { status: 409 })
+        }
+
+        // 扣點數（spend 類型）
+        const { addPointTransaction: exchangeAddTx } = await import('@/repositories/pointRepository')
+        await exchangeAddTx({
+          tenant_id: exchangeTenant.id as string,
+          member_id: exchangeMember.id as string,
+          type: 'spend',
+          amount: -requiredPoints,
+          note: `兌換「${exchangeCoupon.name as string}」`,
+        })
+
+        // 發券
+        const { issueCoupon: exchangeIssueCoupon } = await import('@/repositories/couponRepository')
+        const newMemberCoupon = await exchangeIssueCoupon(
+          exchangeTenant.id as string,
+          exchangeMember.id as string,
+          exchangeCouponId
+        )
+
+        // 推播通知
+        const channelToken = (exchangeTenant.channel_access_token as string) ?? ''
+        const pushUid = exchangeMember.line_uid as string
+        const newPoints = memberPoints - requiredPoints
+        if (exchangeTenant.push_enabled && pushUid && channelToken) {
+          after(() =>
+            pushTextMessage(
+              pushUid,
+              `🎟 已成功兌換「${exchangeCoupon.name as string}」！\n扣除 ${requiredPoints} 點，剩餘 ${newPoints} 點。`,
+              channelToken
+            )
+          )
+        }
+
+        return NextResponse.json({ ...newMemberCoupon, newPoints }, { status: 201 })
       }
 
       case 'redeem': {
