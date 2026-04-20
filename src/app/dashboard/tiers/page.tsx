@@ -18,14 +18,12 @@ interface TierSetting {
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
 interface TierFormData {
-  tier: string
   tier_display_name: string
   min_points: string
   point_rate: string
 }
 
 const EMPTY_FORM: TierFormData = {
-  tier: '',
   tier_display_name: '',
   min_points: '0',
   point_rate: '1',
@@ -33,7 +31,6 @@ const EMPTY_FORM: TierFormData = {
 
 function tierToForm(t: TierSetting): TierFormData {
   return {
-    tier: t.tier,
     tier_display_name: t.tier_display_name,
     min_points: String(t.min_points),
     point_rate: String(t.point_rate),
@@ -90,7 +87,6 @@ function TierModal({ initial, onClose, onSaved }: ModalProps) {
             point_rate: pointRate,
           }
         : {
-            tier: form.tier.trim().toLowerCase(),
             tier_display_name: form.tier_display_name.trim(),
             min_points: minPoints,
             point_rate: pointRate,
@@ -129,30 +125,9 @@ function TierModal({ initial, onClose, onSaved }: ModalProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* 識別碼（新增時才填）*/}
-          {!isEdit && (
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1.5">
-                識別碼 <span className="text-zinc-400 font-normal">（英文小寫，儲存後不可更改）</span>
-              </label>
-              <input
-                name="tier"
-                type="text"
-                required
-                value={form.tier}
-                onChange={handleChange}
-                placeholder="例：silver"
-                pattern="[a-z0-9_]+"
-                title="只能使用英文小寫、數字、底線"
-                autoFocus
-                className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] transition"
-              />
-            </div>
-          )}
-
           {/* 顯示名稱 */}
           <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1.5">顯示名稱</label>
+            <label className="block text-sm font-medium text-zinc-700 mb-1.5">等級名稱</label>
             <input
               name="tier_display_name"
               type="text"
@@ -160,7 +135,7 @@ function TierModal({ initial, onClose, onSaved }: ModalProps) {
               value={form.tier_display_name}
               onChange={handleChange}
               placeholder="例：銀卡會員"
-              autoFocus={isEdit}
+              autoFocus
               className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] transition"
             />
           </div>
@@ -330,8 +305,7 @@ export default function TiersPage() {
               <thead>
                 <tr className="border-b border-zinc-100 bg-zinc-50">
                   <th className="text-left px-6 py-3 font-medium text-zinc-500">#</th>
-                  <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">識別碼</th>
-                  <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">顯示名稱</th>
+                  <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">等級名稱</th>
                   <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">升等門檻</th>
                   <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">集點倍率</th>
                   <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">消費 NT$100 獲得</th>
@@ -342,11 +316,6 @@ export default function TiersPage() {
                 {tiers.map((tier, idx) => (
                   <tr key={tier.id} className="hover:bg-zinc-50 transition-colors">
                     <td className="px-6 py-3 text-zinc-400 text-xs font-mono">{idx + 1}</td>
-                    <td className="px-4 py-3">
-                      <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-700 font-mono">
-                        {tier.tier}
-                      </code>
-                    </td>
                     <td className="px-4 py-3 font-semibold text-zinc-900">{tier.tier_display_name}</td>
                     <td className="px-4 py-3 text-zinc-700 tabular-nums">
                       {tier.min_points === 0
@@ -382,7 +351,7 @@ export default function TiersPage() {
                 ))}
                 {tiers.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-sm text-zinc-400">
+                    <td colSpan={6} className="px-6 py-12 text-center text-sm text-zinc-400">
                       尚無等級設定，點擊「新增等級」以建立第一個等級。
                     </td>
                   </tr>
