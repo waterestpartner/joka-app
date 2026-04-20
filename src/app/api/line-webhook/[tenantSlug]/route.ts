@@ -9,12 +9,12 @@
 import * as crypto from 'crypto'
 import { NextRequest } from 'next/server'
 import { getTenantBySlug } from '@/repositories/tenantRepository'
+import { createSupabaseAdminClient } from '@/lib/supabase-admin'
+import { pushTextMessage } from '@/lib/line-messaging'
 
 interface LineSource {
   type: string
   userId?: string
-  groupId?: string
-  roomId?: string
 }
 
 interface LineMessage {
@@ -34,6 +34,104 @@ interface LineWebhookBody {
   events: LineEvent[]
 }
 
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+/** 取得 LIFF 會員卡連結（用於推播給用戶） */
+function liffUrl(liffId: string | null | undefined): string {
+  if (liffId) return `https://liff.line.me/${liffId}`
+  return ''
+}
+
+/** 處理 follow 事件：推播歡迎訊息 + LIFF 連結 */
+async function handleFollow(
+  userId: string,
+  tenantId: string,
+  tenantName: string,
+  channelAccessToken: string,
+  cardUrl: string
+) {
+  const supabase = createSupabaseAdminClient()
+
+  // 查看是否已是會員
+  const { data: existingMember } = await supabase
+    .from('members')
+    .select('id, points, tier')
+    .eq('tenant_id', tenantId)
+    .eq('line_uid', userId)
+    .maybeSingle()
+
+  let message: string
+
+  if (existingMember) {
+    // 已是會員：歡迎回來
+    const points = (existingMember.points as number) ?? 0
+    message =
+      `👋 歡迎回到 ${tenantName}！\n` +
+      `您目前累積了 ${points} 點。\n\n` +
+      `📱 查看會員卡：\n${cardUrl}`
+  } else {
+    // 新用戶：邀請加入
+    message =
+      `👋 歡迎加入 ${tenantName}！\n\n` +
+      `點擊下方連結完成會員註冊，享受集點回饋 🎁\n${cardUrl}`
+  }
+
+  await pushTextMessage(userId, message, channelAccessToken)
+}
+
+/** 處理 message 事件：自動回覆點數查詢 */
+async function handleMessage(
+  userId: string,
+  tenantId: string,
+  tenantName: string,
+  channelAccessToken: string,
+  cardUrl: string,
+  messageText: string
+) {
+  const supabase = createSupabaseAdminClient()
+
+  // 只處理文字訊息（圖片/貼圖等忽略）
+  if (!messageText) return
+
+  // 查詢會員資料
+  const { data: member } = await supabase
+    .from('members')
+    .select('id, points, tier')
+    .eq('tenant_id', tenantId)
+    .eq('line_uid', userId)
+    .maybeSingle()
+
+  let reply: string
+
+  if (!member) {
+    // 非會員：引導加入
+    reply =
+      `您好！您目前還不是 ${tenantName} 的會員。\n\n` +
+      `立即加入享受集點優惠 👇\n${cardUrl}`
+  } else {
+    // 查詢等級顯示名稱
+    const { data: tierSetting } = await supabase
+      .from('tier_settings')
+      .select('tier_display_name')
+      .eq('tenant_id', tenantId)
+      .eq('tier', member.tier as string)
+      .maybeSingle()
+
+    const tierName = (tierSetting?.tier_display_name as string) ?? (member.tier as string)
+    const points = (member.points as number) ?? 0
+
+    reply =
+      `📊 ${tenantName} 會員點數查詢\n\n` +
+      `等級：${tierName}\n` +
+      `點數：${points} 點\n\n` +
+      `📱 查看完整會員卡：\n${cardUrl}`
+  }
+
+  await pushTextMessage(userId, reply, channelAccessToken)
+}
+
+// ── main handler ──────────────────────────────────────────────────────────────
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ tenantSlug: string }> }
@@ -44,7 +142,6 @@ export async function POST(
   const tenant = await getTenantBySlug(tenantSlug)
   if (!tenant) {
     console.warn(`[webhook] tenant not found: ${tenantSlug}`)
-    // 回傳 200 避免 LINE 重試（未知 slug，直接忽略）
     return new Response('OK', { status: 200 })
   }
 
@@ -81,18 +178,37 @@ export async function POST(
   }
 
   const events: LineEvent[] = parsed.events ?? []
+  const channelToken = tenant.channel_access_token ?? ''
+  const tenantName = tenant.name ?? tenantSlug
+  const cardLink = liffUrl(tenant.liff_id)
 
+  // ── 4. 逐一處理 events（不 await，讓 LINE 快速收到 200）────────────────
   for (const event of events) {
-    const userId = event.source?.userId ?? '(unknown)'
+    const userId = event.source?.userId
+
+    // 沒有 userId 的事件（例如 group message）直接跳過
+    if (!userId) {
+      console.log(`[webhook:${tenantSlug}] event.type=${event.type} no userId, skip`)
+      continue
+    }
 
     switch (event.type) {
       case 'follow':
-        // 用戶加入 OA：可在此記錄到 DB（後續功能）
         console.log(`[webhook:${tenantSlug}] follow uid=${userId}`)
+        // 非同步推播，不 await（避免影響回應速度）
+        handleFollow(
+          userId,
+          tenant.id,
+          tenantName,
+          channelToken,
+          cardLink
+        ).catch((err) =>
+          console.error(`[webhook:${tenantSlug}] handleFollow error:`, err)
+        )
         break
 
       case 'unfollow':
-        // 用戶封鎖 OA
+        // 用戶封鎖 OA：記錄到 console（未來可標記 member 為 inactive）
         console.log(`[webhook:${tenantSlug}] unfollow uid=${userId}`)
         break
 
@@ -100,6 +216,19 @@ export async function POST(
         console.log(
           `[webhook:${tenantSlug}] message uid=${userId} text="${event.message?.text ?? ''}"`
         )
+        // 只回覆文字訊息，其他類型（圖片/貼圖）忽略
+        if (event.message?.type === 'text') {
+          handleMessage(
+            userId,
+            tenant.id,
+            tenantName,
+            channelToken,
+            cardLink,
+            event.message.text ?? ''
+          ).catch((err) =>
+            console.error(`[webhook:${tenantSlug}] handleMessage error:`, err)
+          )
+        }
         break
 
       default:

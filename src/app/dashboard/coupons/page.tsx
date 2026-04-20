@@ -4,6 +4,15 @@ import { useState, useEffect, useCallback } from 'react'
 import type { Coupon, CouponType } from '@/types/coupon'
 import { formatDate } from '@/lib/utils'
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface TierSetting {
+  id: string
+  tier: string
+  tier_display_name: string
+  min_points: number
+}
+
 // ── Display helpers ───────────────────────────────────────────────────────────
 
 const TYPE_LABEL: Record<CouponType, string> = {
@@ -18,22 +27,18 @@ const TYPE_COLOR: Record<CouponType, string> = {
   points_exchange: 'bg-blue-100 text-blue-700',
 }
 
-const TIER_LABEL: Record<string, string> = {
-  all: '所有等級',
-  basic: '一般會員',
-  silver: '銀卡',
-  gold: '金卡',
-}
-
 function formatValue(coupon: Coupon): string {
   switch (coupon.type) {
-    case 'discount':
-      return `NT$${coupon.value}`
-    case 'free_item':
-      return '—'
-    case 'points_exchange':
-      return `${coupon.value} 點`
+    case 'discount':      return `NT$${coupon.value}`
+    case 'free_item':     return '—'
+    case 'points_exchange': return `${coupon.value} 點`
   }
+}
+
+/** target_tier → 顯示名稱 */
+function tierLabel(tierKey: string, tiers: TierSetting[]): string {
+  if (tierKey === 'all') return '所有等級'
+  return tiers.find((t) => t.tier === tierKey)?.tier_display_name ?? tierKey
 }
 
 // ── Coupon form / modal ───────────────────────────────────────────────────────
@@ -50,7 +55,7 @@ const EMPTY_FORM: CouponFormData = {
   name: '',
   type: 'discount',
   value: '',
-  target_tier: 'basic',
+  target_tier: 'all',
   expire_at: '',
 }
 
@@ -66,11 +71,12 @@ function couponToForm(c: Coupon): CouponFormData {
 
 interface CouponModalProps {
   initial?: Coupon
+  tiers: TierSetting[]
   onClose: () => void
   onSaved: (coupon: Coupon) => void
 }
 
-function CouponModal({ initial, onClose, onSaved }: CouponModalProps) {
+function CouponModal({ initial, tiers, onClose, onSaved }: CouponModalProps) {
   const [form, setForm] = useState<CouponFormData>(
     initial ? couponToForm(initial) : EMPTY_FORM
   )
@@ -175,14 +181,12 @@ function CouponModal({ initial, onClose, onSaved }: CouponModalProps) {
           {/* Type + Value */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1.5">
-                類型
-              </label>
+              <label className="block text-sm font-medium text-zinc-700 mb-1.5">類型</label>
               <select
                 name="type"
                 value={form.type}
                 onChange={handleChange}
-                className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition"
+                className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] transition"
               >
                 <option value="discount">折扣金額</option>
                 <option value="free_item">免費商品</option>
@@ -206,45 +210,39 @@ function CouponModal({ initial, onClose, onSaved }: CouponModalProps) {
                 value={form.value}
                 onChange={handleChange}
                 placeholder={
-                  form.type === 'discount'
-                    ? '100'
-                    : form.type === 'points_exchange'
-                    ? '50'
-                    : '—'
+                  form.type === 'discount' ? '100' : form.type === 'points_exchange' ? '50' : '—'
                 }
-                className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition disabled:bg-zinc-50 disabled:text-zinc-400"
+                className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] transition disabled:bg-zinc-50 disabled:text-zinc-400"
               />
             </div>
           </div>
 
-          {/* Tier + Expire */}
+          {/* Tier (動態) + Expire */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1.5">
-                適用等級
-              </label>
+              <label className="block text-sm font-medium text-zinc-700 mb-1.5">適用等級</label>
               <select
                 name="target_tier"
                 value={form.target_tier}
                 onChange={handleChange}
-                className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition"
+                className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] transition"
               >
                 <option value="all">所有等級</option>
-                <option value="basic">一般會員</option>
-                <option value="silver">銀卡</option>
-                <option value="gold">金卡</option>
+                {tiers.map((t) => (
+                  <option key={t.tier} value={t.tier}>
+                    {t.tier_display_name}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1.5">
-                到期日
-              </label>
+              <label className="block text-sm font-medium text-zinc-700 mb-1.5">到期日</label>
               <input
                 name="expire_at"
                 type="date"
                 value={form.expire_at}
                 onChange={handleChange}
-                className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition"
+                className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] transition"
               />
             </div>
           </div>
@@ -282,22 +280,27 @@ function CouponModal({ initial, onClose, onSaved }: CouponModalProps) {
 
 export default function CouponsPage() {
   const [coupons, setCoupons] = useState<Coupon[]>([])
+  const [tiers, setTiers] = useState<TierSetting[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [editTarget, setEditTarget] = useState<Coupon | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
 
-  // ── Fetch ──────────────────────────────────────────────────────────────────
+  // ── Fetch coupons + tiers ──────────────────────────────────────────────────
 
-  const loadCoupons = useCallback(async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     setFetchError(null)
     try {
-      const res = await fetch('/api/coupons')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-      setCoupons((data.coupons ?? []) as Coupon[])
+      const [couponRes, tierRes] = await Promise.all([
+        fetch('/api/coupons'),
+        fetch('/api/tier-settings'),
+      ])
+      if (!couponRes.ok) throw new Error(`HTTP ${couponRes.status}`)
+      const couponData = await couponRes.json()
+      setCoupons((couponData.coupons ?? []) as Coupon[])
+      if (tierRes.ok) setTiers((await tierRes.json()) as TierSetting[])
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : '載入失敗')
     } finally {
@@ -306,8 +309,8 @@ export default function CouponsPage() {
   }, [])
 
   useEffect(() => {
-    loadCoupons()
-  }, [loadCoupons])
+    loadData()
+  }, [loadData])
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
@@ -356,10 +359,7 @@ export default function CouponsPage() {
           </p>
         </div>
         <button
-          onClick={() => {
-            setEditTarget(null)
-            setShowModal(true)
-          }}
+          onClick={() => { setEditTarget(null); setShowModal(true) }}
           className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
           style={{ backgroundColor: '#06C755' }}
         >
@@ -372,9 +372,7 @@ export default function CouponsPage() {
       {fetchError && (
         <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-center justify-between">
           <span>載入失敗：{fetchError}</span>
-          <button onClick={loadCoupons} className="ml-3 underline font-medium">
-            重試
-          </button>
+          <button onClick={loadData} className="ml-3 underline font-medium">重試</button>
         </div>
       )}
 
@@ -387,54 +385,32 @@ export default function CouponsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-100 bg-zinc-50">
-                  <th className="text-left px-6 py-3 font-medium text-zinc-500 whitespace-nowrap">
-                    名稱
-                  </th>
-                  <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">
-                    類型
-                  </th>
-                  <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">
-                    折扣值
-                  </th>
-                  <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">
-                    適用等級
-                  </th>
-                  <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">
-                    到期日
-                  </th>
-                  <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">
-                    狀態
-                  </th>
+                  <th className="text-left px-6 py-3 font-medium text-zinc-500 whitespace-nowrap">名稱</th>
+                  <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">類型</th>
+                  <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">折扣值</th>
+                  <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">適用等級</th>
+                  <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">到期日</th>
+                  <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">狀態</th>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {coupons.map((coupon) => (
-                  <tr
-                    key={coupon.id}
-                    className="hover:bg-zinc-50 transition-colors"
-                  >
-                    <td className="px-6 py-3 font-medium text-zinc-900">
-                      {coupon.name}
-                    </td>
+                  <tr key={coupon.id} className="hover:bg-zinc-50 transition-colors">
+                    <td className="px-6 py-3 font-medium text-zinc-900">{coupon.name}</td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${TYPE_COLOR[coupon.type]}`}
-                      >
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${TYPE_COLOR[coupon.type]}`}>
                         {TYPE_LABEL[coupon.type]}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-zinc-700 tabular-nums">
-                      {formatValue(coupon)}
-                    </td>
+                    <td className="px-4 py-3 text-zinc-700 tabular-nums">{formatValue(coupon)}</td>
                     <td className="px-4 py-3 text-zinc-700">
-                      {TIER_LABEL[coupon.target_tier] ?? coupon.target_tier}
+                      {tierLabel(coupon.target_tier, tiers)}
                     </td>
                     <td className="px-4 py-3 text-zinc-500">
                       {coupon.expire_at ? formatDate(coupon.expire_at) : '無期限'}
                     </td>
                     <td className="px-4 py-3">
-                      {/* Clickable badge to toggle active status */}
                       <button
                         onClick={() => handleToggleActive(coupon)}
                         disabled={toggling === coupon.id}
@@ -445,24 +421,13 @@ export default function CouponsPage() {
                             : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
                         }`}
                       >
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            coupon.is_active ? 'bg-green-500' : 'bg-zinc-400'
-                          }`}
-                        />
-                        {toggling === coupon.id
-                          ? '…'
-                          : coupon.is_active
-                          ? '啟用中'
-                          : '停用'}
+                        <span className={`h-1.5 w-1.5 rounded-full ${coupon.is_active ? 'bg-green-500' : 'bg-zinc-400'}`} />
+                        {toggling === coupon.id ? '…' : coupon.is_active ? '啟用中' : '停用'}
                       </button>
                     </td>
                     <td className="px-4 py-3">
                       <button
-                        onClick={() => {
-                          setEditTarget(coupon)
-                          setShowModal(true)
-                        }}
+                        onClick={() => { setEditTarget(coupon); setShowModal(true) }}
                         className="text-xs text-zinc-500 hover:text-zinc-900 transition-colors"
                       >
                         編輯
@@ -472,10 +437,7 @@ export default function CouponsPage() {
                 ))}
                 {coupons.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={7}
-                      className="px-6 py-12 text-center text-sm text-zinc-400"
-                    >
+                    <td colSpan={7} className="px-6 py-12 text-center text-sm text-zinc-400">
                       尚無優惠券，點擊「新增優惠券」以建立第一張。
                     </td>
                   </tr>
@@ -490,10 +452,8 @@ export default function CouponsPage() {
       {showModal && (
         <CouponModal
           initial={editTarget ?? undefined}
-          onClose={() => {
-            setShowModal(false)
-            setEditTarget(null)
-          }}
+          tiers={tiers}
+          onClose={() => { setShowModal(false); setEditTarget(null) }}
           onSaved={handleSaved}
         />
       )}
