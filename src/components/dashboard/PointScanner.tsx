@@ -11,13 +11,19 @@ interface PointScannerProps {
   onSuccess?: (transaction: PointTransaction) => void
 }
 
+interface ScanResult extends PointTransaction {
+  newTotalPoints?: number
+  tierUpgraded?: boolean
+  newTier?: string
+}
+
 export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
   const [memberId, setMemberId] = useState('')
-  const [points, setPoints] = useState('')
+  const [spentAmount, setSpentAmount] = useState('')
   const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [recentTransactions, setRecentTransactions] = useState<PointTransaction[]>([])
+  const [recentTransactions, setRecentTransactions] = useState<ScanResult[]>([])
 
   const memberIdRef = useRef<HTMLInputElement>(null)
 
@@ -30,13 +36,13 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
     e.preventDefault()
     setError(null)
 
-    const pointAmount = Number(points)
+    const spent = Number(spentAmount)
     if (!memberId.trim()) {
       setError('請輸入或掃描會員 ID')
       return
     }
-    if (!pointAmount || pointAmount <= 0) {
-      setError('請輸入有效的點數')
+    if (!spent || spent <= 0) {
+      setError('請輸入有效的消費金額')
       return
     }
 
@@ -49,24 +55,23 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
         body: JSON.stringify({
           tenantId,
           memberId: memberId.trim(),
-          type: 'earn',
-          amount: pointAmount,
+          spentAmount: spent,
           note: note.trim() || null,
         }),
       })
 
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))
-        throw new Error(json.error ?? '集點失敗')
+        throw new Error((json as { error?: string }).error ?? '集點失敗')
       }
 
-      const transaction: PointTransaction = await res.json()
-      setRecentTransactions((prev) => [transaction, ...prev.slice(0, 9)])
-      onSuccess?.(transaction)
+      const result: ScanResult = await res.json()
+      setRecentTransactions((prev) => [result, ...prev.slice(0, 9)])
+      onSuccess?.(result)
 
       // Reset form, keep focus on member ID for next scan
       setMemberId('')
-      setPoints('')
+      setSpentAmount('')
       setNote('')
       memberIdRef.current?.focus()
     } catch (err) {
@@ -105,24 +110,30 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
           />
         </div>
 
-        {/* Points */}
+        {/* Spent Amount */}
         <div className="flex flex-col gap-1">
           <label
             className="text-sm font-medium text-gray-600"
-            htmlFor="scanner-points"
+            htmlFor="scanner-spent"
           >
-            點數
+            消費金額（NT$）
           </label>
-          <input
-            id="scanner-points"
-            type="number"
-            min="1"
-            step="1"
-            value={points}
-            onChange={(e) => setPoints(e.target.value)}
-            placeholder="輸入點數（例：100）"
-            className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-base text-gray-800 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
-          />
+          <div className="relative">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-medium">
+              NT$
+            </span>
+            <input
+              id="scanner-spent"
+              type="number"
+              min="1"
+              step="1"
+              value={spentAmount}
+              onChange={(e) => setSpentAmount(e.target.value)}
+              placeholder="0"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 pl-12 pr-4 py-3 text-base text-gray-800 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
+            />
+          </div>
+          <p className="text-xs text-gray-400">系統將依會員等級自動換算點數</p>
         </div>
 
         {/* Note */}
@@ -138,7 +149,7 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
             type="text"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="例：消費 NT$500"
+            placeholder="例：洗衣機清潔服務"
             className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-base text-gray-800 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
           />
         </div>
@@ -154,7 +165,7 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
           disabled={submitting}
           className="w-full rounded-xl bg-green-500 py-4 text-lg font-bold text-white shadow-sm disabled:opacity-60 active:bg-green-600"
         >
-          {submitting ? '集點中…' : '集點'}
+          {submitting ? '集點中…' : '確認集點'}
         </button>
       </form>
 
@@ -174,16 +185,30 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
                   <span className="text-sm font-medium text-gray-700 font-mono truncate max-w-[180px]">
                     {tx.member_id}
                   </span>
-                  {tx.note && (
-                    <span className="text-xs text-gray-400">{tx.note}</span>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {tx.note && (
+                      <span className="text-xs text-gray-400">{tx.note}</span>
+                    )}
+                    {tx.tierUpgraded && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                        🎉 升等
+                      </span>
+                    )}
+                  </div>
                   <span className="text-xs text-gray-400">
                     {formatDate(tx.created_at)}
                   </span>
                 </div>
-                <span className="text-base font-bold text-green-600">
-                  +{formatNumber(tx.amount)} pt
-                </span>
+                <div className="text-right">
+                  <span className="text-base font-bold text-green-600">
+                    +{formatNumber(tx.amount)} pt
+                  </span>
+                  {tx.newTotalPoints !== undefined && (
+                    <p className="text-xs text-gray-400">
+                      累積 {formatNumber(tx.newTotalPoints)} pt
+                    </p>
+                  )}
+                </div>
               </li>
             ))}
           </ul>

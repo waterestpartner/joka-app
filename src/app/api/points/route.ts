@@ -114,6 +114,16 @@ export async function GET(req: NextRequest) {
 
 // ── POST /api/points ──────────────────────────────────────────────────────────
 // Dashboard 用：需要後台登入，只能操作自己 tenant 的會員點數
+//
+// 兩種模式：
+//   1. 消費集點（掃碼）：{ memberId, spentAmount (NT$), note }
+//      → API 依會員目前等級的 point_rate 換算點數，更新 total_spent
+//   2. 手動調整：    { memberId, type, amount, note }
+//      → 直接用 amount 作為點數增減（不更新 total_spent）
+//
+// 兩種模式都會：
+//   - 在點數變動後自動檢查並升降等級
+//   - 推播通知會員（含升等訊息）
 
 export async function POST(req: NextRequest) {
   const auth = await requireDashboardAuth()
@@ -121,13 +131,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { memberId, type, amount, note, tenantId } = body
+    const { memberId, type, amount, spentAmount, note, tenantId } = body
 
-    if (!memberId || !type || amount === undefined) {
-      return NextResponse.json(
-        { error: 'memberId, type, and amount are required' },
-        { status: 400 }
-      )
+    if (!memberId) {
+      return NextResponse.json({ error: 'memberId is required' }, { status: 400 })
     }
 
     // 禁止指定其他 tenant
@@ -135,26 +142,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const validTypes: PointTransactionType[] = ['earn', 'spend', 'expire', 'manual']
-    if (!validTypes.includes(type)) {
-      return NextResponse.json({ error: 'Invalid transaction type' }, { status: 400 })
-    }
+    const isScanEarn = spentAmount !== undefined && spentAmount !== null
+    const isManual = !isScanEarn
 
-    // amount 數值驗證：必須是有限數、非零、不超過合理範圍
-    const numAmount = Number(amount)
-    if (!Number.isFinite(numAmount) || numAmount === 0 || Math.abs(numAmount) > 1_000_000) {
+    if (isManual && (!type || amount === undefined)) {
       return NextResponse.json(
-        { error: 'Invalid amount: must be a finite non-zero number ≤ 1,000,000' },
+        { error: 'type and amount are required for manual adjustment' },
         { status: 400 }
       )
     }
 
-    // 確認 member 屬於此 tenant，同時取得 tenant 的 channel_access_token 供推播用
+    if (isManual) {
+      const validTypes: PointTransactionType[] = ['earn', 'spend', 'expire', 'manual']
+      if (!validTypes.includes(type)) {
+        return NextResponse.json({ error: 'Invalid transaction type' }, { status: 400 })
+      }
+    }
+
+    // 取得 member、tenant、tier_settings（平行查詢）
     const supabase = createSupabaseAdminClient()
-    const [{ data: member }, { data: tenant }] = await Promise.all([
+    const [{ data: member }, { data: tenant }, { data: tierSettings }] = await Promise.all([
       supabase
         .from('members')
-        .select('id, line_uid, points')
+        .select('id, line_uid, points, tier, total_spent')
         .eq('id', memberId)
         .eq('tenant_id', auth.tenantId)
         .single(),
@@ -163,35 +173,119 @@ export async function POST(req: NextRequest) {
         .select('channel_access_token, push_enabled')
         .eq('id', auth.tenantId)
         .single(),
+      supabase
+        .from('tier_settings')
+        .select('tier, tier_display_name, min_points, point_rate')
+        .eq('tenant_id', auth.tenantId)
+        .order('min_points', { ascending: true }),
     ])
 
     if (!member) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     }
 
+    const currentPoints = member.points as number
+    const sortedTiers = [...(tierSettings ?? [])].sort(
+      (a, b) => (a.min_points as number) - (b.min_points as number)
+    )
+
+    // ── 計算本次點數 ──────────────────────────────────────────────────
+    let numAmount: number
+    let numSpentAmount = 0
+
+    if (isScanEarn) {
+      numSpentAmount = Number(spentAmount)
+      if (!Number.isFinite(numSpentAmount) || numSpentAmount <= 0 || numSpentAmount > 10_000_000) {
+        return NextResponse.json(
+          { error: 'Invalid spentAmount: must be a positive number ≤ 10,000,000' },
+          { status: 400 }
+        )
+      }
+      // 依目前等級的倍率換算點數
+      let pointRate = 1.0
+      for (const ts of sortedTiers) {
+        if (currentPoints >= (ts.min_points as number)) {
+          pointRate = ts.point_rate as number
+        }
+      }
+      numAmount = Math.round(numSpentAmount * pointRate)
+    } else {
+      numAmount = Number(amount)
+      if (!Number.isFinite(numAmount) || numAmount === 0 || Math.abs(numAmount) > 1_000_000) {
+        return NextResponse.json(
+          { error: 'Invalid amount: must be a finite non-zero number ≤ 1,000,000' },
+          { status: 400 }
+        )
+      }
+    }
+
+    // ── 建立點數異動紀錄 ──────────────────────────────────────────────
+    const txType: PointTransactionType = isScanEarn ? 'earn' : (type as PointTransactionType)
+    const txNote = note ?? (isScanEarn ? `消費 NT$${numSpentAmount}` : null)
+
     const transaction = await addPointTransaction({
       tenant_id: auth.tenantId,
       member_id: memberId,
-      type: type as PointTransactionType,
+      type: txType,
       amount: numAmount,
-      note: note ?? null,
+      note: txNote,
     })
 
-    // 推播通知：after() 確保在回應送出後才執行，不阻塞 API 回應
-    // 使用 LIFF UID（同 Provider 架構下等同 OA UID）
+    // ── 計算新點數 & 判斷升降等 ──────────────────────────────────────
+    const newTotalPoints = Math.max(0, currentPoints + numAmount)
+
+    let newTierKey = sortedTiers[0]?.tier ?? 'basic'
+    let newTierDisplayName = (sortedTiers[0]?.tier_display_name as string) ?? '一般會員'
+    for (const ts of sortedTiers) {
+      if (newTotalPoints >= (ts.min_points as number)) {
+        newTierKey = ts.tier as string
+        newTierDisplayName = ts.tier_display_name as string
+      }
+    }
+
+    const oldTierKey = member.tier as string
+    const oldTierIdx = sortedTiers.findIndex((t) => t.tier === oldTierKey)
+    const newTierIdx = sortedTiers.findIndex((t) => t.tier === newTierKey)
+    const tierUpgraded = newTierIdx > oldTierIdx
+    const tierChanged = newTierKey !== oldTierKey
+
+    // ── 更新 member（tier / total_spent）────────────────────────────
+    const memberUpdates: Record<string, unknown> = {}
+    if (tierChanged) memberUpdates.tier = newTierKey
+    if (numSpentAmount > 0) {
+      memberUpdates.total_spent = ((member.total_spent as number) ?? 0) + numSpentAmount
+    }
+    if (Object.keys(memberUpdates).length > 0) {
+      await supabase
+        .from('members')
+        .update(memberUpdates)
+        .eq('id', memberId)
+        .eq('tenant_id', auth.tenantId)
+    }
+
+    // ── 推播通知 ─────────────────────────────────────────────────────
     const pushUid = member.line_uid as string
-    const currentPoints = member.points as number
-    const newTotal = Math.max(0, currentPoints + numAmount)
-    const pushText =
-      numAmount > 0
-        ? `感謝消費！您獲得了 ${numAmount} 點，目前累積 ${newTotal} 點 🎉`
-        : `您的點數已調整 ${numAmount} 點，目前累積 ${newTotal} 點。`
     const channelToken = (tenant?.channel_access_token as string) ?? ''
+
+    let pushText: string
+    if (tierUpgraded) {
+      pushText =
+        `🎉 恭喜升等為「${newTierDisplayName}」！\n` +
+        `您獲得了 ${numAmount} 點，目前累積 ${newTotalPoints} 點。`
+    } else if (numAmount > 0) {
+      pushText = `感謝消費！您獲得了 ${numAmount} 點，目前累積 ${newTotalPoints} 點 🎉`
+    } else {
+      pushText = `您的點數已調整 ${numAmount} 點，目前累積 ${newTotalPoints} 點。`
+    }
+
     if (tenant?.push_enabled) {
       after(() => pushTextMessage(pushUid, pushText, channelToken))
     }
 
-    return NextResponse.json(transaction, { status: 201 })
+    return NextResponse.json(
+      { ...transaction, newTotalPoints, tierUpgraded, newTier: newTierKey },
+      { status: 201 }
+    )
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error'
     return NextResponse.json({ error: message }, { status: 500 })
