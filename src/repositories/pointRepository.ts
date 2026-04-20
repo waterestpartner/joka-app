@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { PointTransaction } from '@/types/member'
 
 export async function getPointsByMember(
@@ -7,7 +7,7 @@ export async function getPointsByMember(
   limit = 50
 ): Promise<PointTransaction[]> {
   try {
-    const supabase = await createSupabaseServerClient()
+    const supabase = createSupabaseAdminClient()
     const { data, error } = await supabase
       .from('point_transactions')
       .select('*')
@@ -25,7 +25,7 @@ export async function getPointsByMember(
 export async function addPointTransaction(
   data: Omit<PointTransaction, 'id' | 'created_at'>
 ): Promise<PointTransaction> {
-  const supabase = await createSupabaseServerClient()
+  const supabase = createSupabaseAdminClient()
 
   // Insert the transaction (INSERT ONLY — never update or delete)
   const { data: created, error: insertError } = await supabase

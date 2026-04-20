@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { Coupon, MemberCoupon } from '@/types/coupon'
 
 export async function getCouponsByTenant(
@@ -6,7 +6,7 @@ export async function getCouponsByTenant(
   activeOnly = false
 ): Promise<Coupon[]> {
   try {
-    const supabase = await createSupabaseServerClient()
+    const supabase = createSupabaseAdminClient()
     let query = supabase
       .from('coupons')
       .select('*')
@@ -28,7 +28,7 @@ export async function getCouponsByTenant(
 export async function createCoupon(
   data: Omit<Coupon, 'id' | 'created_at'>
 ): Promise<Coupon> {
-  const supabase = await createSupabaseServerClient()
+  const supabase = createSupabaseAdminClient()
   const { data: created, error } = await supabase
     .from('coupons')
     .insert(data)
@@ -44,7 +44,7 @@ export async function updateCoupon(
   data: Partial<Omit<Coupon, 'id' | 'tenant_id' | 'created_at'>>
 ): Promise<Coupon | null> {
   try {
-    const supabase = await createSupabaseServerClient()
+    const supabase = createSupabaseAdminClient()
     const { data: updated, error } = await supabase
       .from('coupons')
       .update(data)
@@ -65,7 +65,7 @@ export async function getMemberCoupons(
   status?: string
 ): Promise<(MemberCoupon & { coupon: Coupon })[]> {
   try {
-    const supabase = await createSupabaseServerClient()
+    const supabase = createSupabaseAdminClient()
     let query = supabase
       .from('member_coupons')
       .select('*, coupon:coupons(*)')
@@ -90,7 +90,7 @@ export async function issueCoupon(
   memberId: string,
   couponId: string
 ): Promise<MemberCoupon> {
-  const supabase = await createSupabaseServerClient()
+  const supabase = createSupabaseAdminClient()
   const { data, error } = await supabase
     .from('member_coupons')
     .insert({
@@ -111,7 +111,7 @@ export async function redeemCoupon(
   memberCouponId: string
 ): Promise<MemberCoupon | null> {
   try {
-    const supabase = await createSupabaseServerClient()
+    const supabase = createSupabaseAdminClient()
     const { data, error } = await supabase
       .from('member_coupons')
       .update({
