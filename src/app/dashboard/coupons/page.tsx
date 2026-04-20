@@ -49,6 +49,7 @@ interface CouponFormData {
   value: string
   target_tier: string
   expire_at: string
+  max_redemptions: string
 }
 
 const EMPTY_FORM: CouponFormData = {
@@ -57,6 +58,7 @@ const EMPTY_FORM: CouponFormData = {
   value: '',
   target_tier: 'all',
   expire_at: '',
+  max_redemptions: '',
 }
 
 function couponToForm(c: Coupon): CouponFormData {
@@ -66,6 +68,7 @@ function couponToForm(c: Coupon): CouponFormData {
     value: c.type === 'free_item' ? '' : String(c.value),
     target_tier: c.target_tier,
     expire_at: c.expire_at ? c.expire_at.slice(0, 10) : '',
+    max_redemptions: c.max_redemptions != null ? String(c.max_redemptions) : '',
   }
 }
 
@@ -110,20 +113,35 @@ function CouponModal({ initial, tiers, onClose, onSaved }: CouponModalProps) {
 
     try {
       const isEdit = !!initial
-      const payload = {
-        name: form.name.trim(),
-        type: form.type,
-        value: form.type === 'free_item' ? 0 : numValue,
-        targetTier: form.target_tier,
-        expireAt: form.expire_at || null,
-      }
+      const maxRed = form.max_redemptions.trim()
+      const maxRedemptionsValue = maxRed === '' ? null : parseInt(maxRed, 10)
+      const numericValue = form.type === 'free_item' ? 0 : numValue
+
+      // PATCH uses snake_case DB column names; POST (create) uses camelCase action params
+      const body = isEdit
+        ? {
+            id: initial!.id,
+            name: form.name.trim(),
+            type: form.type,
+            value: numericValue,
+            target_tier: form.target_tier,
+            expire_at: form.expire_at || null,
+            max_redemptions: maxRedemptionsValue,
+          }
+        : {
+            action: 'create',
+            name: form.name.trim(),
+            type: form.type,
+            value: numericValue,
+            targetTier: form.target_tier,
+            expireAt: form.expire_at || null,
+            maxRedemptions: maxRedemptionsValue,
+          }
 
       const res = await fetch('/api/coupons', {
         method: isEdit ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(
-          isEdit ? { id: initial!.id, ...payload } : { action: 'create', ...payload }
-        ),
+        body: JSON.stringify(body),
       })
 
       if (!res.ok) {
@@ -245,6 +263,23 @@ function CouponModal({ initial, tiers, onClose, onSaved }: CouponModalProps) {
                 className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] transition"
               />
             </div>
+          </div>
+
+          {/* Max Redemptions */}
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1.5">
+              兌換上限（留空不限）
+            </label>
+            <input
+              name="max_redemptions"
+              type="number"
+              min="1"
+              step="1"
+              value={form.max_redemptions}
+              onChange={handleChange}
+              placeholder="例：100"
+              className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] transition"
+            />
           </div>
 
           {error && (
@@ -390,6 +425,7 @@ export default function CouponsPage() {
                   <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">折扣值</th>
                   <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">適用等級</th>
                   <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">到期日</th>
+                  <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">兌換上限</th>
                   <th className="text-left px-4 py-3 font-medium text-zinc-500 whitespace-nowrap">狀態</th>
                   <th className="px-4 py-3" />
                 </tr>
@@ -409,6 +445,9 @@ export default function CouponsPage() {
                     </td>
                     <td className="px-4 py-3 text-zinc-500">
                       {coupon.expire_at ? formatDate(coupon.expire_at) : '無期限'}
+                    </td>
+                    <td className="px-4 py-3 text-zinc-500 tabular-nums">
+                      {coupon.max_redemptions != null ? coupon.max_redemptions : '不限'}
                     </td>
                     <td className="px-4 py-3">
                       <button
@@ -437,7 +476,7 @@ export default function CouponsPage() {
                 ))}
                 {coupons.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-sm text-zinc-400">
+                    <td colSpan={8} className="px-6 py-12 text-center text-sm text-zinc-400">
                       尚無優惠券，點擊「新增優惠券」以建立第一張。
                     </td>
                   </tr>

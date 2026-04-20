@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const tenantId = searchParams.get('tenantId')
   const lineUid = searchParams.get('lineUid')
+  const exportCsv = searchParams.get('export') === 'csv'
 
   const resolvedTenantId = auth.tenantId
   if (tenantId && tenantId !== resolvedTenantId) {
@@ -34,6 +35,60 @@ export async function GET(req: NextRequest) {
       .single()
     if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     return NextResponse.json(member)
+  }
+
+  // ── CSV Export ────────────────────────────────────────────────────────────
+  if (exportCsv) {
+    // Fetch all members (no pagination) and tier settings in parallel
+    const [{ data: allMembers }, { data: tierSettings }] = await Promise.all([
+      supabase
+        .from('members')
+        .select('*')
+        .eq('tenant_id', resolvedTenantId)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('tier_settings')
+        .select('tier, tier_display_name')
+        .eq('tenant_id', resolvedTenantId),
+    ])
+
+    const tierMap: Record<string, string> = {}
+    for (const ts of tierSettings ?? []) {
+      tierMap[ts.tier as string] = ts.tier_display_name as string
+    }
+
+    const headers = ['姓名', '手機', '等級', '點數', '累計消費', '加入日期', '生日']
+
+    function escapeCsvField(val: string | number | null | undefined): string {
+      const str = val == null ? '' : String(val)
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`
+      }
+      return str
+    }
+
+    const rows = (allMembers ?? []).map((m: Record<string, unknown>) => [
+      escapeCsvField(m.name as string | null),
+      escapeCsvField(m.phone as string | null),
+      escapeCsvField(tierMap[m.tier as string] ?? (m.tier as string)),
+      escapeCsvField(m.points as number),
+      escapeCsvField(m.total_spent as number),
+      escapeCsvField(m.created_at ? (m.created_at as string).slice(0, 10) : ''),
+      escapeCsvField(m.birthday as string | null),
+    ])
+
+    const csvContent = [
+      headers.map(escapeCsvField).join(','),
+      ...rows.map((r) => r.join(',')),
+    ].join('\r\n')
+
+    return new Response('\uFEFF' + csvContent, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="members.csv"',
+      },
+    })
   }
 
   const search = searchParams.get('search') ?? undefined

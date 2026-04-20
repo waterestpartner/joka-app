@@ -79,7 +79,26 @@ async function handleFollow(
   await pushTextMessage(userId, message, channelAccessToken)
 }
 
-/** 處理 message 事件：自動回覆點數查詢 */
+/** 比對訊息是否符合自動回覆規則 */
+function matchesRule(
+  text: string,
+  keyword: string,
+  matchType: string
+): boolean {
+  const normalizedText = text.toLowerCase()
+  const normalizedKeyword = keyword.toLowerCase()
+  switch (matchType) {
+    case 'exact':
+      return normalizedText === normalizedKeyword
+    case 'starts_with':
+      return normalizedText.startsWith(normalizedKeyword)
+    case 'contains':
+    default:
+      return normalizedText.includes(normalizedKeyword)
+  }
+}
+
+/** 處理 message 事件：先檢查自動回覆規則，再回覆點數查詢 */
 async function handleMessage(
   userId: string,
   tenantId: string,
@@ -92,6 +111,31 @@ async function handleMessage(
 
   // 只處理文字訊息（圖片/貼圖等忽略）
   if (!messageText) return
+
+  // ── 1. 查詢自動回覆規則（is_active=true, 依 sort_order 排序）────────────
+  const { data: rules } = await supabase
+    .from('auto_reply_rules')
+    .select('keyword, reply_text, match_type')
+    .eq('tenant_id', tenantId)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true })
+
+  if (rules && rules.length > 0) {
+    for (const rule of rules) {
+      const keyword = rule.keyword as string
+      const replyText = rule.reply_text as string
+      const matchType = (rule.match_type as string) ?? 'contains'
+
+      if (matchesRule(messageText, keyword, matchType)) {
+        // Found a matching rule — push its reply and return early
+        await pushTextMessage(userId, replyText, channelAccessToken)
+        return
+      }
+    }
+  }
+
+  // ── 2. No rule matched — fall through to default points reply ────────────
 
   // 查詢會員資料
   const { data: member } = await supabase

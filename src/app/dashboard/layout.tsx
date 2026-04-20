@@ -16,6 +16,7 @@ const navLinks = [
   { href: '/dashboard/push', label: '推播訊息' },
   { href: '/dashboard/coupons', label: '優惠券' },
   { href: '/dashboard/tiers', label: '等級設定' },
+  { href: '/dashboard/auto-reply', label: '自動回覆' },
   { href: '/dashboard/settings', label: '品牌設定' },
 ]
 

@@ -91,6 +91,33 @@ export async function issueCoupon(
   couponId: string
 ): Promise<MemberCoupon> {
   const supabase = createSupabaseAdminClient()
+
+  // ── Check max_redemptions ─────────────────────────────────────────────────
+  const { data: coupon, error: couponError } = await supabase
+    .from('coupons')
+    .select('id, max_redemptions')
+    .eq('id', couponId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+
+  if (couponError) throw new Error(couponError.message)
+  if (!coupon) throw new Error('優惠券不存在')
+
+  const maxRedemptions = coupon.max_redemptions as number | null
+  if (maxRedemptions !== null && maxRedemptions !== undefined) {
+    const { count, error: countError } = await supabase
+      .from('member_coupons')
+      .select('id', { count: 'exact', head: true })
+      .eq('coupon_id', couponId)
+      .in('status', ['active', 'used'])
+
+    if (countError) throw new Error(countError.message)
+
+    if ((count ?? 0) >= maxRedemptions) {
+      throw new Error('此優惠券已達兌換上限')
+    }
+  }
+
   const { data, error } = await supabase
     .from('member_coupons')
     .insert({

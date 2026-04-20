@@ -30,7 +30,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     // Whitelist updatable fields to prevent mass-assignment
-    const ALLOWED = ['name', 'type', 'value', 'target_tier', 'expire_at', 'is_active'] as const
+    const ALLOWED = ['name', 'type', 'value', 'target_tier', 'expire_at', 'is_active', 'max_redemptions'] as const
     const safeUpdates: Record<string, unknown> = {}
     for (const key of ALLOWED) {
       if (key in rawUpdates) safeUpdates[key] = rawUpdates[key]
@@ -199,7 +199,7 @@ export async function POST(req: NextRequest) {
         const auth = await requireDashboardAuth()
         if (!isDashboardAuth(auth)) return auth
 
-        const { name, type, value, targetTier, expireAt, tenantId } = body
+        const { name, type, value, targetTier, expireAt, tenantId, maxRedemptions } = body
 
         if (!name || !type || value === undefined) {
           return NextResponse.json(
@@ -221,6 +221,7 @@ export async function POST(req: NextRequest) {
           target_tier: targetTier ?? 'basic',
           expire_at: expireAt ?? null,
           is_active: true,
+          max_redemptions: maxRedemptions != null ? Number(maxRedemptions) : null,
         })
         return NextResponse.json(coupon, { status: 201 })
       }

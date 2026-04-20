@@ -5,6 +5,9 @@ import type { Member, PointTransaction } from '@/types/member'
 import type { MemberCoupon, Coupon } from '@/types/coupon'
 import { formatDate, formatPoints, formatNumber } from '@/lib/utils'
 
+// Extend Member locally to include the notes column added via migration
+type MemberWithNotes = Member & { notes?: string | null }
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type MemberCouponWithCoupon = MemberCoupon & { coupon: Coupon }
@@ -40,7 +43,7 @@ const TIER_BADGE: Record<string, { bg: string; text: string }> = {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
-  member: Member
+  member: MemberWithNotes
   onClose: () => void
 }
 
@@ -57,6 +60,11 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
   const [issuing, setIssuing] = useState(false)
   const [issueError, setIssueError] = useState<string | null>(null)
   const [issueSuccess, setIssueSuccess] = useState(false)
+
+  // Notes
+  const [notes, setNotes] = useState<string>(member.notes ?? '')
+  const [notesSaving, setNotesSaving] = useState(false)
+  const [notesSaveStatus, setNotesSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -139,6 +147,30 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
     }
   }
 
+  async function handleSaveNotes() {
+    if (notesSaving) return
+    setNotesSaving(true)
+    setNotesSaveStatus('idle')
+    try {
+      const res = await fetch(`/api/members/${member.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error((j as { error?: string }).error ?? '儲存失敗')
+      }
+      setNotesSaveStatus('saved')
+      setTimeout(() => setNotesSaveStatus('idle'), 2500)
+    } catch {
+      setNotesSaveStatus('error')
+      setTimeout(() => setNotesSaveStatus('idle'), 3000)
+    } finally {
+      setNotesSaving(false)
+    }
+  }
+
   // 動態等級用固定 fallback 樣式
   const tierStyle = TIER_BADGE[member.tier] ?? { bg: 'bg-zinc-100', text: 'text-zinc-600' }
 
@@ -199,6 +231,42 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* ── Notes section ── */}
+          <div className="rounded-2xl bg-zinc-50 border border-zinc-200 p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <label
+                htmlFor={`notes-${member.id}`}
+                className="text-xs font-semibold uppercase tracking-wide text-zinc-500"
+              >
+                備註
+              </label>
+              {notesSaveStatus === 'saved' && (
+                <span className="text-xs text-green-600 font-medium">已儲存 ✓</span>
+              )}
+              {notesSaveStatus === 'error' && (
+                <span className="text-xs text-red-500 font-medium">儲存失敗，請重試</span>
+              )}
+            </div>
+            <textarea
+              id={`notes-${member.id}`}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              onBlur={handleSaveNotes}
+              rows={3}
+              placeholder="輸入會員備註（失焦後自動儲存）…"
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#06C755] resize-none transition"
+            />
+            <button
+              type="button"
+              onClick={handleSaveNotes}
+              disabled={notesSaving}
+              className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+              style={{ backgroundColor: '#06C755' }}
+            >
+              {notesSaving ? '儲存中…' : '儲存備註'}
+            </button>
           </div>
 
           {loading ? (

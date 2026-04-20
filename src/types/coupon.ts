@@ -11,6 +11,7 @@ export interface Coupon {
   target_tier: string
   expire_at: string | null
   is_active: boolean
+  max_redemptions: number | null
   created_at: string
 }
 
