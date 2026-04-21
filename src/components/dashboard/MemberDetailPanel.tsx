@@ -31,6 +31,16 @@ interface MemberTagRow {
   tags: Tag
 }
 
+interface StampCardProgress {
+  card_id: string
+  card_name: string
+  icon_emoji: string
+  bg_color: string
+  required_stamps: number
+  current_stamps: number
+  completed_count: number
+}
+
 // ── Display helpers ───────────────────────────────────────────────────────────
 
 const TX_LABEL: Record<string, string> = {
@@ -84,16 +94,20 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
   const [tagMenuOpen, setTagMenuOpen] = useState(false)
   const [tagLoading, setTagLoading] = useState(false)
 
+  // Stamp card progress
+  const [stampProgress, setStampProgress] = useState<StampCardProgress[]>([])
+
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [ptRes, mcRes, cRes, tierRes, mtRes, tagsRes] = await Promise.all([
+      const [ptRes, mcRes, cRes, tierRes, mtRes, tagsRes, stampRes] = await Promise.all([
         fetch(`/api/points?memberId=${member.id}`),
         fetch(`/api/coupons?memberId=${member.id}`),
         fetch('/api/coupons?activeOnly=true'),
         fetch('/api/tier-settings'),
         fetch(`/api/member-tags?memberId=${member.id}`),
         fetch('/api/tags'),
+        fetch(`/api/stamp-cards/stamp?memberId=${member.id}`),
       ])
 
       if (ptRes.ok) {
@@ -116,6 +130,9 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
       }
       if (tagsRes.ok) {
         setAllTags((await tagsRes.json()) as Tag[])
+      }
+      if (stampRes.ok) {
+        setStampProgress((await stampRes.json()) as StampCardProgress[])
       }
     } finally {
       setLoading(false)
@@ -438,6 +455,55 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
                   </ul>
                 )}
               </section>
+
+              {/* ── Stamp card progress ── */}
+              {stampProgress.length > 0 && (
+                <section>
+                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    集章卡進度
+                  </h4>
+                  <ul className="flex flex-col gap-2">
+                    {stampProgress.map((sp) => {
+                      const pct = Math.min(100, Math.round((sp.current_stamps / sp.required_stamps) * 100))
+                      return (
+                        <li
+                          key={sp.card_id}
+                          className="rounded-xl border border-zinc-200 bg-zinc-50 overflow-hidden"
+                        >
+                          <div
+                            className="flex items-center gap-2 px-3 py-2"
+                            style={{ backgroundColor: sp.bg_color + '33' }}
+                          >
+                            <span className="text-base">{sp.icon_emoji}</span>
+                            <p className="text-sm font-medium text-zinc-800 flex-1 truncate">
+                              {sp.card_name}
+                            </p>
+                            {sp.completed_count > 0 && (
+                              <span className="text-xs rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 font-medium">
+                                完成 ×{sp.completed_count}
+                              </span>
+                            )}
+                          </div>
+                          <div className="px-3 py-2.5">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <p className="text-xs text-zinc-500">
+                                {sp.current_stamps} / {sp.required_stamps} 格
+                              </p>
+                              <p className="text-xs font-medium text-zinc-600">{pct}%</p>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-zinc-200 overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{ width: `${pct}%`, backgroundColor: sp.bg_color }}
+                              />
+                            </div>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </section>
+              )}
 
               {/* ── Coupons ── */}
               <section>

@@ -18,6 +18,8 @@ interface TenantSettings {
   referral_referrer_points: number  // 推薦人獲得點數
   referral_referred_points: number  // 被推薦人獲得點數
   points_expire_days: string        // 點數到期天數（空白=永不到期）
+  birthday_bonus_points: string     // 生日禮物點數（0=僅祝賀）
+  dormant_reminder_days: string     // 沉睡喚醒天數（空白=停用）
 }
 
 const DEFAULT_SETTINGS: TenantSettings = {
@@ -36,6 +38,8 @@ const DEFAULT_SETTINGS: TenantSettings = {
   referral_referrer_points: 100,
   referral_referred_points: 50,
   points_expire_days: '',
+  birthday_bonus_points: '0',
+  dormant_reminder_days: '',
 }
 
 /** 從 NEXT_PUBLIC_APP_URL 或相對路徑計算出完整 App 網址 */
@@ -85,6 +89,8 @@ export default function SettingsPage() {
               referral_referrer_points: data.referral_referrer_points ?? 100,
               referral_referred_points: data.referral_referred_points ?? 50,
               points_expire_days: data.points_expire_days != null ? String(data.points_expire_days) : '',
+              birthday_bonus_points: data.birthday_bonus_points != null ? String(data.birthday_bonus_points) : '0',
+              dormant_reminder_days: data.dormant_reminder_days != null ? String(data.dormant_reminder_days) : '',
             })
           }
         }
@@ -158,6 +164,10 @@ export default function SettingsPage() {
         referral_referred_points: Number(settings.referral_referred_points) || 50,
         points_expire_days: settings.points_expire_days.trim()
           ? Number(settings.points_expire_days)
+          : null,
+        birthday_bonus_points: Number(settings.birthday_bonus_points) || 0,
+        dormant_reminder_days: settings.dormant_reminder_days.trim()
+          ? Number(settings.dormant_reminder_days)
           : null,
       }
       // 敏感欄位有填才更新，空白不覆蓋舊值
@@ -478,6 +488,57 @@ export default function SettingsPage() {
                       setError(null)
                     }}
                     placeholder="永不到期"
+                    className="w-24 rounded-lg border border-zinc-300 px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition"
+                  />
+                  <span className="text-sm text-zinc-500 whitespace-nowrap">天</span>
+                </div>
+              </div>
+              {/* Birthday bonus points */}
+              <div className="mt-4 flex items-start gap-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-zinc-800">生日禮物點數</p>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    在會員生日當天自動贈送點數並推播祝賀訊息。設為 0 則只發送訊息，不贈點。
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100000}
+                    value={settings.birthday_bonus_points}
+                    onChange={(e) => {
+                      setSettings((prev) => ({ ...prev, birthday_bonus_points: e.target.value }))
+                      setSuccess(false)
+                      setError(null)
+                    }}
+                    placeholder="0"
+                    className="w-24 rounded-lg border border-zinc-300 px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition"
+                  />
+                  <span className="text-sm text-zinc-500 whitespace-nowrap">點</span>
+                </div>
+              </div>
+
+              {/* Dormant reminder days */}
+              <div className="mt-4 flex items-start gap-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-zinc-800">沉睡會員喚醒天數</p>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    超過指定天數未消費的會員，系統將自動推播喚醒訊息（每週一執行）。留空代表停用。
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={7}
+                    max={3650}
+                    value={settings.dormant_reminder_days}
+                    onChange={(e) => {
+                      setSettings((prev) => ({ ...prev, dormant_reminder_days: e.target.value }))
+                      setSuccess(false)
+                      setError(null)
+                    }}
+                    placeholder="停用"
                     className="w-24 rounded-lg border border-zinc-300 px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition"
                   />
                   <span className="text-sm text-zinc-500 whitespace-nowrap">天</span>

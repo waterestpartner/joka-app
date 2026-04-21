@@ -4,6 +4,7 @@ import type { Member } from '@/types/member'
 import MemberTable from '@/components/dashboard/MemberTable'
 import Pagination from '@/components/dashboard/Pagination'
 import TagFilter from '@/components/dashboard/TagFilter'
+import MemberImportButton from '@/components/dashboard/MemberImportButton'
 
 const PER_PAGE = 20
 
@@ -143,14 +144,17 @@ export default async function MembersPage({ searchParams }: Props) {
             )}
           </p>
         </div>
-        <a
-          href="/api/members?export=csv"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 hover:border-zinc-400"
-        >
-          匯出 CSV
-        </a>
+        <div className="flex items-center gap-2">
+          <MemberImportButton />
+          <a
+            href="/api/members?export=csv"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 hover:border-zinc-400"
+          >
+            ↓ 匯出 CSV
+          </a>
+        </div>
       </div>
 
       {/* Tag filter bar */}

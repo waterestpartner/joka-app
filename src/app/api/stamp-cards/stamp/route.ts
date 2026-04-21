@@ -158,13 +158,69 @@ export async function POST(req: NextRequest) {
   })
 }
 
-// ── GET: list active stamp cards for scanner ──────────────────────────────────
-// Same as /api/stamp-cards but without LIFF auth — used by PointScanner
-export async function GET(_req: NextRequest) {
+// ── GET ───────────────────────────────────────────────────────────────────────
+// ?memberId=   → return stamp card progress for that member (dashboard detail panel)
+// (no params)  → list active stamp cards for scanner (PointScanner)
+export async function GET(req: NextRequest) {
   const auth = await requireDashboardAuth()
   if (!isDashboardAuth(auth)) return auth
 
   const supabase = createSupabaseAdminClient()
+  const memberId = req.nextUrl.searchParams.get('memberId')
+
+  // ── Member stamp progress (for MemberDetailPanel) ─────────────────────────
+  if (memberId) {
+    // Verify member belongs to this tenant
+    const { data: member } = await supabase
+      .from('members').select('id')
+      .eq('id', memberId).eq('tenant_id', auth.tenantId).maybeSingle()
+    if (!member) return NextResponse.json({ error: '找不到會員' }, { status: 404 })
+
+    // Get all active stamp cards for this tenant
+    const { data: cards } = await supabase
+      .from('stamp_cards')
+      .select('id, name, required_stamps, icon_emoji, bg_color, is_active')
+      .eq('tenant_id', auth.tenantId)
+      .order('sort_order', { ascending: true })
+
+    if (!cards || cards.length === 0) return NextResponse.json([])
+
+    const cardIds = cards.map((c) => c.id as string)
+
+    // Get member's progress
+    const { data: progressRows } = await supabase
+      .from('member_stamp_cards')
+      .select('stamp_card_id, current_stamps, completed_count')
+      .eq('member_id', memberId)
+      .in('stamp_card_id', cardIds)
+
+    const progressMap: Record<string, { current_stamps: number; completed_count: number }> = {}
+    for (const p of progressRows ?? []) {
+      progressMap[p.stamp_card_id as string] = {
+        current_stamps: p.current_stamps as number,
+        completed_count: p.completed_count as number,
+      }
+    }
+
+    const result = cards
+      .filter((c) => c.is_active || progressMap[c.id as string]) // show active cards + any with progress
+      .map((c) => {
+        const prog = progressMap[c.id as string] ?? { current_stamps: 0, completed_count: 0 }
+        return {
+          card_id: c.id as string,
+          card_name: c.name as string,
+          icon_emoji: (c.icon_emoji as string) ?? '⭐',
+          bg_color: (c.bg_color as string) ?? '#06C755',
+          required_stamps: c.required_stamps as number,
+          current_stamps: prog.current_stamps,
+          completed_count: prog.completed_count,
+        }
+      })
+
+    return NextResponse.json(result)
+  }
+
+  // ── List active stamp cards for scanner ────────────────────────────────────
   const { data, error } = await supabase
     .from('stamp_cards')
     .select('id, name, required_stamps, icon_emoji, bg_color')

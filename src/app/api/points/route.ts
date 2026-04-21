@@ -271,15 +271,21 @@ export async function POST(req: NextRequest) {
     const pushUid = member.line_uid as string
     const channelToken = (tenant?.channel_access_token as string) ?? ''
 
+    const tierDowngraded = tierChanged && !tierUpgraded && newTierIdx < oldTierIdx
+
     let pushText: string
     if (tierUpgraded) {
       pushText =
         `🎉 恭喜升等為「${newTierDisplayName}」！\n` +
         `您獲得了 ${numAmount} 點，目前累積 ${newTotalPoints} 點。`
+    } else if (tierDowngraded) {
+      pushText =
+        `您的會員等級已調整為「${newTierDisplayName}」。\n` +
+        `目前累積 ${newTotalPoints} 點。繼續消費即可再次升等！`
     } else if (numAmount > 0) {
       pushText = `感謝消費！您獲得了 ${numAmount} 點，目前累積 ${newTotalPoints} 點 🎉`
     } else {
-      pushText = `您的點數已調整 ${numAmount} 點，目前累積 ${newTotalPoints} 點。`
+      pushText = `您的點數已調整 ${numAmount > 0 ? '+' : ''}${numAmount} 點，目前累積 ${newTotalPoints} 點。`
     }
 
     if (tenant?.push_enabled) {
@@ -287,7 +293,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(
-      { ...transaction, newTotalPoints, tierUpgraded, newTier: newTierKey },
+      { ...transaction, newTotalPoints, tierUpgraded, tierDowngraded, newTier: newTierKey },
       { status: 201 }
     )
   } catch (err) {

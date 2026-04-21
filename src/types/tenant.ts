@@ -16,6 +16,8 @@ export interface Tenant {
   referral_referrer_points: number    // 推薦人獲得的點數
   referral_referred_points: number    // 被推薦人獲得的點數
   points_expire_days: number | null   // 點數到期天數（null = 永不到期）
+  birthday_bonus_points: number       // 生日禮物點數（0 = 僅發祝賀訊息）
+  dormant_reminder_days: number | null // 沉睡喚醒天數（null = 停用）
   created_at: string
 }
 

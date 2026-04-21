@@ -24,6 +24,21 @@ interface ReferralData {
   stats: { totalReferred: number; totalPointsEarned: number }
 }
 
+interface StampCard {
+  id: string
+  name: string
+  required_stamps: number
+  icon_emoji: string
+  bg_color: string
+  description: string | null
+  reward_description: string | null
+}
+
+interface StampCardsResponse {
+  stampCards: StampCard[]
+  memberProgress: Record<string, { current_stamps: number; completed_count: number }>
+}
+
 const TX_TYPE_LABEL: Record<PointTransaction['type'], string> = {
   earn: '集點',
   spend: '兌換',
@@ -51,12 +66,23 @@ export default function MemberCardPage() {
   const [showReferral, setShowReferral] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  // Stamp cards
+  const [stampData, setStampData] = useState<StampCardsResponse | null>(null)
+
   const loadReferral = useCallback(async () => {
     if (!idToken || !tenantSlug) return
     const res = await fetch(`/api/referral?tenantSlug=${tenantSlug}`, {
       headers: { Authorization: `Bearer ${idToken}` },
     })
     if (res.ok) setReferral(await res.json() as ReferralData)
+  }, [idToken, tenantSlug])
+
+  const loadStampCards = useCallback(async () => {
+    if (!idToken || !tenantSlug) return
+    const res = await fetch(`/api/stamp-cards?liff=1&tenantSlug=${tenantSlug}`, {
+      headers: { Authorization: `Bearer ${idToken}` },
+    })
+    if (res.ok) setStampData(await res.json() as StampCardsResponse)
   }, [idToken, tenantSlug])
 
   async function copyReferralUrl() {
@@ -92,6 +118,7 @@ export default function MemberCardPage() {
         const memberData = await res.json()
         setData(memberData)
         loadReferral()
+        loadStampCards()
       } catch (err) {
         setFetchError(err instanceof Error ? err.message : '發生錯誤')
       } finally {
@@ -100,7 +127,7 @@ export default function MemberCardPage() {
     }
 
     fetchMember()
-  }, [isReady, idToken, tenantSlug, router, loadReferral])
+  }, [isReady, idToken, tenantSlug, router, loadReferral, loadStampCards])
 
   useRealtimeMember(data?.member.id, (next) => {
     setData((prev) => prev ? { ...prev, member: { ...prev.member, ...next } } : prev)
@@ -157,6 +184,93 @@ export default function MemberCardPage() {
             <span className="text-sm text-amber-600">前往 ›</span>
           </Link>
         </div>
+      )}
+
+      {/* ── 集章卡進度 ────────────────────────────────────── */}
+      {stampData && stampData.stampCards.length > 0 && (
+        <section className="px-4 mt-3">
+          <div className="rounded-2xl bg-white shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-4 pt-4 pb-2">
+              <h2 className="text-sm font-bold text-gray-800">集章卡</h2>
+              <Link
+                href={`/t/${tenantSlug}/stamps`}
+                className="text-xs text-gray-500 hover:text-gray-700"
+              >
+                查看全部 ›
+              </Link>
+            </div>
+            <div className="overflow-x-auto px-4 pb-4">
+              <div className="flex gap-3" style={{ minWidth: 'min-content' }}>
+                {stampData.stampCards.map((card) => {
+                  const prog = stampData.memberProgress[card.id] ?? {
+                    current_stamps: 0,
+                    completed_count: 0,
+                  }
+                  const pct = Math.min(
+                    100,
+                    Math.round((prog.current_stamps / card.required_stamps) * 100)
+                  )
+                  // Generate a semi-transparent tint from the card colour
+                  const bgTint = card.bg_color + '22'
+                  const headerTint = card.bg_color + '44'
+                  return (
+                    <Link
+                      key={card.id}
+                      href={`/t/${tenantSlug}/stamps`}
+                      className="flex-none w-36 rounded-xl overflow-hidden border border-gray-100 active:scale-[.97] transition"
+                      style={{ backgroundColor: bgTint }}
+                    >
+                      {/* Card header */}
+                      <div
+                        className="flex items-center gap-2 px-3 py-2"
+                        style={{ backgroundColor: headerTint }}
+                      >
+                        <span className="text-lg leading-none">{card.icon_emoji}</span>
+                        <p className="text-xs font-semibold text-gray-800 truncate leading-tight">
+                          {card.name}
+                        </p>
+                      </div>
+                      {/* Progress body */}
+                      <div className="px-3 py-2.5">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <p className="text-xs text-gray-500">
+                            {prog.current_stamps}
+                            <span className="text-gray-400">/{card.required_stamps} 格</span>
+                          </p>
+                          {prog.completed_count > 0 && (
+                            <span className="text-[10px] rounded-full bg-amber-100 text-amber-700 px-1.5 py-0.5 font-medium">
+                              ×{prog.completed_count}
+                            </span>
+                          )}
+                        </div>
+                        {/* Progress bar */}
+                        <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-300"
+                            style={{ width: `${pct}%`, backgroundColor: card.bg_color }}
+                          />
+                        </div>
+                        {/* Mini stamp dots — up to 10 */}
+                        {card.required_stamps <= 10 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {Array.from({ length: card.required_stamps }).map((_, idx) => (
+                              <span
+                                key={idx}
+                                className="text-[11px]"
+                              >
+                                {idx < prog.current_stamps ? '●' : '○'}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
       )}
 
       {/* ── 最近點數紀錄 ────────────────────────────────────── */}

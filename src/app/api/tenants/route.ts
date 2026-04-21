@@ -122,6 +122,7 @@ export async function PATCH(req: NextRequest) {
       'line_channel_secret',
       'referral_referrer_points', 'referral_referred_points',
       'points_expire_days',
+      'birthday_bonus_points', 'dormant_reminder_days',
     ]
     for (const key of Object.keys(updateFields)) {
       if (!ALLOWED_UPDATE_FIELDS.includes(key)) delete updateFields[key]
