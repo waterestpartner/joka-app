@@ -69,6 +69,14 @@ export default function MemberCardPage() {
   // Stamp cards
   const [stampData, setStampData] = useState<StampCardsResponse | null>(null)
 
+  // Profile edit
+  const [showProfileEdit, setShowProfileEdit] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editBirthday, setEditBirthday] = useState('')
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileError, setProfileError] = useState<string | null>(null)
+  const [profileSuccess, setProfileSuccess] = useState(false)
+
   const loadReferral = useCallback(async () => {
     if (!idToken || !tenantSlug) return
     const res = await fetch(`/api/referral?tenantSlug=${tenantSlug}`, {
@@ -84,6 +92,42 @@ export default function MemberCardPage() {
     })
     if (res.ok) setStampData(await res.json() as StampCardsResponse)
   }, [idToken, tenantSlug])
+
+  async function handleSaveProfile(e: React.FormEvent) {
+    e.preventDefault()
+    if (!idToken || !tenantSlug) return
+    setProfileSaving(true)
+    setProfileError(null)
+    setProfileSuccess(false)
+    try {
+      const res = await fetch(`/api/members/me?tenantSlug=${tenantSlug}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          name: editName.trim() || undefined,
+          birthday: editBirthday || null,
+        }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error((j as { error?: string }).error ?? '更新失敗')
+      }
+      const { member: updatedMember } = await res.json() as { member: Member }
+      setData((prev) => prev ? { ...prev, member: { ...prev.member, ...updatedMember } } : prev)
+      setProfileSuccess(true)
+      setTimeout(() => {
+        setProfileSuccess(false)
+        setShowProfileEdit(false)
+      }, 1500)
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : '發生錯誤')
+    } finally {
+      setProfileSaving(false)
+    }
+  }
 
   async function copyReferralUrl() {
     if (!referral) return
@@ -359,6 +403,84 @@ export default function MemberCardPage() {
             </li>
           </ul>
         </div>
+      </section>
+
+      {/* ── 個人資料編輯 ─────────────────────────────────── */}
+      <section className="px-4 mt-5">
+        <button
+          onClick={() => {
+            setEditName(member.name ?? '')
+            setEditBirthday(member.birthday ?? '')
+            setProfileError(null)
+            setProfileSuccess(false)
+            setShowProfileEdit((v) => !v)
+          }}
+          className="w-full flex items-center justify-between rounded-2xl bg-white border border-gray-100 shadow-sm p-4 active:scale-[.99] transition"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-xl">
+              ✏️
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-gray-800">個人資料</p>
+              <p className="text-xs text-gray-500">更新姓名與生日</p>
+            </div>
+          </div>
+          <span className="text-sm text-gray-500">{showProfileEdit ? '▲' : '▼'}</span>
+        </button>
+
+        {showProfileEdit && (
+          <form
+            onSubmit={handleSaveProfile}
+            className="mt-2 rounded-2xl bg-white shadow-sm p-4 space-y-3"
+          >
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">姓名</label>
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="您的姓名"
+                className="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">生日</label>
+              <input
+                type="date"
+                value={editBirthday}
+                onChange={(e) => setEditBirthday(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+              />
+            </div>
+            {profileError && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                {profileError}
+              </p>
+            )}
+            {profileSuccess && (
+              <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                ✓ 資料已更新
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={profileSaving}
+                className="flex-1 rounded-xl bg-green-500 py-2.5 text-sm font-semibold text-white active:bg-green-600 disabled:opacity-60 transition"
+              >
+                {profileSaving ? '儲存中…' : '儲存'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowProfileEdit(false)}
+                className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-600 active:bg-gray-50 transition"
+              >
+                取消
+              </button>
+            </div>
+          </form>
+        )}
       </section>
 
       {/* ── 推薦好友 ────────────────────────────────────────── */}

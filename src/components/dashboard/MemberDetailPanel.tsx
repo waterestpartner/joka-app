@@ -76,6 +76,19 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
   const [tiers, setTiers] = useState<TierSetting[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Live member data (updated after edits)
+  const [liveMember, setLiveMember] = useState<MemberWithNotes>(member)
+
+  // Edit profile sub-form
+  const [showEdit, setShowEdit] = useState(false)
+  const [editName, setEditName] = useState(member.name ?? '')
+  const [editPhone, setEditPhone] = useState(member.phone ?? '')
+  const [editBirthday, setEditBirthday] = useState(member.birthday ?? '')
+  const [editTier, setEditTier] = useState(member.tier ?? '')
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+  const [editSuccess, setEditSuccess] = useState(false)
+
   // Issue-coupon sub-form
   const [showIssue, setShowIssue] = useState(false)
   const [selectedCouponId, setSelectedCouponId] = useState('')
@@ -84,7 +97,7 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
   const [issueSuccess, setIssueSuccess] = useState(false)
 
   // Notes
-  const [notes, setNotes] = useState<string>(member.notes ?? '')
+  const [notes, setNotes] = useState<string>(liveMember.notes ?? '')
   const [notesSaving, setNotesSaving] = useState(false)
   const [notesSaveStatus, setNotesSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
 
@@ -244,12 +257,47 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
     }
   }
 
+  // ── Profile edit handler ────────────────────────────────────────────────────
+
+  async function handleSaveProfile(e: React.FormEvent) {
+    e.preventDefault()
+    setEditSaving(true)
+    setEditError(null)
+    setEditSuccess(false)
+
+    try {
+      const res = await fetch(`/api/members/${liveMember.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editName.trim() || undefined,
+          phone: editPhone.trim() || undefined,
+          birthday: editBirthday.trim() || null,
+          tier: editTier || undefined,
+        }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error((j as { error?: string }).error ?? '更新失敗')
+      }
+      const updated = await res.json() as MemberWithNotes
+      setLiveMember(updated)
+      setEditSuccess(true)
+      setTimeout(() => {
+        setEditSuccess(false)
+        setShowEdit(false)
+      }, 1500)
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : '發生錯誤')
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
   const assignedTagIds = new Set(memberTagRows.map((r) => r.tag_id))
   const unassignedTags = allTags.filter((t) => !assignedTagIds.has(t.id))
 
   // 動態等級用固定 fallback 樣式
-  const tierStyle = TIER_BADGE[member.tier] ?? { bg: 'bg-zinc-100', text: 'text-zinc-600' }
-
   return (
     <>
       {/* Backdrop */}
@@ -276,34 +324,130 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-lg font-bold text-zinc-900">
-                  {member.name ?? '（未填姓名）'}
+                  {liveMember.name ?? '（未填姓名）'}
                 </h3>
-                <p className="text-sm text-zinc-500 mt-0.5">{member.phone ?? '—'}</p>
-                {member.birthday && (
+                <p className="text-sm text-zinc-500 mt-0.5">{liveMember.phone ?? '—'}</p>
+                {liveMember.birthday && (
                   <p className="text-xs text-zinc-400 mt-0.5">
-                    生日：{member.birthday}
+                    生日：{liveMember.birthday}
                   </p>
                 )}
               </div>
-              <span
-                className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${tierStyle.bg} ${tierStyle.text}`}
-              >
-                {/* 從 tier_settings 動態查顯示名稱，loading 中暫時顯示 key */}
-                {loading ? member.tier : tierDisplayName(member.tier)}
-              </span>
+              <div className="flex flex-col items-end gap-1.5">
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                    (TIER_BADGE[liveMember.tier] ?? { bg: 'bg-zinc-100', text: 'text-zinc-600' }).bg
+                  } ${
+                    (TIER_BADGE[liveMember.tier] ?? { bg: 'bg-zinc-100', text: 'text-zinc-600' }).text
+                  }`}
+                >
+                  {loading ? liveMember.tier : tierDisplayName(liveMember.tier)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditName(liveMember.name ?? '')
+                    setEditPhone(liveMember.phone ?? '')
+                    setEditBirthday(liveMember.birthday ?? '')
+                    setEditTier(liveMember.tier ?? '')
+                    setEditError(null)
+                    setEditSuccess(false)
+                    setShowEdit((v) => !v)
+                  }}
+                  className="text-xs font-medium text-[#06C755] hover:underline transition-colors"
+                >
+                  {showEdit ? '取消編輯' : '✏️ 編輯資料'}
+                </button>
+              </div>
             </div>
+
+            {/* ── Edit profile form ── */}
+            {showEdit && (
+              <form onSubmit={handleSaveProfile} className="mt-4 space-y-3 border-t border-zinc-200 pt-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">姓名</label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="姓名"
+                      className="w-full rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">手機</label>
+                    <input
+                      type="text"
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      placeholder="0912345678"
+                      className="w-full rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">生日</label>
+                    <input
+                      type="date"
+                      value={editBirthday}
+                      onChange={(e) => setEditBirthday(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">等級</label>
+                    <select
+                      value={editTier}
+                      onChange={(e) => setEditTier(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] transition"
+                    >
+                      {tiers.map((t) => (
+                        <option key={t.tier} value={t.tier}>{t.tier_display_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {editError && (
+                  <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                    {editError}
+                  </p>
+                )}
+                {editSuccess && (
+                  <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                    ✓ 資料已更新
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={editSaving}
+                    className="flex-1 rounded-lg py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+                    style={{ backgroundColor: '#06C755' }}
+                  >
+                    {editSaving ? '儲存中…' : '儲存'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowEdit(false)}
+                    className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition"
+                  >
+                    取消
+                  </button>
+                </div>
+              </form>
+            )}
 
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-xl bg-white border border-zinc-200 px-3 py-2.5 text-center">
                 <p className="text-xs text-zinc-400">點數</p>
                 <p className="text-xl font-bold text-zinc-900 tabular-nums">
-                  {formatPoints(member.points)}
+                  {formatPoints(liveMember.points)}
                 </p>
               </div>
               <div className="rounded-xl bg-white border border-zinc-200 px-3 py-2.5 text-center">
                 <p className="text-xs text-zinc-400">加入日期</p>
                 <p className="text-sm font-semibold text-zinc-700">
-                  {formatDate(member.created_at)}
+                  {formatDate(liveMember.created_at)}
                 </p>
               </div>
             </div>

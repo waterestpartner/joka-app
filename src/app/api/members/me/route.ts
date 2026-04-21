@@ -1,5 +1,5 @@
-// GET /api/members/me
-// 查詢 LIFF 使用者自己的會員資料
+// GET /api/members/me  — 查詢 LIFF 使用者自己的會員資料
+// PATCH /api/members/me — LIFF 會員自行更新姓名 / 生日（僅允許安全欄位）
 //
 // 安全設計：
 //   - 從 Authorization header 取 LINE Token（ID Token 優先，fallback Access Token）
@@ -97,6 +97,86 @@ export async function GET(req: NextRequest) {
       tierSettings: (tierSettings ?? []) as TierSetting[],
       activeCouponsCount: activeCouponsCount ?? 0,
     })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Internal server error'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
+// ── PATCH /api/members/me ─────────────────────────────────────────────────────
+// LIFF 會員自行更新資料。僅允許安全欄位：name, birthday。
+// 不允許修改 phone / tier / points 等敏感欄位。
+
+export async function PATCH(req: NextRequest) {
+  const token = extractBearerToken(req)
+  if (!token) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { searchParams } = req.nextUrl
+  const tenantSlug = searchParams.get('tenantSlug')
+  if (!tenantSlug) {
+    return NextResponse.json({ error: 'tenantSlug is required' }, { status: 400 })
+  }
+
+  let body: unknown
+  try { body = await req.json() } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
+
+  const { name, birthday } = body as Record<string, unknown>
+
+  // Validate
+  if (name !== undefined) {
+    if (typeof name !== 'string' || name.trim().length === 0)
+      return NextResponse.json({ error: '姓名不可為空' }, { status: 400 })
+    if (name.trim().length > 100)
+      return NextResponse.json({ error: '姓名不可超過 100 字' }, { status: 400 })
+  }
+  if (birthday !== undefined && birthday !== null && birthday !== '') {
+    if (typeof birthday !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(birthday))
+      return NextResponse.json({ error: '生日格式應為 YYYY-MM-DD' }, { status: 400 })
+  }
+
+  if (name === undefined && birthday === undefined)
+    return NextResponse.json({ error: '沒有可更新的欄位' }, { status: 400 })
+
+  try {
+    const supabase = createSupabaseAdminClient()
+
+    const { data: tenant } = await supabase
+      .from('tenants')
+      .select('id, liff_id')
+      .eq('slug', tenantSlug)
+      .single()
+
+    if (!tenant) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+
+    let lineUid: string
+    try {
+      const payload = await verifyLineToken(token, tenant.liff_id ?? undefined)
+      lineUid = payload.sub
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Invalid token'
+      return NextResponse.json({ error: message }, { status: 401 })
+    }
+
+    const updates: Record<string, unknown> = {}
+    if (name !== undefined) updates.name = (name as string).trim()
+    if (birthday !== undefined) updates.birthday = birthday && birthday !== '' ? birthday : null
+
+    const { data: updated, error } = await supabase
+      .from('members')
+      .update(updates)
+      .eq('line_uid', lineUid)
+      .eq('tenant_id', tenant.id)
+      .select('id, name, birthday, phone, points, tier, created_at')
+      .single()
+
+    if (error) throw new Error(error.message)
+    if (!updated) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+
+    return NextResponse.json({ ok: true, member: updated })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error'
     return NextResponse.json({ error: message }, { status: 500 })
