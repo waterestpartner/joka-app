@@ -9,6 +9,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { pushTextMessage } from '@/lib/line-messaging'
+import { getActiveMultiplier } from '@/lib/point-multiplier'
 import type { PointTransactionType } from '@/types/member'
 
 // ── GET /api/points ───────────────────────────────────────────────────────────
@@ -164,7 +165,7 @@ export async function POST(req: NextRequest) {
     const [{ data: member }, { data: tenant }, { data: tierSettings }] = await Promise.all([
       supabase
         .from('members')
-        .select('id, line_uid, points, tier, total_spent')
+        .select('id, line_uid, points, tier, total_spent, is_blocked')
         .eq('id', memberId)
         .eq('tenant_id', auth.tenantId)
         .single(),
@@ -184,6 +185,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     }
 
+    if (member.is_blocked) {
+      return NextResponse.json({ error: '此會員已被列入黑名單，無法操作點數' }, { status: 403 })
+    }
+
     const currentPoints = member.points as number
     const sortedTiers = [...(tierSettings ?? [])].sort(
       (a, b) => (a.min_points as number) - (b.min_points as number)
@@ -192,6 +197,7 @@ export async function POST(req: NextRequest) {
     // ── 計算本次點數 ──────────────────────────────────────────────────
     let numAmount: number
     let numSpentAmount = 0
+    let appliedMultiplier = 1
 
     if (isScanEarn) {
       numSpentAmount = Number(spentAmount)
@@ -208,7 +214,9 @@ export async function POST(req: NextRequest) {
           pointRate = ts.point_rate as number
         }
       }
-      numAmount = Math.round(numSpentAmount * pointRate)
+      // 套用加倍點數活動倍率（如有）
+      appliedMultiplier = await getActiveMultiplier(auth.tenantId)
+      numAmount = Math.round(numSpentAmount * pointRate * appliedMultiplier)
     } else {
       numAmount = Number(amount)
       if (!Number.isFinite(numAmount) || numAmount === 0 || Math.abs(numAmount) > 1_000_000) {
@@ -221,7 +229,10 @@ export async function POST(req: NextRequest) {
 
     // ── 建立點數異動紀錄 ──────────────────────────────────────────────
     const txType: PointTransactionType = isScanEarn ? 'earn' : (type as PointTransactionType)
-    const txNote = note ?? (isScanEarn ? `消費 NT$${numSpentAmount}` : null)
+    let txNote = note ?? (isScanEarn ? `消費 NT$${numSpentAmount}` : null)
+    if (isScanEarn && appliedMultiplier > 1) {
+      txNote = (txNote ? txNote + ' ' : '') + `(${appliedMultiplier}x 加倍活動)`
+    }
 
     const transaction = await addPointTransaction({
       tenant_id: auth.tenantId,

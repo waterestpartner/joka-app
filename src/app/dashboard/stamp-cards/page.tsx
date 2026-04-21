@@ -182,12 +182,19 @@ export default function StampCardsPage() {
 
   // ── Toggle active ─────────────────────────────────────────────────────────────
   async function toggleActive(c: StampCard) {
-    await fetch('/api/stamp-cards', {
+    // Optimistic update
+    setCards((prev) => prev.map((x) => x.id === c.id ? { ...x, is_active: !c.is_active } : x))
+    const res = await fetch('/api/stamp-cards', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: c.id, is_active: !c.is_active }),
     })
-    setCards((prev) => prev.map((x) => x.id === c.id ? { ...x, is_active: !c.is_active } : x))
+    if (!res.ok) {
+      // Rollback on failure
+      setCards((prev) => prev.map((x) => x.id === c.id ? { ...x, is_active: c.is_active } : x))
+      const { error } = await res.json().catch(() => ({ error: '狀態更新失敗' })) as { error?: string }
+      alert(error ?? '狀態更新失敗')
+    }
   }
 
   // ── Delete ────────────────────────────────────────────────────────────────────

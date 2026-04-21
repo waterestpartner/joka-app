@@ -11,6 +11,7 @@ const TYPE_LABEL: Record<PointTransactionType, string> = {
   spend: '使用',
   expire: '過期',
   manual: '手動調整',
+  birthday: '生日獎勵',
 }
 
 interface PointsResponse {

@@ -76,11 +76,13 @@ export async function POST(req: NextRequest) {
       })
       .select()
       .single()
-    if (createErr) return NextResponse.json({ error: createErr.message }, { status: 500 })
+    if (createErr || !created) return NextResponse.json({ error: createErr?.message ?? '建立進度失敗' }, { status: 500 })
     progress = created
   }
 
-  const prevStamps = progress.current_stamps as number
+  // TypeScript: progress is guaranteed non-null here (either fetched or just created)
+  const safeProgress = progress!
+  const prevStamps = safeProgress.current_stamps as number
   const newRaw = prevStamps + toAdd
 
   // Detect completions: may complete multiple times if stampsToAdd is large
@@ -88,7 +90,7 @@ export async function POST(req: NextRequest) {
   const remaining = newRaw % requiredStamps
 
   const newCurrentStamps = remaining
-  const newCompletedCount = (progress.completed_count as number) + completions
+  const newCompletedCount = (safeProgress.completed_count as number) + completions
 
   // ── Update progress ───────────────────────────────────────────────────────────
   const now = new Date().toISOString()
@@ -99,7 +101,7 @@ export async function POST(req: NextRequest) {
       completed_count: newCompletedCount,
       last_stamped_at: now,
     })
-    .eq('id', progress.id)
+    .eq('id', safeProgress.id)
 
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
 
@@ -107,7 +109,7 @@ export async function POST(req: NextRequest) {
   await supabase.from('stamp_logs').insert({
     tenant_id: auth.tenantId,
     stamp_card_id: stampCardId,
-    member_stamp_card_id: progress.id,
+    member_stamp_card_id: safeProgress.id,
     member_id: memberId,
     stamps_added: toAdd,
     note: typeof note === 'string' ? note.trim() || null : null,

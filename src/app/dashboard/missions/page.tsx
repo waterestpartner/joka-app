@@ -159,14 +159,23 @@ export default function MissionsPage() {
 
   // ── Toggle active ─────────────────────────────────────────────────────────────
   async function toggleActive(m: Mission) {
-    await fetch('/api/missions', {
+    // Optimistic update
+    setMissions((prev) =>
+      prev.map((x) => x.id === m.id ? { ...x, is_active: !m.is_active } : x)
+    )
+    const res = await fetch('/api/missions', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: m.id, is_active: !m.is_active }),
     })
-    setMissions((prev) =>
-      prev.map((x) => x.id === m.id ? { ...x, is_active: !m.is_active } : x)
-    )
+    if (!res.ok) {
+      // Rollback on failure
+      setMissions((prev) =>
+        prev.map((x) => x.id === m.id ? { ...x, is_active: m.is_active } : x)
+      )
+      const { error } = await res.json().catch(() => ({ error: '狀態更新失敗' })) as { error?: string }
+      alert(error ?? '狀態更新失敗')
+    }
   }
 
   // ── Delete ────────────────────────────────────────────────────────────────────

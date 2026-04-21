@@ -10,7 +10,7 @@
 //   3. 檢查該 member 是否已達完成上限（max_completions_per_member）
 //   4. daily 任務：今日已完成 → 拒絕
 //   5. one_time 任務：曾完成過 → 拒絕
-//   6. 插入 mission_completions，read-then-write 更新 member.points
+//   6. 插入 mission_completions，透過 addPointTransaction 原子更新 member.points
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -115,27 +115,21 @@ export async function POST(req: NextRequest) {
 
   if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 })
 
-  // 2. Insert point_transaction
-  await supabase.from('point_transactions').insert({
-    tenant_id: tenant.id,
-    member_id: member.id,
-    type: 'earn',
-    amount: rewardPts,
-    note: `任務完成：${mission.title as string}`,
-  })
+  // 2. Award points atomically
+  const { addPointTransaction } = await import('@/repositories/pointRepository')
+  const newPoints = (member.points as number) + rewardPts
+  try {
+    await addPointTransaction({
+      tenant_id: tenant.id as string,
+      member_id: member.id as string,
+      type: 'earn',
+      amount: rewardPts,
+      note: `任務完成：${mission.title as string}`,
+    })
+  } catch { /* addPointTransaction already logged */ }
 
-  // 3. Read-then-write member.points (safe increment)
-  const { data: freshMember } = await supabase
-    .from('members')
-    .select('points')
-    .eq('id', member.id)
-    .single()
-
-  const newPoints = ((freshMember?.points as number) ?? 0) + rewardPts
-  await supabase.from('members').update({
-    points: newPoints,
-    last_activity_at: new Date().toISOString(),
-  }).eq('id', member.id)
+  // ── Update last_activity_at ───────────────────────────────────────────────
+  await supabase.from('members').update({ last_activity_at: new Date().toISOString() }).eq('id', member.id as string)
 
   return NextResponse.json({
     success: true,

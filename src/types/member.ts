@@ -1,4 +1,4 @@
-export type PointTransactionType = 'earn' | 'spend' | 'expire' | 'manual'
+export type PointTransactionType = 'earn' | 'spend' | 'expire' | 'manual' | 'birthday'
 
 export interface Member {
   id: string

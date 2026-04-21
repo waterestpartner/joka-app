@@ -39,11 +39,21 @@ interface StampCardsResponse {
   memberProgress: Record<string, { current_stamps: number; completed_count: number }>
 }
 
+interface Announcement {
+  id: string
+  title: string
+  content: string
+  image_url: string | null
+  published_at: string | null
+  expires_at: string | null
+}
+
 const TX_TYPE_LABEL: Record<PointTransaction['type'], string> = {
   earn: '集點',
   spend: '兌換',
   expire: '過期',
   manual: '調整',
+  birthday: '生日',
 }
 
 function formatDate(iso: string): string {
@@ -69,6 +79,12 @@ export default function MemberCardPage() {
   // Stamp cards
   const [stampData, setStampData] = useState<StampCardsResponse | null>(null)
 
+  // Announcements
+  const [announcements, setAnnouncements] = useState<Announcement[]>([])
+
+  // Points expiry warning
+  const [expiryWarning, setExpiryWarning] = useState<{ daysRemaining: number; points: number } | null>(null)
+
   // Profile edit
   const [showProfileEdit, setShowProfileEdit] = useState(false)
   const [editName, setEditName] = useState('')
@@ -92,6 +108,12 @@ export default function MemberCardPage() {
     })
     if (res.ok) setStampData(await res.json() as StampCardsResponse)
   }, [idToken, tenantSlug])
+
+  const loadAnnouncements = useCallback(async () => {
+    if (!tenantSlug) return
+    const res = await fetch(`/api/announcements?tenantSlug=${tenantSlug}`)
+    if (res.ok) setAnnouncements(await res.json() as Announcement[])
+  }, [tenantSlug])
 
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault()
@@ -137,6 +159,11 @@ export default function MemberCardPage() {
   }
 
   useEffect(() => {
+    if (tenantSlug) void loadAnnouncements()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantSlug])
+
+  useEffect(() => {
     if (!isReady) return
 
     if (!idToken) {
@@ -163,6 +190,19 @@ export default function MemberCardPage() {
         setData(memberData)
         loadReferral()
         loadStampCards()
+        loadAnnouncements()
+        // Check points expiry
+        if (idToken && tenantSlug) {
+          void fetch(`/api/points-expiry?tenantSlug=${tenantSlug}`, {
+            headers: { Authorization: `Bearer ${idToken}` },
+          }).then(async (r) => {
+            if (!r.ok) return
+            const exp = await r.json() as { willExpire?: boolean; daysRemaining?: number | null; points?: number }
+            if (exp.willExpire && exp.daysRemaining != null && (exp.points ?? 0) > 0) {
+              setExpiryWarning({ daysRemaining: exp.daysRemaining, points: exp.points ?? 0 })
+            }
+          }).catch(() => {})
+        }
       } catch (err) {
         setFetchError(err instanceof Error ? err.message : '發生錯誤')
       } finally {
@@ -229,6 +269,66 @@ export default function MemberCardPage() {
           </Link>
         </div>
       )}
+
+      {/* ── 點數到期警告 ────────────────────────────────── */}
+      {expiryWarning && (
+        <section className="px-4 mt-3">
+          <div className="rounded-2xl bg-orange-50 border border-orange-200 px-4 py-3 flex items-start gap-3">
+            <span className="text-xl mt-0.5">⚠️</span>
+            <div>
+              <p className="text-sm font-semibold text-orange-800">點數即將到期！</p>
+              <p className="text-xs text-orange-600 mt-0.5">
+                您有 <strong>{expiryWarning.points}</strong> 點將在
+                <strong className="mx-1">{expiryWarning.daysRemaining}</strong>
+                天內到期，快去消費使用吧！
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ── 公告 ────────────────────────────────────────── */}
+      {announcements.length > 0 && (
+        <section className="px-4 mt-3 space-y-2">
+          {announcements.map((a) => (
+            <div key={a.id} className="rounded-2xl bg-white border border-zinc-100 shadow-sm overflow-hidden">
+              {a.image_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={a.image_url} alt={a.title} className="w-full object-cover max-h-40" />
+              )}
+              <div className="px-4 py-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-bold rounded-full px-2 py-0.5 text-white" style={{ backgroundColor: '#06C755' }}>公告</span>
+                  <p className="text-sm font-semibold text-gray-800">{a.title}</p>
+                </div>
+                <p className="text-xs text-gray-500 leading-relaxed whitespace-pre-line">{a.content}</p>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {/* ── 快捷功能 ────────────────────────────────────── */}
+      <section className="px-4 mt-3">
+        <div className="grid grid-cols-4 gap-2">
+          {[
+            { href: `/t/${tenantSlug}/store`, emoji: '🏪', label: '積分商城' },
+            { href: `/t/${tenantSlug}/checkin`, emoji: '📍', label: '打卡集點' },
+            { href: `/t/${tenantSlug}/missions`, emoji: '🎯', label: '任務中心' },
+            { href: `/t/${tenantSlug}/stamps`, emoji: '⭐', label: '集章卡' },
+            { href: `/t/${tenantSlug}/surveys`, emoji: '📋', label: '問卷調查' },
+            { href: `/t/${tenantSlug}/coupons`, emoji: '🎟️', label: '我的優惠券' },
+            { href: `/t/${tenantSlug}/referral`, emoji: '🤝', label: '推薦好友' },
+            { href: `/t/${tenantSlug}/profile`, emoji: '👤', label: '個人資料' },
+          ].map(({ href, emoji, label }) => (
+            <Link key={href} href={href}
+              className="flex flex-col items-center gap-1.5 rounded-2xl bg-white border border-zinc-100 shadow-sm py-3.5 active:scale-[.97] transition">
+              <span className="text-2xl">{emoji}</span>
+              <span className="text-xs font-medium text-gray-600">{label}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       {/* ── 集章卡進度 ────────────────────────────────────── */}
       {stampData && stampData.stampCards.length > 0 && (

@@ -173,6 +173,111 @@ export async function pushFlexMessageBatch(
   return { successCount, failCount }
 }
 
+// ── LINE Rich Menu ───────────────────────────────────────────────────────────
+
+export interface RichMenuArea {
+  bounds: { x: number; y: number; width: number; height: number }
+  action: { type: string; uri?: string; text?: string; data?: string; label?: string }
+}
+
+export interface RichMenuDefinition {
+  size: { width: number; height: number }
+  selected: boolean
+  name: string
+  chatBarText: string
+  areas: RichMenuArea[]
+}
+
+/** Create a rich menu and return its ID */
+export async function createRichMenu(
+  definition: RichMenuDefinition,
+  token: string
+): Promise<string | null> {
+  try {
+    const res = await fetch('https://api.line.me/v2/bot/richmenu', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(definition),
+      cache: 'no-store',
+    })
+    if (!res.ok) { console.error('[rich-menu] create error:', await res.text()); return null }
+    const { richMenuId } = await res.json() as { richMenuId: string }
+    return richMenuId
+  } catch (e) { console.error('[rich-menu] create error:', e); return null }
+}
+
+/** Upload image to a rich menu */
+export async function uploadRichMenuImage(
+  richMenuId: string,
+  imageBuffer: ArrayBuffer,
+  contentType: 'image/jpeg' | 'image/png',
+  token: string
+): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api-data.line.me/v2/bot/richmenu/${richMenuId}/content`, {
+      method: 'POST',
+      headers: { 'Content-Type': contentType, Authorization: `Bearer ${token}` },
+      body: imageBuffer,
+      cache: 'no-store',
+    })
+    return res.ok
+  } catch (e) { console.error('[rich-menu] upload image error:', e); return false }
+}
+
+/** Set rich menu as default for all users */
+export async function setDefaultRichMenu(richMenuId: string, token: string): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api.line.me/v2/bot/user/all/richmenu/${richMenuId}`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+    })
+    return res.ok
+  } catch (e) { console.error('[rich-menu] set default error:', e); return false }
+}
+
+/** Get list of all rich menus */
+export async function listRichMenus(token: string): Promise<{ richMenuId: string; name: string; chatBarText: string; selected: boolean }[]> {
+  try {
+    const res = await fetch('https://api.line.me/v2/bot/richmenu/list', {
+      headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+    })
+    if (!res.ok) return []
+    const { richmenus } = await res.json() as { richmenus: { richMenuId: string; name: string; chatBarText: string; selected: boolean }[] }
+    return richmenus ?? []
+  } catch { return [] }
+}
+
+/** Get default rich menu ID */
+export async function getDefaultRichMenuId(token: string): Promise<string | null> {
+  try {
+    const res = await fetch('https://api.line.me/v2/bot/user/all/richmenu', {
+      headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+    })
+    if (!res.ok) return null
+    const { richMenuId } = await res.json() as { richMenuId: string }
+    return richMenuId ?? null
+  } catch { return null }
+}
+
+/** Delete a rich menu */
+export async function deleteRichMenu(richMenuId: string, token: string): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api.line.me/v2/bot/richmenu/${richMenuId}`, {
+      method: 'DELETE', headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+    })
+    return res.ok
+  } catch { return false }
+}
+
+/** Unlink default rich menu */
+export async function unlinkDefaultRichMenu(token: string): Promise<boolean> {
+  try {
+    const res = await fetch('https://api.line.me/v2/bot/user/all/richmenu', {
+      method: 'DELETE', headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+    })
+    return res.ok
+  } catch { return false }
+}
+
 // ── LINE Bot Info ────────────────────────────────────────────────────────────
 // 透過 Channel Access Token 查詢 LINE Official Account 的基本資訊
 // 用途：在品牌設定頁儲存 token 時，自動帶入 LINE@ 的顯示名稱與大頭貼

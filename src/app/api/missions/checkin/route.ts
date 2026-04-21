@@ -82,24 +82,21 @@ export async function POST(req: NextRequest) {
     })
   if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 })
 
-  // ── Point transaction ─────────────────────────────────────────────────────────
-  await supabase.from('point_transactions').insert({
-    tenant_id: auth.tenantId,
-    member_id: member.id,
-    type: 'earn',
-    amount: rewardPts,
-    note: `打卡任務：${mission.title as string}`,
-  })
+  // ── Award points atomically via addPointTransaction ──────────────────────────
+  const { addPointTransaction } = await import('@/repositories/pointRepository')
+  const newPoints = (member.points as number) + rewardPts
+  try {
+    await addPointTransaction({
+      tenant_id: auth.tenantId,
+      member_id: member.id as string,
+      type: 'earn',
+      amount: rewardPts,
+      note: `打卡任務：${mission.title as string}`,
+    })
+  } catch { /* addPointTransaction already logged */ }
 
-  // ── Read-then-write points ────────────────────────────────────────────────────
-  const { data: freshMember } = await supabase
-    .from('members')
-    .select('points')
-    .eq('id', member.id)
-    .single()
-
-  const newPoints = ((freshMember?.points as number) ?? 0) + rewardPts
-  await supabase.from('members').update({ points: newPoints }).eq('id', member.id)
+  // ── Update last_activity_at ───────────────────────────────────────────────
+  await supabase.from('members').update({ last_activity_at: new Date().toISOString() }).eq('id', member.id)
 
   return NextResponse.json({
     success: true,
