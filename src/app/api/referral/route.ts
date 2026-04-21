@@ -72,8 +72,7 @@ export async function GET(req: NextRequest) {
   const { data: referralRows } = await supabase
     .from('referrals')
     .select('referrer_points_awarded')
-    .eq('referrer_member_id', member.id)
-    .eq('status', 'completed')
+    .eq('referrer_id', member.id)
 
   const totalReferred = (referralRows ?? []).length
   const totalPointsEarned = (referralRows ?? []).reduce(
