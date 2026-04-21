@@ -6,6 +6,39 @@
 //   - ID Token 驗證需要該 tenant 的 loginChannelId（從 liffId 提取）
 //   - 若 tenant 尚未設定 liff_id，fallback 到 Access Token 驗證（只需 profile scope）
 
+// ── In-memory token verification cache ───────────────────────────────────────
+// LINE tokens 有效期通常 > 10 分鐘，同一 token 短時間內不重複打 LINE API
+const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000 // 5 分鐘
+
+interface CacheEntry {
+  payload: Pick<LineTokenPayload, 'sub'>
+  expiresAt: number
+}
+
+const tokenCache = new Map<string, CacheEntry>()
+
+function getCached(token: string): Pick<LineTokenPayload, 'sub'> | null {
+  const entry = tokenCache.get(token)
+  if (!entry) return null
+  if (Date.now() > entry.expiresAt) {
+    tokenCache.delete(token)
+    return null
+  }
+  return entry.payload
+}
+
+function setCached(token: string, payload: Pick<LineTokenPayload, 'sub'>): void {
+  // 每 100 次寫入順便清理過期 entry，避免長時間執行的 lambda 累積太多
+  if (tokenCache.size % 100 === 0) {
+    const now = Date.now()
+    for (const [key, entry] of tokenCache) {
+      if (now > entry.expiresAt) tokenCache.delete(key)
+    }
+  }
+  tokenCache.set(token, { payload, expiresAt: Date.now() + TOKEN_CACHE_TTL_MS })
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface LineTokenPayload {
   iss: string       // https://access.line.me
   sub: string       // LINE user ID（= lineUid）
@@ -89,18 +122,28 @@ export async function verifyLineToken(
   token: string,
   liffId?: string
 ): Promise<Pick<LineTokenPayload, 'sub'>> {
+  const cached = getCached(token)
+  if (cached) return cached
+
+  let payload: Pick<LineTokenPayload, 'sub'>
+
   if (liffId) {
     const channelId = extractChannelIdFromLiffId(liffId)
     if (channelId) {
       try {
-        return await verifyLineIdToken(token, channelId)
+        payload = await verifyLineIdToken(token, channelId)
+        setCached(token, payload)
+        return payload
       } catch {
         // ID Token 驗證失敗（可能是 Access Token，或 openid scope 未啟用）
         // fallback 到 Access Token 驗證
       }
     }
   }
-  return verifyLineAccessToken(token)
+
+  payload = await verifyLineAccessToken(token)
+  setCached(token, payload)
+  return payload
 }
 
 /**
