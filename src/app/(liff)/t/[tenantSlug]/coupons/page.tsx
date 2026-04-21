@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
 import { useLiff } from '@/hooks/useLiff'
 import { useRealtimeMemberCoupons } from '@/hooks/useRealtimeMember'
 import type { MemberCoupon, Coupon, CouponType, MemberCouponStatus } from '@/types/coupon'
@@ -44,6 +45,9 @@ export default function CouponsPage() {
   const [myLoading, setMyLoading] = useState(true)
   const [myError, setMyError] = useState<string | null>(null)
   const [redeeming, setRedeeming] = useState<string | null>(null)
+
+  // ── QR modal state ────────────────────────────────────────────────────────
+  const [qrCoupon, setQrCoupon] = useState<MemberCouponWithCoupon | null>(null)
 
   // ── exchange state ────────────────────────────────────────────────────────
   const [memberPoints, setMemberPoints] = useState<number>(0)
@@ -195,6 +199,43 @@ export default function CouponsPage() {
 
   return (
     <main className="min-h-screen bg-gray-50 pb-10">
+      {/* ── QR Code Modal ── */}
+      {qrCoupon && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50"
+          onClick={() => setQrCoupon(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-t-3xl bg-white p-6 pb-8 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-gray-900">出示 QR Code</h3>
+              <button
+                onClick={() => setQrCoupon(null)}
+                className="text-gray-400 text-2xl leading-none"
+              >×</button>
+            </div>
+            <p className="text-sm font-semibold text-gray-800 line-clamp-2">{qrCoupon.coupon.name}</p>
+            <div className="flex flex-col items-center gap-3 py-2">
+              <div className="rounded-2xl border-2 border-gray-100 bg-white p-4 shadow-sm">
+                <QRCodeSVG value={qrCoupon.id} size={200} level="M" includeMargin={false} />
+              </div>
+              <p className="font-mono text-xs text-gray-400 text-center break-all max-w-[220px]">
+                {qrCoupon.id}
+              </p>
+              <p className="text-sm text-gray-500">出示此碼給店員核銷</p>
+            </div>
+            <button
+              onClick={() => setQrCoupon(null)}
+              className="w-full rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-600"
+            >
+              關閉
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Header ── */}
       <div className="bg-green-500 px-6 pt-10 pb-6 text-white">
         <h1 className="text-xl font-bold">優惠券</h1>
@@ -248,6 +289,7 @@ export default function CouponsPage() {
                         mc={mc}
                         onRedeem={handleRedeem}
                         redeeming={redeeming}
+                        onShowQR={() => setQrCoupon(mc)}
                       />
                     ))}
                   </ul>
@@ -263,6 +305,7 @@ export default function CouponsPage() {
                         mc={mc}
                         onRedeem={handleRedeem}
                         redeeming={redeeming}
+                        onShowQR={() => setQrCoupon(mc)}
                       />
                     ))}
                   </ul>
@@ -383,10 +426,12 @@ function MyCouponCard({
   mc,
   onRedeem,
   redeeming,
+  onShowQR,
 }: {
   mc: MemberCouponWithCoupon
   onRedeem: (id: string) => void
   redeeming: string | null
+  onShowQR: () => void
 }) {
   return (
     <li className="rounded-2xl bg-white px-5 py-4 shadow-sm flex flex-col gap-2">
@@ -409,13 +454,23 @@ function MyCouponCard({
         <p className="text-xs text-gray-400">使用時間：{formatDate(mc.used_at)}</p>
       )}
       {mc.status === 'active' && (
-        <button
-          onClick={() => onRedeem(mc.id)}
-          disabled={redeeming === mc.id}
-          className="mt-1 w-full rounded-xl bg-green-500 py-2 text-sm font-semibold text-white disabled:opacity-60 active:bg-green-600"
-        >
-          {redeeming === mc.id ? '核銷中…' : '核銷使用'}
-        </button>
+        <div className="mt-1 flex gap-2">
+          {/* QR code button — primary action */}
+          <button
+            onClick={onShowQR}
+            className="flex-1 rounded-xl bg-green-500 py-2 text-sm font-semibold text-white active:bg-green-600 flex items-center justify-center gap-1.5"
+          >
+            <span>📱</span> 出示 QR Code
+          </button>
+          {/* Self-redeem fallback */}
+          <button
+            onClick={() => onRedeem(mc.id)}
+            disabled={redeeming === mc.id}
+            className="rounded-xl border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 disabled:opacity-60 active:bg-gray-50"
+          >
+            {redeeming === mc.id ? '…' : '自助核銷'}
+          </button>
+        </div>
       )}
     </li>
   )
