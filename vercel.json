@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/scheduled-push",
-      "schedule": "* * * * *"
+      "schedule": "0 9 * * *"
     },
     {
       "path": "/api/cron/dormant",
