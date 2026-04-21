@@ -5,6 +5,7 @@ import { getMembersByTenant } from '@/repositories/memberRepository'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { findOrCreatePlatformMember, upsertConsent } from '@/lib/platform-members'
 import type { Member } from '@/types/member'
 
 // ── GET /api/members ──────────────────────────────────────────────────────────
@@ -112,7 +113,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { name, phone, birthday, tenantSlug, referralCode } = body
+    const { name, phone, birthday, tenantSlug, referralCode, consentPlatform } = body
 
     if (!tenantSlug) {
       return NextResponse.json({ error: 'tenantSlug is required' }, { status: 400 })
@@ -134,7 +135,7 @@ export async function POST(req: NextRequest) {
     // 1. 從 tenantSlug 取得 tenant（含 liff_id 供驗 token 用）
     const { data: tenant } = await supabase
       .from('tenants')
-      .select('id, liff_id')
+      .select('id, liff_id, platform_participation')
       .eq('slug', tenantSlug)
       .single()
 
@@ -164,6 +165,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Member already registered' }, { status: 409 })
     }
 
+    // ── 4. 取得或建立平台級會員 ID（Model C Hybrid Federated）────────────────
+    //    只有在 platform_participation 不是 'disabled' 時才觸發
+    //    若失敗不中斷主流程（品牌會員資料更重要）
+    let platformMemberId: string | null = null
+    if (tenant.platform_participation !== 'disabled') {
+      try {
+        platformMemberId = await findOrCreatePlatformMember(supabase, {
+          line_uid:     lineUid,
+          display_name: name.trim(),
+          birthday:     birthday ?? null,
+          // 注意：不寫 phone — 品牌收集的手機和平台手機分開管理，避免意外覆蓋
+        })
+
+        // Phase 2：如果使用者勾選同意書，寫入 platform_member_consents
+        if (platformMemberId && consentPlatform === true) {
+          await upsertConsent(supabase, {
+            platform_member_id:               platformMemberId,
+            tenant_id:                        tenant.id,
+            share_basic_profile:              true,
+            share_transaction_history:        true,
+            allow_cross_brand_recommendation: true,
+            consent_version:                  'v1.0',
+          })
+        }
+      } catch (pmErr) {
+        // fire-and-forget 失敗不影響主流程，但記 log 以便追蹤
+        console.error('[members/POST] platform member / consent error:', pmErr)
+      }
+    }
+
     const memberData: Omit<Member, 'id' | 'created_at'> = {
       tenant_id: tenant.id,
       line_uid: lineUid,
@@ -177,7 +208,10 @@ export async function POST(req: NextRequest) {
 
     const { data: created, error } = await supabase
       .from('members')
-      .insert(memberData)
+      .insert({
+        ...memberData,
+        platform_member_id: platformMemberId,  // Model C: 可為 null
+      })
       .select()
       .single()
 
@@ -225,7 +259,7 @@ async function processReferral(
     const referrerPts = (tenant?.referral_referrer_points as number) ?? 100
     const referredPts = (tenant?.referral_referred_points as number) ?? 50
 
-    // Insert referral record (UNIQUE constraint on referred_id prevents duplicates)
+    // Insert referral record — UNIQUE (referred_id) prevents duplicate referrals
     const { error: insertError } = await supabase
       .from('referrals')
       .insert({
@@ -238,21 +272,11 @@ async function processReferral(
 
     if (insertError) return // already referred — silently skip
 
-    const now = new Date().toISOString()
-
-    // Record point transactions
-    await supabase.from('point_transactions').insert([
-      { tenant_id: tenantId, member_id: referrer.id, type: 'earn', amount: referrerPts, note: '推薦好友獎勵', created_at: now },
-      { tenant_id: tenantId, member_id: referredMemberId, type: 'earn', amount: referredPts, note: '新會員推薦入會獎勵', created_at: now },
-    ])
-
-    // Update member points (read-then-write to avoid needing DB function)
-    const { data: refMember } = await supabase.from('members').select('points').eq('id', referrer.id).single()
-    const { data: newMember } = await supabase.from('members').select('points').eq('id', referredMemberId).single()
-
+    // Award referral points atomically via RPC
+    const { addPointTransaction } = await import('@/repositories/pointRepository')
     await Promise.all([
-      refMember ? supabase.from('members').update({ points: (refMember.points as number) + referrerPts }).eq('id', referrer.id) : Promise.resolve(),
-      newMember ? supabase.from('members').update({ points: Math.max(0, (newMember.points as number) + referredPts) }).eq('id', referredMemberId) : Promise.resolve(),
+      addPointTransaction({ tenant_id: tenantId, member_id: referrer.id as string, type: 'earn', amount: referrerPts, note: '推薦好友獎勵' }),
+      addPointTransaction({ tenant_id: tenantId, member_id: referredMemberId, type: 'earn', amount: referredPts, note: '新會員推薦入會獎勵' }),
     ])
   } catch (err) {
     console.error('[referral] processReferral error:', err)

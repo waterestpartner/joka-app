@@ -100,7 +100,7 @@ export async function GET(req: NextRequest) {
           .select('member_id')
           .eq('tenant_id', tenantId)
           .in('member_id', bMemberIds)
-          .eq('type', 'earn')
+          .eq('type', 'birthday')
           .eq('note', '生日禮物')
           .gte('created_at', yearStart)
         alreadyBonusedIds = new Set((existingTx ?? []).map((t) => t.member_id as string))
@@ -118,20 +118,14 @@ export async function GET(req: NextRequest) {
         // ── Award birthday bonus points (idempotent) ─────────────────────────
         let actualBonus = 0
         if (bonusPoints > 0 && !alreadyBonusedIds.has(memberId)) {
-          // Insert transaction
-          await supabase.from('point_transactions').insert({
+          const { addPointTransaction } = await import('@/repositories/pointRepository')
+          await addPointTransaction({
             tenant_id: tenantId,
             member_id: memberId,
-            type: 'earn',
+            type: 'birthday',
             amount: bonusPoints,
             note: '生日禮物',
           })
-          // Update member points
-          await supabase
-            .from('members')
-            .update({ points: currentPoints + bonusPoints })
-            .eq('id', memberId)
-            .eq('tenant_id', tenantId)
           actualBonus = bonusPoints
           totalPointsAwarded += bonusPoints
         }

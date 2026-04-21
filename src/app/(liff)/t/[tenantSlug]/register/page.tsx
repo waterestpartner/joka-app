@@ -12,6 +12,7 @@ export default function RegisterPage() {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [birthday, setBirthday] = useState('')
+  const [consentPlatform, setConsentPlatform] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -33,7 +34,7 @@ export default function RegisterPage() {
       const res = await fetch('/api/members', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ name, phone, birthday: birthday || null, tenantSlug, referralCode }),
+        body: JSON.stringify({ name, phone, birthday: birthday || null, tenantSlug, referralCode, consentPlatform }),
       })
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))
@@ -97,6 +98,19 @@ export default function RegisterPage() {
           <input id="birthday" type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)}
             className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-800 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100" />
         </div>
+        {/* 跨品牌同意書 */}
+        <label className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={consentPlatform}
+            onChange={(e) => setConsentPlatform(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-green-500"
+          />
+          <span className="text-xs text-gray-600 leading-relaxed">
+            （選填）同意加入跨品牌會員計畫，授權與合作品牌共享基本資料及消費紀錄，享受跨品牌優惠推薦。可隨時在個人設定中撤回。
+          </span>
+        </label>
+
         {submitError && <p className="text-sm text-red-500 text-center">{submitError}</p>}
         <button type="submit" disabled={submitting || !idToken}
           className="mt-2 w-full rounded-xl bg-green-500 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-60 active:bg-green-600">
