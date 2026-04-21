@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLiff } from '@/hooks/useLiff'
@@ -16,6 +16,12 @@ interface MemberMeResponse {
   recentTransactions: PointTransaction[]
   tierSettings: TierSetting[]
   activeCouponsCount: number
+}
+
+interface ReferralData {
+  referralCode: string
+  referralUrl: string
+  stats: { totalReferred: number; totalPointsEarned: number }
 }
 
 const TX_TYPE_LABEL: Record<PointTransaction['type'], string> = {
@@ -40,6 +46,26 @@ export default function MemberCardPage() {
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
 
+  // Referral
+  const [referral, setReferral] = useState<ReferralData | null>(null)
+  const [showReferral, setShowReferral] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const loadReferral = useCallback(async () => {
+    if (!idToken || !tenantSlug) return
+    const res = await fetch(`/api/referral?tenantSlug=${tenantSlug}`, {
+      headers: { Authorization: `Bearer ${idToken}` },
+    })
+    if (res.ok) setReferral(await res.json() as ReferralData)
+  }, [idToken, tenantSlug])
+
+  async function copyReferralUrl() {
+    if (!referral) return
+    await navigator.clipboard.writeText(referral.referralUrl).catch(() => {})
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   useEffect(() => {
     if (!isReady) return
 
@@ -63,7 +89,9 @@ export default function MemberCardPage() {
           const errBody = await res.json().catch(() => null)
           throw new Error((errBody as { error?: string } | null)?.error ?? `HTTP ${res.status}`)
         }
-        setData(await res.json())
+        const memberData = await res.json()
+        setData(memberData)
+        loadReferral()
       } catch (err) {
         setFetchError(err instanceof Error ? err.message : '發生錯誤')
       } finally {
@@ -72,7 +100,7 @@ export default function MemberCardPage() {
     }
 
     fetchMember()
-  }, [isReady, idToken, tenantSlug, router])
+  }, [isReady, idToken, tenantSlug, router, loadReferral])
 
   useRealtimeMember(data?.member.id, (next) => {
     setData((prev) => prev ? { ...prev, member: { ...prev.member, ...next } } : prev)
@@ -217,6 +245,62 @@ export default function MemberCardPage() {
             </li>
           </ul>
         </div>
+      </section>
+
+      {/* ── 推薦好友 ────────────────────────────────────────── */}
+      <section className="px-4 mt-5">
+        <button
+          onClick={() => { setShowReferral((v) => !v) }}
+          className="w-full flex items-center justify-between rounded-2xl bg-gradient-to-r from-green-50 to-emerald-50 border border-green-100 shadow-sm p-4 active:scale-[.99] transition"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 text-xl">
+              🤝
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-gray-800">推薦好友</p>
+              <p className="text-xs text-gray-500">
+                {referral
+                  ? `已推薦 ${referral.stats.totalReferred} 位，賺 ${formatNumber(referral.stats.totalPointsEarned)} 點`
+                  : '推薦朋友加入，雙方都得點數'}
+              </p>
+            </div>
+          </div>
+          <span className="text-sm text-green-600">{showReferral ? '▲' : '▼'}</span>
+        </button>
+
+        {showReferral && referral && (
+          <div className="mt-2 rounded-2xl bg-white shadow-sm p-4 space-y-3">
+            <div className="text-center">
+              <p className="text-xs text-gray-400 mb-1">你的專屬推薦碼</p>
+              <p className="text-3xl font-bold font-mono tracking-widest text-green-600">
+                {referral.referralCode}
+              </p>
+            </div>
+            <div className="rounded-xl bg-gray-50 px-3 py-2">
+              <p className="text-[10px] text-gray-400 mb-0.5">推薦連結</p>
+              <p className="text-xs text-gray-600 break-all font-mono leading-relaxed">
+                {referral.referralUrl}
+              </p>
+            </div>
+            <button
+              onClick={copyReferralUrl}
+              className="w-full rounded-xl bg-green-500 py-2.5 text-sm font-semibold text-white active:bg-green-600"
+            >
+              {copied ? '✅ 已複製連結' : '📋 複製推薦連結'}
+            </button>
+            <div className="grid grid-cols-2 gap-2 text-center">
+              <div className="rounded-lg bg-green-50 p-3">
+                <p className="text-lg font-bold text-green-600">{referral.stats.totalReferred}</p>
+                <p className="text-xs text-gray-400">成功推薦</p>
+              </div>
+              <div className="rounded-lg bg-blue-50 p-3">
+                <p className="text-lg font-bold text-blue-600">{formatNumber(referral.stats.totalPointsEarned)}</p>
+                <p className="text-xs text-gray-400">推薦獲得點</p>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* ── 會員等級說明 ────────────────────────────────────── */}

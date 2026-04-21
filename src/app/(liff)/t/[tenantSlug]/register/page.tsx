@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useLiff } from '@/hooks/useLiff'
 
 export default function RegisterPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { isReady, idToken, profile, tenantSlug } = useLiff()
 
   const [name, setName] = useState('')
@@ -14,6 +15,9 @@ export default function RegisterPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+
+  // Read referral code from URL (?ref=CODE)
+  const referralCode = searchParams.get('ref') ?? undefined
 
   useEffect(() => {
     if (profile?.displayName) setName(profile.displayName)
@@ -29,7 +33,7 @@ export default function RegisterPage() {
       const res = await fetch('/api/members', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ name, phone, birthday: birthday || null, tenantSlug }),
+        body: JSON.stringify({ name, phone, birthday: birthday || null, tenantSlug, referralCode }),
       })
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))
@@ -62,7 +66,14 @@ export default function RegisterPage() {
     <main className="min-h-screen bg-gray-50 pb-10">
       <div className="bg-green-500 px-6 pt-10 pb-8 text-white text-center">
         <h1 className="text-xl font-bold">加入會員</h1>
-        <p className="text-sm text-green-100 mt-1">填寫資料，享受專屬優惠</p>
+        <p className="text-sm text-green-100 mt-1">
+          {referralCode ? `由好友推薦加入，享額外入會點數！` : '填寫資料，享受專屬優惠'}
+        </p>
+        {referralCode && (
+          <div className="mt-2 inline-block rounded-full bg-white/20 px-3 py-0.5 text-xs font-medium">
+            推薦碼：{referralCode}
+          </div>
+        )}
       </div>
       <form onSubmit={handleSubmit} className="mx-auto mt-6 max-w-sm px-4 flex flex-col gap-4">
         <div className="flex flex-col gap-1">

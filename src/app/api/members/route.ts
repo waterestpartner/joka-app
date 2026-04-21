@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { name, phone, birthday, tenantSlug } = body
+    const { name, phone, birthday, tenantSlug, referralCode } = body
 
     if (!tenantSlug) {
       return NextResponse.json({ error: 'tenantSlug is required' }, { status: 400 })
@@ -182,9 +182,79 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) throw new Error(error.message)
+
+    // ── 5. 推薦好友獎勵（非同步，不影響主流程）────────────────────────────────
+    if (referralCode && typeof referralCode === 'string') {
+      // Fire-and-forget: run after response via after() if available, else as side effect
+      void processReferral(supabase, tenant.id, created.id as string, referralCode.trim().toUpperCase())
+    }
+
     return NextResponse.json(created, { status: 201 })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error'
     return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
+// ── Referral reward processing ────────────────────────────────────────────────
+
+async function processReferral(
+  supabase: ReturnType<typeof createSupabaseAdminClient>,
+  tenantId: string,
+  referredMemberId: string,
+  referralCode: string
+): Promise<void> {
+  try {
+    // Find referrer by code (must be in same tenant)
+    const { data: referrer } = await supabase
+      .from('members')
+      .select('id, points')
+      .eq('tenant_id', tenantId)
+      .eq('referral_code', referralCode)
+      .maybeSingle()
+
+    if (!referrer || referrer.id === referredMemberId) return
+
+    // Get tenant's reward settings
+    const { data: tenant } = await supabase
+      .from('tenants')
+      .select('referral_referrer_points, referral_referred_points')
+      .eq('id', tenantId)
+      .maybeSingle()
+
+    const referrerPts = (tenant?.referral_referrer_points as number) ?? 100
+    const referredPts = (tenant?.referral_referred_points as number) ?? 50
+
+    // Insert referral record (UNIQUE constraint on referred_id prevents duplicates)
+    const { error: insertError } = await supabase
+      .from('referrals')
+      .insert({
+        tenant_id: tenantId,
+        referrer_id: referrer.id,
+        referred_id: referredMemberId,
+        referrer_points_awarded: referrerPts,
+        referred_points_awarded: referredPts,
+      })
+
+    if (insertError) return // already referred — silently skip
+
+    const now = new Date().toISOString()
+
+    // Record point transactions
+    await supabase.from('point_transactions').insert([
+      { tenant_id: tenantId, member_id: referrer.id, type: 'earn', amount: referrerPts, note: '推薦好友獎勵', created_at: now },
+      { tenant_id: tenantId, member_id: referredMemberId, type: 'earn', amount: referredPts, note: '新會員推薦入會獎勵', created_at: now },
+    ])
+
+    // Update member points (read-then-write to avoid needing DB function)
+    const { data: refMember } = await supabase.from('members').select('points').eq('id', referrer.id).single()
+    const { data: newMember } = await supabase.from('members').select('points').eq('id', referredMemberId).single()
+
+    await Promise.all([
+      refMember ? supabase.from('members').update({ points: (refMember.points as number) + referrerPts }).eq('id', referrer.id) : Promise.resolve(),
+      newMember ? supabase.from('members').update({ points: Math.max(0, (newMember.points as number) + referredPts) }).eq('id', referredMemberId) : Promise.resolve(),
+    ])
+  } catch (err) {
+    console.error('[referral] processReferral error:', err)
   }
 }
