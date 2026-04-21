@@ -53,6 +53,18 @@ function BottomNav({ tenantSlug, pathname }: { tenantSlug: string; pathname: str
         </svg>
       ),
     },
+    {
+      href: `${base}/missions`,
+      label: '任務',
+      icon: (active: boolean) => (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+          fill={active ? 'currentColor' : 'none'} stroke="currentColor"
+          strokeWidth={active ? 0 : 1.8} className="h-6 w-6">
+          <path d="M9 11l3 3L22 4" strokeLinecap="round" strokeLinejoin="round" fill="none" stroke="currentColor" strokeWidth={1.8} />
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ),
+    },
   ] as const
 
   return (

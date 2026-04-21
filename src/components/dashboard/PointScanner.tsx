@@ -2,6 +2,7 @@
 
 // 掃碼集點介面（後台專用，平板友好）
 // 支援：相機掃 QR Code / 手動貼上會員 ID / USB 條碼槍
+// 集點完成後可一併完成打卡任務
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { PointTransaction } from '@/types/member'
@@ -18,6 +19,13 @@ interface ScanResult extends PointTransaction {
   newTier?: string
 }
 
+interface CheckinMission {
+  id: string
+  title: string
+  reward_points: number
+  max_completions_per_member: number | null
+}
+
 export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
   const [memberId, setMemberId] = useState('')
   const [spentAmount, setSpentAmount] = useState('')
@@ -25,6 +33,11 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [recentTransactions, setRecentTransactions] = useState<ScanResult[]>([])
+
+  // Checkin missions
+  const [checkinMissions, setCheckinMissions] = useState<CheckinMission[]>([])
+  const [checkinLoading, setCheckinLoading] = useState<Record<string, boolean>>({})
+  const [checkinResults, setCheckinResults] = useState<Record<string, string>>({})
 
   // Camera scanner state
   const [cameraOpen, setCameraOpen] = useState(false)
@@ -39,6 +52,16 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
   // Auto-focus the member ID input on mount
   useEffect(() => {
     memberIdRef.current?.focus()
+  }, [])
+
+  // Load checkin missions on mount
+  useEffect(() => {
+    void fetch('/api/missions/checkin')
+      .then((r) => r.json())
+      .then((d: unknown) => {
+        if (Array.isArray(d)) setCheckinMissions(d as CheckinMission[])
+      })
+      .catch(() => {})
   }, [])
 
   // ── Camera scanner ─────────────────────────────────────────────
@@ -140,14 +163,44 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
       setRecentTransactions((prev) => [result, ...prev.slice(0, 9)])
       onSuccess?.(result)
 
-      setMemberId('')
       setSpentAmount('')
       setNote('')
+      // Don't clear memberId — keep it so operator can also award checkin missions
+      setCheckinResults({})
       memberIdRef.current?.focus()
     } catch (err) {
       setError(err instanceof Error ? err.message : '發生錯誤')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleCheckin(mission: CheckinMission) {
+    if (!memberId.trim()) {
+      setError('請先輸入或掃描會員 ID')
+      return
+    }
+    setCheckinLoading((c) => ({ ...c, [mission.id]: true }))
+    setCheckinResults((r) => ({ ...r, [mission.id]: '' }))
+    try {
+      const res = await fetch('/api/missions/checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId: memberId.trim(), missionId: mission.id }),
+      })
+      const data = await res.json() as { success?: boolean; error?: string; pointsAwarded?: number; memberName?: string }
+      if (!res.ok) {
+        setCheckinResults((r) => ({ ...r, [mission.id]: `❌ ${data.error ?? '失敗'}` }))
+      } else {
+        setCheckinResults((r) => ({
+          ...r,
+          [mission.id]: `✅ +${data.pointsAwarded ?? 0} 點 完成！`,
+        }))
+      }
+    } catch {
+      setCheckinResults((r) => ({ ...r, [mission.id]: '❌ 網路錯誤' }))
+    } finally {
+      setCheckinLoading((c) => ({ ...c, [mission.id]: false }))
     }
   }
 
@@ -274,6 +327,40 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
           {submitting ? '集點中…' : '確認集點'}
         </button>
       </form>
+
+      {/* ── Checkin Missions ── */}
+      {checkinMissions.length > 0 && (
+        <div className="rounded-2xl bg-white p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-700 mb-1">📍 打卡任務</h3>
+          <p className="text-xs text-gray-400 mb-3">
+            掃描會員 QR Code 後，點擊下方任務按鈕完成打卡並獎勵點數
+          </p>
+          <div className="flex flex-col gap-2">
+            {checkinMissions.map((m) => (
+              <div key={m.id} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{m.title}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">+{m.reward_points} 點</p>
+                </div>
+                {checkinResults[m.id] ? (
+                  <span className="text-sm font-medium text-green-600 whitespace-nowrap">
+                    {checkinResults[m.id]}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={checkinLoading[m.id] ?? false}
+                    onClick={() => void handleCheckin(m)}
+                    className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50 transition whitespace-nowrap"
+                  >
+                    {(checkinLoading[m.id] ?? false) ? '處理中…' : '打卡完成'}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Recent transactions ── */}
       {recentTransactions.length > 0 && (

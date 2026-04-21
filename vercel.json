@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/scheduled-push",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/dormant",
+      "schedule": "0 2 * * 1"
     }
   ]
 }
