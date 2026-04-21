@@ -11,7 +11,9 @@ async function signOutAction() {
 
 const navLinks = [
   { href: '/dashboard/overview', label: '數據總覽' },
+  { href: '/dashboard/analytics', label: '數據報表' },
   { href: '/dashboard/members', label: '會員管理' },
+  { href: '/dashboard/tags', label: '標籤管理' },
   { href: '/dashboard/scan', label: '掃碼集點' },
   { href: '/dashboard/push', label: '推播訊息' },
   { href: '/dashboard/coupons', label: '優惠券' },
