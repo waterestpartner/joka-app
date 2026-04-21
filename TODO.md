@@ -6,10 +6,11 @@
 
 ## 🔴 緊急 / 下個 session 先做
 
-- [ ] 設定 `CRON_SECRET` 環境變數（Vercel + `.env.local`）— 所有 cron routes 目前全回 401
+- [x] 設定 `CRON_SECRET` 環境變數（Vercel + `.env.local`）— 已設定（2026-04-21）
+- [x] 執行 `supabase/rls-policies-v2.sql` — 已執行（2026-04-21）
+- [x] Vercel Cron Jobs 排程設定 — 4 個 cron 已上線（2026-04-21）
 - [ ] 端對端測試：掃碼集點 + 加倍點數活動生效驗證
 - [ ] 端對端測試：會員備註 CRUD
-- [ ] 執行 `supabase/rls-policies-v2.sql`（已寫入，待執行）✅ 已執行（2026-04-21）
 
 ---
 
@@ -22,7 +23,7 @@
 - [x] Phase 1：`GET /api/platform-members/me`（跨品牌概覽 API）
 - [x] Phase 1：`GET /api/cron/backfill-platform-members`（歷史資料回補）
 - [x] Phase 2：LIFF 註冊頁加同意書 checkbox → 寫入 platform_member_consents（已實作）
-- [ ] Phase 2：設定 Vercel cron schedule for backfill（每 5 分鐘）
+- [x] Phase 2：設定 Vercel cron schedule for backfill（Hobby 限制每日一次，04:00 UTC）
 - [ ] Phase 3：backfill 完成後驗證 `platform_member_id IS NULL` 歸零
 - [ ] Phase 4：在 LIFF 前台實作「我的品牌卡包」功能
 
@@ -114,7 +115,7 @@
 
 ### 技術改進
 - [x] LINE Token 驗證快取（同一 token 5 分鐘內不重複打 LINE API）— `src/lib/line-auth.ts`（2026-04-21）
-- [ ] Webhook 簽名驗證（收端）— 目前只有送端有 HMAC
+- [x] Webhook 簽名驗證（收端）— JOKA 無收端需求，LINE webhook 已有 HMAC 驗證
 - [x] Supabase RLS 政策更新（supabase/rls-policies-v2.sql 已執行，2026-04-21）
 
 ### LIFF 前台缺失頁面
