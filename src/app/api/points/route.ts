@@ -249,11 +249,15 @@ export async function POST(req: NextRequest) {
     const tierUpgraded = newTierIdx > oldTierIdx
     const tierChanged = newTierKey !== oldTierKey
 
-    // ── 更新 member（tier / total_spent）────────────────────────────
+    // ── 更新 member（tier / total_spent / last_activity_at）─────────
     const memberUpdates: Record<string, unknown> = {}
     if (tierChanged) memberUpdates.tier = newTierKey
     if (numSpentAmount > 0) {
       memberUpdates.total_spent = ((member.total_spent as number) ?? 0) + numSpentAmount
+    }
+    // Always bump last_activity_at on earn/spend (used for point expiry)
+    if (txType === 'earn' || txType === 'spend') {
+      memberUpdates.last_activity_at = new Date().toISOString()
     }
     if (Object.keys(memberUpdates).length > 0) {
       await supabase

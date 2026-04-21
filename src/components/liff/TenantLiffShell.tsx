@@ -65,6 +65,25 @@ function BottomNav({ tenantSlug, pathname }: { tenantSlug: string; pathname: str
         </svg>
       ),
     },
+    {
+      href: `${base}/stamps`,
+      label: '集章',
+      icon: (active: boolean) => (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+          fill={active ? 'currentColor' : 'none'} stroke="currentColor"
+          strokeWidth={active ? 0 : 1.8} className="h-6 w-6">
+          <circle cx="12" cy="12" r="3" />
+          <circle cx="12" cy="4" r="2" />
+          <circle cx="12" cy="20" r="2" />
+          <circle cx="4" cy="12" r="2" />
+          <circle cx="20" cy="12" r="2" />
+          <circle cx="6.34" cy="6.34" r="2" />
+          <circle cx="17.66" cy="17.66" r="2" />
+          <circle cx="6.34" cy="17.66" r="2" />
+          <circle cx="17.66" cy="6.34" r="2" />
+        </svg>
+      ),
+    },
   ] as const
 
   return (

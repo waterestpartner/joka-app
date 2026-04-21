@@ -26,6 +26,14 @@ interface CheckinMission {
   max_completions_per_member: number | null
 }
 
+interface StampCardSlim {
+  id: string
+  name: string
+  required_stamps: number
+  icon_emoji: string
+  bg_color: string
+}
+
 export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
   const [memberId, setMemberId] = useState('')
   const [spentAmount, setSpentAmount] = useState('')
@@ -38,6 +46,11 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
   const [checkinMissions, setCheckinMissions] = useState<CheckinMission[]>([])
   const [checkinLoading, setCheckinLoading] = useState<Record<string, boolean>>({})
   const [checkinResults, setCheckinResults] = useState<Record<string, string>>({})
+
+  // Stamp cards
+  const [stampCards, setStampCards] = useState<StampCardSlim[]>([])
+  const [stampLoading, setStampLoading] = useState<Record<string, boolean>>({})
+  const [stampResults, setStampResults] = useState<Record<string, string>>({})
 
   // Camera scanner state
   const [cameraOpen, setCameraOpen] = useState(false)
@@ -54,13 +67,16 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
     memberIdRef.current?.focus()
   }, [])
 
-  // Load checkin missions on mount
+  // Load checkin missions + stamp cards on mount
   useEffect(() => {
     void fetch('/api/missions/checkin')
       .then((r) => r.json())
-      .then((d: unknown) => {
-        if (Array.isArray(d)) setCheckinMissions(d as CheckinMission[])
-      })
+      .then((d: unknown) => { if (Array.isArray(d)) setCheckinMissions(d as CheckinMission[]) })
+      .catch(() => {})
+
+    void fetch('/api/stamp-cards/stamp')
+      .then((r) => r.json())
+      .then((d: unknown) => { if (Array.isArray(d)) setStampCards(d as StampCardSlim[]) })
       .catch(() => {})
   }, [])
 
@@ -165,8 +181,9 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
 
       setSpentAmount('')
       setNote('')
-      // Don't clear memberId — keep it so operator can also award checkin missions
+      // Don't clear memberId — keep it so operator can also award checkin/stamp
       setCheckinResults({})
+      setStampResults({})
       memberIdRef.current?.focus()
     } catch (err) {
       setError(err instanceof Error ? err.message : '發生錯誤')
@@ -201,6 +218,40 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
       setCheckinResults((r) => ({ ...r, [mission.id]: '❌ 網路錯誤' }))
     } finally {
       setCheckinLoading((c) => ({ ...c, [mission.id]: false }))
+    }
+  }
+
+  async function handleStamp(card: StampCardSlim) {
+    if (!memberId.trim()) {
+      setError('請先輸入或掃描會員 ID')
+      return
+    }
+    setStampLoading((c) => ({ ...c, [card.id]: true }))
+    setStampResults((r) => ({ ...r, [card.id]: '' }))
+    try {
+      const res = await fetch('/api/stamp-cards/stamp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId: memberId.trim(), stampCardId: card.id }),
+      })
+      const data = await res.json() as {
+        success?: boolean; error?: string
+        currentStamps?: number; requiredStamps?: number
+        completions?: number; memberName?: string
+      }
+      if (!res.ok) {
+        setStampResults((r) => ({ ...r, [card.id]: `❌ ${data.error ?? '失敗'}` }))
+      } else {
+        const completed = (data.completions ?? 0) > 0 ? ' 🎉 集滿！' : ''
+        setStampResults((r) => ({
+          ...r,
+          [card.id]: `✅ ${data.currentStamps ?? 0}/${data.requiredStamps ?? card.required_stamps} 格${completed}`,
+        }))
+      }
+    } catch {
+      setStampResults((r) => ({ ...r, [card.id]: '❌ 網路錯誤' }))
+    } finally {
+      setStampLoading((c) => ({ ...c, [card.id]: false }))
     }
   }
 
@@ -354,6 +405,47 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
                     className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50 transition whitespace-nowrap"
                   >
                     {(checkinLoading[m.id] ?? false) ? '處理中…' : '打卡完成'}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Stamp Cards ── */}
+      {stampCards.length > 0 && (
+        <div className="rounded-2xl bg-white p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-700 mb-1">🃏 蓋章卡</h3>
+          <p className="text-xs text-gray-400 mb-3">
+            掃描會員 QR Code 後，點擊下方按鈕為此會員蓋一格印章
+          </p>
+          <div className="flex flex-col gap-2">
+            {stampCards.map((card) => (
+              <div key={card.id} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                <div
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-base text-white"
+                  style={{ background: card.bg_color }}
+                >
+                  {card.icon_emoji}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{card.name}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">集滿 {card.required_stamps} 格</p>
+                </div>
+                {stampResults[card.id] ? (
+                  <span className="text-sm font-medium text-green-600 whitespace-nowrap">
+                    {stampResults[card.id]}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={stampLoading[card.id] ?? false}
+                    onClick={() => void handleStamp(card)}
+                    className="rounded-lg px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 transition whitespace-nowrap"
+                    style={{ background: card.bg_color }}
+                  >
+                    {(stampLoading[card.id] ?? false) ? '蓋章中…' : '蓋章'}
                   </button>
                 )}
               </div>

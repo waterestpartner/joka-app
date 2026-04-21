@@ -13,8 +13,9 @@ export interface Tenant {
   channel_access_token: string | null   // 店家自己的 LINE Messaging API token（推播用）
   push_enabled: boolean                 // 是否啟用自動推播（預設 true）
   liff_id: string | null
-  referral_referrer_points: number   // 推薦人獲得的點數
-  referral_referred_points: number   // 被推薦人獲得的點數
+  referral_referrer_points: number    // 推薦人獲得的點數
+  referral_referred_points: number    // 被推薦人獲得的點數
+  points_expire_days: number | null   // 點數到期天數（null = 永不到期）
   created_at: string
 }
 

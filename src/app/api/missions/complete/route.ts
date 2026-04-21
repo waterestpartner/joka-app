@@ -132,7 +132,10 @@ export async function POST(req: NextRequest) {
     .single()
 
   const newPoints = ((freshMember?.points as number) ?? 0) + rewardPts
-  await supabase.from('members').update({ points: newPoints }).eq('id', member.id)
+  await supabase.from('members').update({
+    points: newPoints,
+    last_activity_at: new Date().toISOString(),
+  }).eq('id', member.id)
 
   return NextResponse.json({
     success: true,
