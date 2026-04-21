@@ -94,6 +94,85 @@ export async function pushTextMessageBatch(
   return { successCount, failCount }
 }
 
+/**
+ * 推播 Flex Message 給單一 LINE 用戶。
+ * @param lineUserId         目標用戶的 LINE UID
+ * @param altText            通知欄顯示的替代文字（不支援 Flex 時顯示）
+ * @param flexContents       Flex Message container JSON（bubble 或 carousel）
+ * @param channelAccessToken 租戶的 LINE Messaging API Channel Access Token
+ */
+export async function pushFlexMessage(
+  lineUserId: string,
+  altText: string,
+  flexContents: object,
+  channelAccessToken: string
+): Promise<void> {
+  if (!channelAccessToken || !lineUserId) return
+
+  try {
+    const res = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${channelAccessToken}`,
+      },
+      body: JSON.stringify({
+        to: lineUserId,
+        messages: [{ type: 'flex', altText, contents: flexContents }],
+      }),
+      cache: 'no-store',
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      console.error('[line-flex] API error:', res.status, body)
+    }
+  } catch (err) {
+    console.error('[line-flex] Network error:', err)
+  }
+}
+
+/**
+ * 批次推播 Flex Message 給多位 LINE 用戶。
+ */
+export async function pushFlexMessageBatch(
+  lineUserIds: string[],
+  altText: string,
+  flexContents: object,
+  channelAccessToken: string
+): Promise<{ successCount: number; failCount: number }> {
+  let successCount = 0
+  let failCount = 0
+
+  for (const userId of lineUserIds) {
+    try {
+      const res = await fetch('https://api.line.me/v2/bot/message/push', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${channelAccessToken}`,
+        },
+        body: JSON.stringify({
+          to: userId,
+          messages: [{ type: 'flex', altText, contents: flexContents }],
+        }),
+        cache: 'no-store',
+      })
+      if (res.ok) {
+        successCount++
+      } else {
+        const body = await res.json().catch(() => ({}))
+        console.error(`[line-flex-batch] failed for ${userId}:`, res.status, body)
+        failCount++
+      }
+    } catch (err) {
+      console.error(`[line-flex-batch] network error for ${userId}:`, err)
+      failCount++
+    }
+  }
+
+  return { successCount, failCount }
+}
+
 // ── LINE Bot Info ────────────────────────────────────────────────────────────
 // 透過 Channel Access Token 查詢 LINE Official Account 的基本資訊
 // 用途：在品牌設定頁儲存 token 時，自動帶入 LINE@ 的顯示名稱與大頭貼
