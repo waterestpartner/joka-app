@@ -15,6 +15,8 @@ interface TenantSettings {
   channel_access_token: string      // 輸入新 token 才儲存，空白代表不變更
   channel_access_token_set: boolean // 從 API 回傳：目前是否已設定
   push_enabled: boolean             // 自動推播開關
+  referral_referrer_points: number  // 推薦人獲得點數
+  referral_referred_points: number  // 被推薦人獲得點數
 }
 
 const DEFAULT_SETTINGS: TenantSettings = {
@@ -30,6 +32,8 @@ const DEFAULT_SETTINGS: TenantSettings = {
   channel_access_token: '',
   channel_access_token_set: false,
   push_enabled: true,
+  referral_referrer_points: 100,
+  referral_referred_points: 50,
 }
 
 /** 從 NEXT_PUBLIC_APP_URL 或相對路徑計算出完整 App 網址 */
@@ -76,6 +80,8 @@ export default function SettingsPage() {
               channel_access_token: '',             // 永遠不顯示舊 token（安全）
               channel_access_token_set: data.channel_access_token_set ?? false,
               push_enabled: data.push_enabled ?? true,
+              referral_referrer_points: data.referral_referrer_points ?? 100,
+              referral_referred_points: data.referral_referred_points ?? 50,
             })
           }
         }
@@ -145,6 +151,8 @@ export default function SettingsPage() {
         liff_id: settings.liff_id,
         line_channel_id: settings.line_channel_id,
         push_enabled: settings.push_enabled,
+        referral_referrer_points: Number(settings.referral_referrer_points) || 100,
+        referral_referred_points: Number(settings.referral_referred_points) || 50,
       }
       // 敏感欄位有填才更新，空白不覆蓋舊值
       if (settings.line_channel_secret.trim()) {
@@ -443,6 +451,64 @@ export default function SettingsPage() {
               <p className={`mt-2 text-xs font-medium ${settings.push_enabled ? 'text-green-600' : 'text-zinc-400'}`}>
                 {settings.push_enabled ? '✓ 自動推播已開啟' : '✕ 自動推播已關閉'}
               </p>
+            </div>
+
+            <hr className="border-zinc-100" />
+
+            {/* ── 推薦好友 ── */}
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-900 mb-1">推薦好友設定</h2>
+              <p className="text-xs text-zinc-400 mb-4">
+                會員推薦好友加入時，雙方各獲得的點數獎勵
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="referral_referrer_points" className="block text-sm font-medium text-zinc-700 mb-1.5">
+                    推薦人獲得點數
+                  </label>
+                  <input
+                    id="referral_referrer_points"
+                    name="referral_referrer_points"
+                    type="number"
+                    min={0}
+                    max={100000}
+                    value={settings.referral_referrer_points}
+                    onChange={(e) => {
+                      setSettings((prev) => ({ ...prev, referral_referrer_points: Number(e.target.value) }))
+                      setSuccess(false)
+                      setError(null)
+                    }}
+                    className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition"
+                  />
+                  <p className="mt-1 text-xs text-zinc-400">成功推薦好友後，推薦人得到的點數</p>
+                </div>
+                <div>
+                  <label htmlFor="referral_referred_points" className="block text-sm font-medium text-zinc-700 mb-1.5">
+                    被推薦人獲得點數
+                  </label>
+                  <input
+                    id="referral_referred_points"
+                    name="referral_referred_points"
+                    type="number"
+                    min={0}
+                    max={100000}
+                    value={settings.referral_referred_points}
+                    onChange={(e) => {
+                      setSettings((prev) => ({ ...prev, referral_referred_points: Number(e.target.value) }))
+                      setSuccess(false)
+                      setError(null)
+                    }}
+                    className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition"
+                  />
+                  <p className="mt-1 text-xs text-zinc-400">透過推薦碼加入的新會員得到的點數</p>
+                </div>
+              </div>
+              <div className="mt-3 rounded-xl bg-zinc-50 border border-zinc-200 px-4 py-3">
+                <p className="text-xs text-zinc-500">
+                  🤝 設為 <strong>0</strong> 可關閉推薦獎勵。推薦碼在會員卡頁面自動產生，
+                  每位會員一組永久碼。
+                </p>
+              </div>
             </div>
 
             {success && <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">✓ 設定已成功儲存。</p>}

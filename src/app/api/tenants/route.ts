@@ -120,6 +120,7 @@ export async function PATCH(req: NextRequest) {
       'name', 'logo_url', 'primary_color', 'liff_id',
       'line_channel_id', 'channel_access_token', 'push_enabled',
       'line_channel_secret',
+      'referral_referrer_points', 'referral_referred_points',
     ]
     for (const key of Object.keys(updateFields)) {
       if (!ALLOWED_UPDATE_FIELDS.includes(key)) delete updateFields[key]
