@@ -29,6 +29,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { logAudit } from '@/lib/audit'
 
 // ── Targeting helper ──────────────────────────────────────────────────────────
 
@@ -336,6 +337,20 @@ export async function POST(req: NextRequest) {
       created_by_email: auth.email ?? null,
     })
   }
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'campaign.execute',
+    target_type: 'campaign',
+    payload: {
+      action: action as string,
+      target: target as string,
+      processed,
+      succeeded,
+      skipped,
+    },
+  })
 
   return NextResponse.json({
     ok: true,

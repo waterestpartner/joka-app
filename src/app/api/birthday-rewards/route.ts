@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { addPointTransaction } from '@/repositories/pointRepository'
+import { logAudit } from '@/lib/audit'
 
 export async function GET(_req: NextRequest) {
   const auth = await requireDashboardAuth()
@@ -116,6 +117,15 @@ export async function POST(req: NextRequest) {
       skipped++
     }
   }
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'birthday_rewards.run',
+    target_type: 'tenant',
+    target_id: auth.tenantId,
+    payload: { awarded, skipped, bonusPoints: pts },
+  })
 
   return NextResponse.json({ awarded, skipped })
 }

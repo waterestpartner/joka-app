@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { logAudit } from '@/lib/audit'
 
 export async function DELETE(
   _req: NextRequest,
@@ -42,6 +43,14 @@ export async function DELETE(
       .eq('tenant_id', auth.tenantId)
 
     if (error) throw new Error(error.message)
+
+    void logAudit({
+      tenant_id: auth.tenantId,
+      operator_email: auth.email,
+      action: 'member.delete',
+      target_type: 'member',
+      target_id: memberId,
+    })
 
     return NextResponse.json({ success: true })
   } catch (err) {
@@ -161,6 +170,15 @@ export async function PATCH(
       .single()
 
     if (error) throw new Error(error.message)
+
+    void logAudit({
+      tenant_id: auth.tenantId,
+      operator_email: auth.email,
+      action: 'member.update',
+      target_type: 'member',
+      target_id: memberId,
+      payload: { fields: Object.keys(updates) },
+    })
 
     return NextResponse.json(updated)
   } catch (err) {

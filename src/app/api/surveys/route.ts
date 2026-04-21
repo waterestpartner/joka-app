@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
+import { logAudit } from '@/lib/audit'
 
 interface Question {
   question_text: string
@@ -138,6 +139,15 @@ export async function POST(req: NextRequest) {
   if (questionRows.length > 0) {
     await supabase.from('survey_questions').insert(questionRows)
   }
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'survey.create',
+    target_type: 'survey',
+    target_id: surveyId,
+    payload: { title: (title as string).trim(), question_count: questionRows.length },
+  })
 
   return NextResponse.json(survey, { status: 201 })
 }

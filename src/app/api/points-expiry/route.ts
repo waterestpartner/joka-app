@@ -11,6 +11,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { pushTextMessage } from '@/lib/line-messaging'
+import { logAudit } from '@/lib/audit'
 
 export async function GET(req: NextRequest) {
   const tenantSlug = req.nextUrl.searchParams.get('tenantSlug')
@@ -155,6 +156,15 @@ export async function POST(req: NextRequest) {
       } catch { failed++ }
     })
   )
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'points_expiry.warning_push',
+    target_type: 'tenant',
+    target_id: auth.tenantId,
+    payload: { sent, failed, total: targetMembers.length },
+  })
 
   return NextResponse.json({ sent, failed, total: targetMembers.length })
 }

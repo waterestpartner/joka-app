@@ -19,6 +19,7 @@ import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { getTenantById } from '@/repositories/tenantRepository'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { pushTextMessageBatch, pushFlexMessageBatch } from '@/lib/line-messaging'
+import { logAudit } from '@/lib/audit'
 import type { PushLog } from '@/types/push'
 
 // ── Helper: build member query with advanced filters ──────────────────────────
@@ -191,6 +192,21 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single()
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'push.send',
+    target_type: 'push',
+    target_id: (log as { id?: string } | null)?.id,
+    payload: {
+      mode: isFlexMode ? 'flex' : 'text',
+      target,
+      sentToCount: lineUserIds.length,
+      successCount,
+      failCount,
+    },
+  })
 
   return NextResponse.json({ ok: true, sentToCount: lineUserIds.length, successCount, failCount, log })
 }

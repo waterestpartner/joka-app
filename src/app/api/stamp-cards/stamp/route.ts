@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { logAudit } from '@/lib/audit'
 
 export async function POST(req: NextRequest) {
   const auth = await requireDashboardAuth()
@@ -145,6 +146,20 @@ export async function POST(req: NextRequest) {
       }
     }
   }
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'stamp.issue',
+    target_type: 'member',
+    target_id: memberId,
+    payload: {
+      stamp_card_id: stampCardId,
+      stamps_added: toAdd,
+      completions,
+      rewards_issued: rewardsIssued.length,
+    },
+  })
 
   return NextResponse.json({
     success: true,

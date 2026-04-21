@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
+import { logAudit } from '@/lib/audit'
 
 const COLOR_RE = /^#[0-9A-Fa-f]{6}$/
 
@@ -129,6 +130,16 @@ export async function POST(req: NextRequest) {
     .select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'stamp_card.create',
+    target_type: 'stamp_card',
+    target_id: data?.id as string | undefined,
+    payload: { name: (name as string).trim(), required_stamps: stamps },
+  })
+
   return NextResponse.json(data, { status: 201 })
 }
 
@@ -165,6 +176,16 @@ export async function PATCH(req: NextRequest) {
     .eq('id', id).eq('tenant_id', auth.tenantId).select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'stamp_card.update',
+    target_type: 'stamp_card',
+    target_id: id,
+    payload: { fields: Object.keys(updates) },
+  })
+
   return NextResponse.json(data)
 }
 
@@ -185,5 +206,14 @@ export async function DELETE(req: NextRequest) {
   const { error } = await supabase.from('stamp_cards').delete()
     .eq('id', id).eq('tenant_id', auth.tenantId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'stamp_card.delete',
+    target_type: 'stamp_card',
+    target_id: id,
+  })
+
   return NextResponse.json({ success: true })
 }

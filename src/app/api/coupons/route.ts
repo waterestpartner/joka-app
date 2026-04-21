@@ -12,6 +12,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { pushTextMessage } from '@/lib/line-messaging'
+import { logAudit } from '@/lib/audit'
 import type { CouponType } from '@/types/coupon'
 
 // ── PATCH /api/coupons ────────────────────────────────────────────────────────
@@ -55,6 +56,15 @@ export async function PATCH(req: NextRequest) {
         { status: 404 }
       )
     }
+
+    void logAudit({
+      tenant_id: auth.tenantId,
+      operator_email: auth.email,
+      action: 'coupon.update',
+      target_type: 'coupon',
+      target_id: id,
+      payload: { fields: Object.keys(safeUpdates) },
+    })
 
     return NextResponse.json(data)
   } catch (err) {
@@ -223,6 +233,16 @@ export async function POST(req: NextRequest) {
           is_active: true,
           max_redemptions: maxRedemptions != null ? Number(maxRedemptions) : null,
         })
+
+        void logAudit({
+          tenant_id: auth.tenantId,
+          operator_email: auth.email,
+          action: 'coupon.create',
+          target_type: 'coupon',
+          target_id: (coupon as { id?: string })?.id,
+          payload: { name, type: type as string, value: Number(value) },
+        })
+
         return NextResponse.json(coupon, { status: 201 })
       }
 
@@ -246,6 +266,15 @@ export async function POST(req: NextRequest) {
         }
 
         const memberCoupon = await issueCoupon(auth.tenantId, memberId, couponId)
+
+        void logAudit({
+          tenant_id: auth.tenantId,
+          operator_email: auth.email,
+          action: 'coupon.issue',
+          target_type: 'member',
+          target_id: memberId,
+          payload: { couponId },
+        })
 
         // 推播通知：after() 確保在回應送出後才執行，不阻塞 API 回應
         const tenantIdForPush = auth.tenantId

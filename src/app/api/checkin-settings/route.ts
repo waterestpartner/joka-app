@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { logAudit } from '@/lib/audit'
 
 export async function GET(_req: NextRequest) {
   const auth = await requireDashboardAuth()
@@ -52,5 +53,17 @@ export async function PATCH(req: NextRequest) {
     )
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'checkin_settings.update',
+    target_type: 'tenant',
+    target_id: auth.tenantId,
+    payload: {
+      is_enabled: is_enabled === true,
+    },
+  })
+
   return NextResponse.json({ success: true })
 }

@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { pushTextMessage } from '@/lib/line-messaging'
+import { logAudit } from '@/lib/audit'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -77,6 +78,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       .eq('id', id)
       .eq('tenant_id', auth.tenantId)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    void logAudit({
+      tenant_id: auth.tenantId,
+      operator_email: auth.email,
+      action: 'lottery.cancel',
+      target_type: 'lottery',
+      target_id: id,
+    })
+
     return NextResponse.json({ success: true })
   }
 
@@ -100,6 +110,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     .eq('tenant_id', auth.tenantId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'lottery.update',
+    target_type: 'lottery',
+    target_id: id,
+    payload: { fields: Object.keys(updates) },
+  })
+
   return NextResponse.json({ success: true })
 }
 
@@ -231,6 +251,15 @@ async function executeDraw(
     .update({ status: 'drawn', drawn_at: new Date().toISOString() })
     .eq('id', lotteryId)
 
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'lottery.draw',
+    target_type: 'lottery',
+    target_id: lotteryId,
+    payload: { poolSize: pool.length, winnersDrawn: winners.length },
+  })
+
   return NextResponse.json({
     success: true,
     poolSize: pool.length,
@@ -295,6 +324,15 @@ async function notifyWinners(
       failCount++
     }
   }
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'lottery.notify',
+    target_type: 'lottery',
+    target_id: lotteryId,
+    payload: { successCount, failCount },
+  })
 
   return NextResponse.json({ success: true, successCount, failCount })
 }

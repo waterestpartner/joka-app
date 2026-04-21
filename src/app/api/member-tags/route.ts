@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { logAudit } from '@/lib/audit'
 
 // ── GET ───────────────────────────────────────────────────────────────────────
 
@@ -73,6 +74,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '該會員已有此標籤' }, { status: 409 })
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'member_tag.add',
+    target_type: 'member',
+    target_id: memberId,
+    payload: { tagId },
+  })
+
   return NextResponse.json(data, { status: 201 })
 }
 
@@ -97,5 +108,15 @@ export async function DELETE(req: NextRequest) {
     .eq('tenant_id', auth.tenantId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'member_tag.remove',
+    target_type: 'member',
+    target_id: memberId,
+    payload: { tagId },
+  })
+
   return NextResponse.json({ success: true })
 }

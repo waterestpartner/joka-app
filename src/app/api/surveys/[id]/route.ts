@@ -11,6 +11,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { addPointTransaction } from '@/repositories/pointRepository'
+import { logAudit } from '@/lib/audit'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -111,6 +112,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const { error } = await supabase.from('surveys').update(updates).eq('id', id).eq('tenant_id', auth.tenantId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'survey.update',
+    target_type: 'survey',
+    target_id: id,
+    payload: { fields: Object.keys(updates) },
+  })
+
   return NextResponse.json({ success: true })
 }
 
@@ -130,6 +141,15 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   await supabase.from('survey_questions').delete().eq('survey_id', id)
   const { error } = await supabase.from('surveys').delete().eq('id', id).eq('tenant_id', auth.tenantId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'survey.delete',
+    target_type: 'survey',
+    target_id: id,
+  })
+
   return NextResponse.json({ success: true })
 }
 

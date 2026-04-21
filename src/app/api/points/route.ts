@@ -10,6 +10,7 @@ import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { pushTextMessage } from '@/lib/line-messaging'
 import { getActiveMultiplier } from '@/lib/point-multiplier'
+import { logAudit } from '@/lib/audit'
 import type { PointTransactionType } from '@/types/member'
 
 // ── GET /api/points ───────────────────────────────────────────────────────────
@@ -302,6 +303,22 @@ export async function POST(req: NextRequest) {
     if (tenant?.push_enabled) {
       after(() => pushTextMessage(pushUid, pushText, channelToken))
     }
+
+    void logAudit({
+      tenant_id: auth.tenantId,
+      operator_email: auth.email,
+      action: isScanEarn ? 'points.scan_earn' : `points.manual.${numAmount > 0 ? 'add' : 'deduct'}`,
+      target_type: 'member',
+      target_id: memberId,
+      payload: {
+        amount: numAmount,
+        spentAmount: numSpentAmount || undefined,
+        multiplier: appliedMultiplier !== 1 ? appliedMultiplier : undefined,
+        newTotalPoints,
+        tierChanged: tierChanged || undefined,
+        note: txNote ?? undefined,
+      },
+    })
 
     return NextResponse.json(
       { ...transaction, newTotalPoints, tierUpgraded, tierDowngraded, newTier: newTierKey },

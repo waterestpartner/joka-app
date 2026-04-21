@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { logAudit } from '@/lib/audit'
 
 const VALID_MATCH_TYPES = ['exact', 'contains', 'starts_with'] as const
 type MatchType = (typeof VALID_MATCH_TYPES)[number]
@@ -94,6 +95,15 @@ export async function POST(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'auto_reply.create',
+    target_type: 'auto_reply_rule',
+    target_id: data?.id as string | undefined,
+    payload: { keyword: keyword.trim(), match_type: resolvedMatchType },
+  })
 
   return NextResponse.json(data, { status: 201 })
 }
@@ -201,6 +211,15 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'auto_reply.update',
+    target_type: 'auto_reply_rule',
+    target_id: id,
+    payload: { fields: Object.keys(updates) },
+  })
+
   return NextResponse.json(data)
 }
 
@@ -238,6 +257,14 @@ export async function DELETE(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'auto_reply.delete',
+    target_type: 'auto_reply_rule',
+    target_id: id,
+  })
 
   return NextResponse.json({ success: true })
 }

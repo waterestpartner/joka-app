@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { logAudit } from '@/lib/audit'
 
 const MAX_ROWS = 5000
 const BATCH_SIZE = 100
@@ -251,6 +252,15 @@ export async function POST(req: NextRequest) {
 
     imported += (inserted?.length ?? 0)
   }
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'member.import',
+    target_type: 'tenant',
+    target_id: auth.tenantId,
+    payload: { imported, skipped, errorCount: errors.length, total: validRows.length },
+  })
 
   return NextResponse.json({
     imported,

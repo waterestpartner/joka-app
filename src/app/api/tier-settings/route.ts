@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
+import { logAudit } from '@/lib/audit'
 
 const ALLOWED_PATCH = ['tier_display_name', 'min_points', 'point_rate'] as const
 
@@ -85,7 +86,17 @@ export async function POST(req: NextRequest) {
         .select()
         .single()
 
-      if (!error) return NextResponse.json(data, { status: 201 })
+      if (!error) {
+        void logAudit({
+          tenant_id: auth.tenantId,
+          operator_email: auth.email,
+          action: 'tier_setting.create',
+          target_type: 'tier_setting',
+          target_id: (data as Record<string, unknown>)?.id as string | undefined,
+          payload: { tier_display_name: (tier_display_name as string).trim(), min_points, point_rate },
+        })
+        return NextResponse.json(data, { status: 201 })
+      }
 
       // unique constraint violation → 重新產生
       if (error.code === '23505') {
@@ -158,6 +169,16 @@ export async function PATCH(req: NextRequest) {
     if (error || !data) {
       return NextResponse.json({ error: 'Tier setting not found or update failed' }, { status: 404 })
     }
+
+    void logAudit({
+      tenant_id: auth.tenantId,
+      operator_email: auth.email,
+      action: 'tier_setting.update',
+      target_type: 'tier_setting',
+      target_id: id,
+      payload: { fields: Object.keys(safeUpdates) },
+    })
+
     return NextResponse.json(data)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error'
@@ -227,5 +248,15 @@ export async function DELETE(req: NextRequest) {
     .eq('tenant_id', auth.tenantId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'tier_setting.delete',
+    target_type: 'tier_setting',
+    target_id: id,
+    payload: { reassigned_to: fallback.tier },
+  })
+
   return NextResponse.json({ ok: true, reassignedTo: fallback.tier })
 }

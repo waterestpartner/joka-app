@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { logAudit } from '@/lib/audit'
 
 export async function POST(req: NextRequest) {
   const auth = await requireDashboardAuth()
@@ -97,6 +98,15 @@ export async function POST(req: NextRequest) {
 
   // ── Update last_activity_at ───────────────────────────────────────────────
   await supabase.from('members').update({ last_activity_at: new Date().toISOString() }).eq('id', member.id)
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'mission.checkin',
+    target_type: 'member',
+    target_id: member.id as string,
+    payload: { missionId, pointsAwarded: rewardPts },
+  })
 
   return NextResponse.json({
     success: true,

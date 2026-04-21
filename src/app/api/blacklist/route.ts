@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { logAudit } from '@/lib/audit'
 
 export async function GET(_req: NextRequest) {
   const auth = await requireDashboardAuth()
@@ -49,5 +50,15 @@ export async function POST(req: NextRequest) {
   }).eq('id', memberId).eq('tenant_id', auth.tenantId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'blacklist.add',
+    target_type: 'member',
+    target_id: memberId,
+    payload: { reason: typeof reason === 'string' ? reason : undefined },
+  })
+
   return NextResponse.json({ success: true })
 }

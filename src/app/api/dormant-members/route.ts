@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { pushTextMessage } from '@/lib/line-messaging'
+import { logAudit } from '@/lib/audit'
 
 const PAGE_SIZE = 30
 
@@ -133,6 +134,15 @@ export async function POST(req: NextRequest) {
       }
     })
   )
+
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'dormant_members.reengagement_push',
+    target_type: 'tenant',
+    target_id: auth.tenantId,
+    payload: { sent, failed, total: targetMembers.length },
+  })
 
   return NextResponse.json({ sent, failed, total: targetMembers.length })
 }

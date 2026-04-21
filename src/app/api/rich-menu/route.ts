@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { logAudit } from '@/lib/audit'
 import {
   createRichMenu,
   uploadRichMenuImage,
@@ -93,6 +94,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  void logAudit({
+    tenant_id: auth.tenantId,
+    operator_email: auth.email,
+    action: 'rich_menu.create',
+    target_type: 'rich_menu',
+    target_id: richMenuId,
+  })
+
   return NextResponse.json({ richMenuId, success: true })
 }
 
@@ -109,12 +118,32 @@ export async function PATCH(req: NextRequest) {
   if (action === 'setDefault') {
     if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
     const ok = await setDefaultRichMenu(id, token)
-    return ok ? NextResponse.json({ success: true }) : NextResponse.json({ error: '設定失敗' }, { status: 500 })
+    if (ok) {
+      void logAudit({
+        tenant_id: auth.tenantId,
+        operator_email: auth.email,
+        action: 'rich_menu.set_default',
+        target_type: 'rich_menu',
+        target_id: id,
+      })
+      return NextResponse.json({ success: true })
+    }
+    return NextResponse.json({ error: '設定失敗' }, { status: 500 })
   }
 
   if (action === 'unlink') {
     const ok = await unlinkDefaultRichMenu(token)
-    return ok ? NextResponse.json({ success: true }) : NextResponse.json({ error: '取消失敗' }, { status: 500 })
+    if (ok) {
+      void logAudit({
+        tenant_id: auth.tenantId,
+        operator_email: auth.email,
+        action: 'rich_menu.unlink_default',
+        target_type: 'tenant',
+        target_id: auth.tenantId,
+      })
+      return NextResponse.json({ success: true })
+    }
+    return NextResponse.json({ error: '取消失敗' }, { status: 500 })
   }
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
@@ -131,5 +160,15 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
 
   const ok = await deleteRichMenu(id, token)
-  return ok ? NextResponse.json({ success: true }) : NextResponse.json({ error: '刪除失敗' }, { status: 500 })
+  if (ok) {
+    void logAudit({
+      tenant_id: auth.tenantId,
+      operator_email: auth.email,
+      action: 'rich_menu.delete',
+      target_type: 'rich_menu',
+      target_id: id,
+    })
+    return NextResponse.json({ success: true })
+  }
+  return NextResponse.json({ error: '刪除失敗' }, { status: 500 })
 }

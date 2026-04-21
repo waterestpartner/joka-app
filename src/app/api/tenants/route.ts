@@ -9,6 +9,7 @@ import {
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { fetchLineBotInfo } from '@/lib/line-messaging'
+import { logAudit } from '@/lib/audit'
 import type { Tenant } from '@/types/tenant'
 
 // 回傳給 Dashboard 的 tenant（去除所有敏感 token 的原始值）
@@ -163,6 +164,15 @@ export async function PATCH(req: NextRequest) {
       )
     }
 
+    void logAudit({
+      tenant_id: auth.tenantId,
+      operator_email: auth.email,
+      action: 'tenant.update',
+      target_type: 'tenant',
+      target_id: auth.tenantId,
+      payload: { fields: Object.keys(updateFields) },
+    })
+
     // 回傳 sanitize 過的 tenant + 本次同步到的 LINE@ 資訊（給前端顯示）
     return NextResponse.json({
       ...sanitizeTenant(updated),
@@ -218,6 +228,15 @@ export async function POST(req: NextRequest) {
     if (!updated) {
       return NextResponse.json({ error: 'Update failed' }, { status: 500 })
     }
+
+    void logAudit({
+      tenant_id: auth.tenantId,
+      operator_email: auth.email,
+      action: 'tenant.sync_line_bot',
+      target_type: 'tenant',
+      target_id: auth.tenantId,
+      payload: { displayName: botInfo.displayName },
+    })
 
     return NextResponse.json({
       ...sanitizeTenant(updated),
