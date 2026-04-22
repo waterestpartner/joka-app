@@ -69,6 +69,12 @@ export default async function AdminLayout({
           >
             🏪 租戶管理
           </Link>
+          <Link
+            href="/admin/templates"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
+          >
+            📦 產業範本
+          </Link>
         </nav>
 
         {/* User info */}
