@@ -33,6 +33,79 @@ function formatDateTime(iso: string) {
 
 // ── sub-components ─────────────────────────────────────────────────────────────
 
+function SetupStep({
+  done,
+  label,
+  hint,
+}: {
+  done: boolean
+  label: string
+  hint: string
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <span
+        className={`mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+          done ? 'bg-[#06C755] text-white' : 'bg-zinc-200 text-zinc-400'
+        }`}
+      >
+        {done ? '✓' : ''}
+      </span>
+      <div>
+        <p
+          className={`text-sm font-medium ${
+            done ? 'text-zinc-400 line-through decoration-zinc-300' : 'text-zinc-900'
+          }`}
+        >
+          {label}
+        </p>
+        {!done && <p className="text-xs text-zinc-500 mt-0.5">{hint}</p>}
+      </div>
+    </div>
+  )
+}
+
+function SetupCard({
+  steps,
+}: {
+  steps: { label: string; done: boolean; hint: string }[]
+}) {
+  const filled = steps.filter((s) => s.done).length
+  const total = steps.length
+  if (filled === total) return null
+
+  return (
+    <div className="bg-white border border-amber-200 rounded-2xl p-6 shadow-sm">
+      <div className="flex items-start justify-between gap-4 mb-5">
+        <div>
+          <h2 className="text-base font-semibold text-zinc-900">
+            完成設定，開始使用 JOKA
+          </h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            完成以下步驟，啟用 LINE 推播與會員系統
+          </p>
+        </div>
+        <span className="shrink-0 text-sm font-semibold text-amber-700 bg-amber-100 rounded-full px-3 py-1">
+          {filled} / {total}
+        </span>
+      </div>
+      <div className="space-y-3.5">
+        {steps.map((s) => (
+          <SetupStep key={s.label} done={s.done} label={s.label} hint={s.hint} />
+        ))}
+      </div>
+      <div className="mt-6">
+        <a
+          href="/dashboard/settings"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-white bg-zinc-900 rounded-xl px-4 py-2.5 hover:bg-zinc-700 transition-colors"
+        >
+          前往設定 →
+        </a>
+      </div>
+    </div>
+  )
+}
+
 function StatCard({
   label,
   value,
@@ -226,6 +299,29 @@ export default async function OverviewPage() {
   const now = new Date()
   const monthLabel = `${now.getMonth() + 1} 月`
 
+  const setupSteps = [
+    {
+      label: 'LIFF ID 已設定',
+      done: !!tenant?.liff_id?.trim(),
+      hint: '至 LINE Developers → LINE Login Channel → LIFF → 複製 LIFF ID',
+    },
+    {
+      label: 'Messaging API Channel ID 已設定',
+      done: !!tenant?.line_channel_id?.trim(),
+      hint: '至 LINE Developers → Messaging API Channel → Basic settings → Channel ID',
+    },
+    {
+      label: 'Channel Secret 已設定',
+      done: !!tenant?.line_channel_secret?.trim(),
+      hint: '至 LINE Developers → Messaging API Channel → Basic settings → Channel secret',
+    },
+    {
+      label: 'Channel Access Token 已設定',
+      done: !!tenant?.channel_access_token?.trim(),
+      hint: '至 LINE Developers → Messaging API Channel → Messaging API → Issue channel access token',
+    },
+  ]
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -236,6 +332,9 @@ export default async function OverviewPage() {
           {tenant && <span className="ml-2 text-zinc-400">— {tenant.name}</span>}
         </p>
       </div>
+
+      {/* ── Setup Wizard（LINE 整合未完成時顯示）── */}
+      <SetupCard steps={setupSteps} />
 
       {/* ── Stat cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
