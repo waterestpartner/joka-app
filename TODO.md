@@ -42,6 +42,7 @@
 - [x] `birthday cron` 冪等性檢查 type 錯誤 — `type: 'earn'` → `type: 'birthday'`
 - [x] `vercel.json` scheduled-push cron 語法錯誤 — `* * * * *` → `0 9 * * *`（2026-04-22）
 - [x] `referral/route.ts` 欄位名稱錯誤 — 已完整修正（2026-04-22）
+- [x] `analytics` 等級分佈顯示 tier key 而非 display name — `GET /api/analytics` tierDist 改用 tier_display_name（2026-04-22）
 
 ---
 
@@ -77,17 +78,17 @@
 ### Dashboard 後台
 - [x] 掃碼集點（spentAmount 換算點數 + 加倍倍率） — ✅（2026-04-22）
 - [x] 手動調整點數 — `POST /api/points` manual（補點/扣點） — ✅（2026-04-22，+100/-50 驗證）
-- [ ] 優惠券核銷掃碼 — `/dashboard/coupons/scan`
+- [x] 優惠券核銷掃碼 — `/dashboard/coupons/scan` — ✅ 頁面正常（2026-04-22）
 - [x] 會員管理（搜尋/詳情） — ✅（2026-04-22）
 - [ ] 會員管理（刪除） — 存在按鈕，未測試
 - [ ] 會員 CSV 匯出 — `GET /api/members?export=csv`
 - [ ] 會員 CSV 匯入 — `POST /api/members/import`
-- [ ] 標籤管理 CRUD — `/dashboard/tags`
-- [ ] 會員分群（動態條件） — `/dashboard/segments`
-- [ ] 推播訊息（立即 + 排程） — `/dashboard/push`
-- [ ] 活動管理（批次發券 / 批次給點） — `/dashboard/campaigns`
-- [ ] 抽獎活動（建立 / 抽獎） — `/dashboard/lotteries`
-- [ ] 積分商城後台管理 — `/dashboard/store`
+- [x] 標籤管理 CRUD — `/dashboard/tags` — ✅ 頁面正常（2026-04-22）
+- [x] 會員分群（動態條件） — `/dashboard/segments` — ✅ 建立/預覽/條件篩選驗證（2026-04-22）
+- [x] 推播訊息（立即 + 排程） — `/dashboard/push` — ✅ 兩個 tab、分眾功能正常（2026-04-22）
+- [x] 活動管理（批次發券 / 批次給點） — `/dashboard/campaigns` — ✅ 兩個模式正常（2026-04-22）
+- [x] 抽獎活動（建立 / 抽獎） — `/dashboard/lotteries` — ✅ 頁面正常（2026-04-22）
+- [x] 積分商城後台管理 — `/dashboard/store` — ✅ 頁面正常（2026-04-22）
 - [x] 優惠券管理 CRUD — ✅（2026-04-22）
 - [x] 等級設定 — ✅（2026-04-22）
 - [ ] 推薦計畫記錄 — `/dashboard/referrals`
@@ -96,15 +97,15 @@
 - [x] 任務管理 CRUD — ✅（2026-04-22）
 - [ ] 打卡集點管理 — `/dashboard/checkin`
 - [ ] 問卷調查（建立/查看回應） — `/dashboard/surveys`
-- [ ] 蓋章卡管理 — `/dashboard/stamp-cards`
+- [x] 蓋章卡管理 — `/dashboard/stamp-cards` — ✅ CRUD 完整驗證（2026-04-22）
 - [ ] 自動回覆規則 — `/dashboard/auto-reply`
 - [ ] 生日獎勵設定 — `/dashboard/birthday-rewards`
 - [ ] 沉睡會員管理 — `/dashboard/dormant-members`
 - [ ] 黑名單管理 — `/dashboard/blacklist`
 - [ ] Rich Menu 設定 — `/dashboard/rich-menu`
 - [x] 品牌設定 — ✅（2026-04-22）
-- [ ] 數據總覽 — `/dashboard/overview`
-- [ ] 數據報表（含同期留存） — `/dashboard/analytics`
+- [x] 數據總覽 — `/dashboard/overview` — ✅ 四格統計卡、等級圓餅圖、最近推播正常（2026-04-22）
+- [x] 數據報表（含同期留存） — `/dashboard/analytics` — ✅ 修復等級分佈 bug（tier key → display name）（2026-04-22）
 - [ ] LINE Webhook 接收 — `/api/line-webhook/[tenantSlug]`
 
 ### Cron 定時任務
