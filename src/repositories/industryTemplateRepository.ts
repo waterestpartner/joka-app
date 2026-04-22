@@ -106,7 +106,9 @@ export async function applyTemplateToTenant(
   const template = await getTemplateByKey(templateKey)
   if (!template) return { applied: false, error: 'Template not found' }
 
-  // 1. Tiers
+  const errors: string[] = []
+
+  // 1. Tiers — requires unique(tenant_id, tier); see supabase/tier-settings-unique.sql
   if (template.tiers.length > 0) {
     const tierRows = template.tiers.map((t) => ({
       tenant_id: tenantId,
@@ -115,10 +117,10 @@ export async function applyTemplateToTenant(
       min_points: t.min_points,
       point_rate: t.point_rate,
     }))
-    // upsert by (tenant_id, tier)
-    await supabase
+    const { error } = await supabase
       .from('tier_settings')
       .upsert(tierRows, { onConflict: 'tenant_id,tier' })
+    if (error) errors.push(`tier_settings: ${error.message}`)
   }
 
   // 2. Custom fields
@@ -132,19 +134,21 @@ export async function applyTemplateToTenant(
       is_required: f.is_required ?? false,
       sort_order: f.sort_order ?? 0,
     }))
-    await supabase
+    const { error } = await supabase
       .from('custom_member_fields')
       .upsert(fieldRows, { onConflict: 'tenant_id,field_key' })
+    if (error) errors.push(`custom_member_fields: ${error.message}`)
   }
 
   // 3. Push templates
   if (template.push_templates.length > 0) {
     if (options.overwriteExisting) {
       // 切換範本時：刪除舊的再加新的
-      await supabase
+      const { error: delErr } = await supabase
         .from('tenant_push_templates')
         .delete()
         .eq('tenant_id', tenantId)
+      if (delErr) errors.push(`tenant_push_templates delete: ${delErr.message}`)
     }
     const pushRows = template.push_templates.map((p, idx) => ({
       tenant_id: tenantId,
@@ -152,7 +156,8 @@ export async function applyTemplateToTenant(
       content: p.content,
       sort_order: idx,
     }))
-    await supabase.from('tenant_push_templates').insert(pushRows)
+    const { error } = await supabase.from('tenant_push_templates').insert(pushRows)
+    if (error) errors.push(`tenant_push_templates: ${error.message}`)
   }
 
   // 4. Setup tasks
@@ -166,10 +171,15 @@ export async function applyTemplateToTenant(
       is_done: false,
       sort_order: idx,
     }))
-    await supabase
+    const { error } = await supabase
       .from('tenant_setup_tasks')
       .upsert(taskRows, { onConflict: 'tenant_id,task_key' })
+    if (error) errors.push(`tenant_setup_tasks: ${error.message}`)
   }
 
+  if (errors.length > 0) {
+    console.error('[applyTemplateToTenant] errors:', errors)
+    return { applied: false, error: errors.join('; ') }
+  }
   return { applied: true }
 }
