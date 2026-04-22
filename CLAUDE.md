@@ -229,8 +229,28 @@ supabase/point-multipliers.sql           ✅ 執行
 supabase/custom-member-fields.sql        ✅ 執行
 supabase/webhooks.sql                    ✅ 執行
 supabase/platform-members.sql            ✅ 執行（2026-04-21，Model C Phase 1）
+supabase/rls-policies-v2.sql             ✅ 執行（2026-04-22，25 張表完整覆蓋）
 ```
 
 ---
 
-_最後更新：2026-04-21_
+## 已驗證可用的功能（2026-04-22 黃金路徑測試通過）
+
+以下功能已在正式環境（joka-app.vercel.app）端對端驗證：
+
+- ✅ Dashboard 登入
+- ✅ 品牌設定（儲存）
+- ✅ 等級設定（CRUD）
+- ✅ 優惠券管理（CRUD）
+- ✅ 任務管理（CRUD）
+- ✅ 掃碼集點（含加倍點數倍率套用：NT$500 × 3x = 1,500pt）
+- ✅ 手動調整點數（補點 +100、扣點 -50）
+- ✅ 會員管理（列表、詳情）
+- ✅ 會員備註（POST/GET）
+- ✅ 點數紀錄頁 `/dashboard/transactions`（搜尋/篩選/分頁）
+- ✅ **Audit log 寫入**（v0.8.0 補齊 40 個 Dashboard mutation API；此前 `logAudit()` 從未被呼叫）
+- ✅ Model C Phase 3 — backfill 邏輯驗證通過（disabled 租戶跳過屬設計預期）
+
+---
+
+_最後更新：2026-04-22_
