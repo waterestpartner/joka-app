@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import { useLiff } from '@/hooks/useLiff'
 
-type CheckinState = 'idle' | 'loading' | 'success' | 'already' | 'error'
+type CheckinState = 'idle' | 'loading' | 'success' | 'already' | 'disabled' | 'error'
 
 export default function CheckinPage() {
   const { isReady, idToken, tenantSlug } = useLiff()
@@ -29,9 +29,12 @@ export default function CheckinPage() {
       if (res.status === 429) {
         setState('already')
         setErrorMsg(json.error ?? '打卡冷卻中')
+      } else if (res.status === 403) {
+        setState('disabled')
+        setErrorMsg(json.error ?? '打卡功能尚未開放')
       } else if (!res.ok) {
         setState('error')
-        setErrorMsg(json.error ?? '打卡失敗')
+        setErrorMsg(json.error ?? '打卡失敗，請稍後再試')
       } else {
         setPointsEarned(json.pointsEarned ?? 0)
         setState('success')
@@ -79,6 +82,14 @@ export default function CheckinPage() {
           >
             返回
           </button>
+        </div>
+      ) : state === 'disabled' ? (
+        <div className="text-center space-y-4">
+          <div className="text-6xl mb-2">🔒</div>
+          <p className="text-xl font-bold text-zinc-900">打卡功能尚未開放</p>
+          <p className="text-sm text-zinc-500 max-w-xs">
+            此品牌目前尚未啟用打卡集點功能，請洽商家了解詳情。
+          </p>
         </div>
       ) : state === 'error' ? (
         <div className="text-center space-y-4">
