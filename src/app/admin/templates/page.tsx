@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { IndustryTemplateWithUsage } from '@/types/industryTemplate'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('zh-TW', {
@@ -16,6 +17,10 @@ export default function AdminTemplatesPage() {
   const [templates, setTemplates] = useState<IndustryTemplateWithUsage[]>([])
   const [loading, setLoading] = useState(true)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<{ key: string; displayName: string } | null>(
+    null,
+  )
+  const [deleting, setDeleting] = useState(false)
 
   async function fetchTemplates() {
     setLoading(true)
@@ -28,14 +33,17 @@ export default function AdminTemplatesPage() {
     fetchTemplates()
   }, [])
 
-  async function handleDelete(key: string, displayName: string) {
-    if (!confirm(`確定要刪除範本「${displayName}」嗎？\n（已建立的租戶資料不受影響）`)) return
-
+  async function confirmDelete() {
+    if (!pendingDelete) return
+    setDeleting(true)
     setDeleteError(null)
-    const res = await fetch(`/api/admin/industry-templates/${encodeURIComponent(key)}`, {
-      method: 'DELETE',
-    })
+    const res = await fetch(
+      `/api/admin/industry-templates/${encodeURIComponent(pendingDelete.key)}`,
+      { method: 'DELETE' },
+    )
+    setDeleting(false)
     if (res.ok) {
+      setPendingDelete(null)
       await fetchTemplates()
     } else {
       const data = await res.json().catch(() => ({}))
@@ -63,7 +71,7 @@ export default function AdminTemplatesPage() {
         </Link>
       </div>
 
-      {deleteError && (
+      {deleteError && !pendingDelete && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
           {deleteError}
         </div>
@@ -159,7 +167,9 @@ export default function AdminTemplatesPage() {
                       </Link>
                       {!t.is_builtin && (
                         <button
-                          onClick={() => handleDelete(t.key, t.display_name)}
+                          onClick={() =>
+                            setPendingDelete({ key: t.key, displayName: t.display_name })
+                          }
                           className="px-3 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition"
                         >
                           刪除
@@ -177,6 +187,22 @@ export default function AdminTemplatesPage() {
       <div className="text-xs text-zinc-400">
         💡 內建範本可以編輯內容但不能刪除；可改成「停用」讓它不出現在新增租戶的選單中。
       </div>
+
+      {pendingDelete && (
+        <ConfirmDialog
+          title="確定要刪除範本？"
+          message={`「${pendingDelete.displayName}」將被刪除。\n（已建立的租戶資料不受影響）`}
+          confirmLabel="刪除"
+          danger
+          loading={deleting}
+          error={deleteError}
+          onConfirm={confirmDelete}
+          onCancel={() => {
+            setPendingDelete(null)
+            setDeleteError(null)
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import type { PushLog } from '@/types/push'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -208,6 +209,7 @@ export default function PushPage() {
   const [tags, setTags] = useState<Tag[]>([])
   const [counts, setCounts] = useState<MemberCounts | null>(null)
   const [pushTemplates, setPushTemplates] = useState<PushTemplateRow[]>([])
+  const [pendingTplOverwrite, setPendingTplOverwrite] = useState<PushTemplateRow | null>(null)
   const [scheduledPushes, setScheduledPushes] = useState<ScheduledPush[]>([])
   const [scheduledLoading, setScheduledLoading] = useState(true)
   const [cancelling, setCancelling] = useState<string | null>(null)
@@ -528,15 +530,13 @@ export default function PushPage() {
                       value=""
                       onChange={(e) => {
                         const tpl = pushTemplates.find((t) => t.id === e.target.value)
-                        if (tpl) {
-                          if (
-                            message.trim() &&
-                            !confirm(`目前已有輸入內容，確認用「${tpl.title}」覆蓋？`)
-                          ) {
-                            return
-                          }
-                          setMessage(tpl.content)
+                        if (!tpl) return
+                        if (message.trim()) {
+                          setPendingTplOverwrite(tpl)
+                          e.target.value = ''
+                          return
                         }
+                        setMessage(tpl.content)
                       }}
                       className="text-xs rounded-md border border-zinc-300 bg-white px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#06C755]"
                     >
@@ -762,6 +762,20 @@ export default function PushPage() {
           )}
         </div>
       </section>
+
+      {pendingTplOverwrite && (
+        <ConfirmDialog
+          title="覆蓋現有內容？"
+          message={`目前已有輸入內容。用「${pendingTplOverwrite.title}」範本覆蓋現有內容嗎？`}
+          confirmLabel="覆蓋"
+          danger
+          onConfirm={() => {
+            setMessage(pendingTplOverwrite.content)
+            setPendingTplOverwrite(null)
+          }}
+          onCancel={() => setPendingTplOverwrite(null)}
+        />
+      )}
     </div>
   )
 }

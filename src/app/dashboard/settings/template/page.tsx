@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { IndustryTemplate } from '@/types/industryTemplate'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 interface CurrentTenant {
   id: string
@@ -21,6 +22,7 @@ export default function TemplateSettingsPage() {
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedToast, setSavedToast] = useState(false)
+  const [pendingApply, setPendingApply] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -48,18 +50,16 @@ export default function TemplateSettingsPage() {
     }
   }, [])
 
-  async function handleApply() {
+  function handleApply() {
     if (!selectedKey) {
       setError('請選擇一個範本')
       return
     }
+    setError(null)
+    setPendingApply(true)
+  }
 
-    const confirmMsg = overwrite
-      ? '確認切換範本？\n\n⚠️ 覆寫模式會刪除現有的推播範本（其他設定是合併）'
-      : '確認套用範本？\n\n會合併新增等級、自訂欄位、推播範本、建議任務；既有設定保留'
-
-    if (!confirm(confirmMsg)) return
-
+  async function confirmApply() {
     setApplying(true)
     setError(null)
 
@@ -69,18 +69,19 @@ export default function TemplateSettingsPage() {
       body: JSON.stringify({ templateKey: selectedKey, overwriteExisting: overwrite }),
     })
 
+    setApplying(false)
     if (res.ok) {
       setTenant((prev) =>
         prev ? { ...prev, industry_template_key: selectedKey } : prev
       )
       setOverwrite(false)
+      setPendingApply(false)
       setSavedToast(true)
       setTimeout(() => setSavedToast(false), 3000)
     } else {
       const data = await res.json().catch(() => ({}))
       setError(data.error ?? '套用失敗')
     }
-    setApplying(false)
   }
 
   if (loading) {
@@ -238,6 +239,26 @@ export default function TemplateSettingsPage() {
         💡 套用範本只會新增東西、不會刪除你既有的會員或點數。
         換範本後，建議到「等級設定」「自訂欄位」「推播」確認內容是否符合需求。
       </div>
+
+      {pendingApply && selected && (
+        <ConfirmDialog
+          title={overwrite ? '確認切換範本？' : '確認套用範本？'}
+          message={
+            overwrite
+              ? `將套用「${selected.display_name}」範本。\n\n⚠️ 覆寫模式會刪除現有的推播範本後再加新的（其他設定是合併）。`
+              : `將套用「${selected.display_name}」範本。\n\n會合併新增等級、自訂欄位、推播範本、建議任務，既有設定保留。`
+          }
+          confirmLabel={overwrite ? '覆寫套用' : '合併套用'}
+          danger={overwrite}
+          loading={applying}
+          error={error}
+          onConfirm={confirmApply}
+          onCancel={() => {
+            setPendingApply(false)
+            setError(null)
+          }}
+        />
+      )}
     </div>
   )
 }
