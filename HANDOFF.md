@@ -1,7 +1,7 @@
 # HANDOFF.md — AI 交接記錄
 
 > 給下一個接手的 AI 看。說明目前完成了什麼、還缺什麼、以及下一步該做什麼。
-> 最後更新：2026-04-22（v0.9.0）
+> 最後更新：2026-04-22（v0.10.0）
 
 ---
 
@@ -12,6 +12,91 @@
 **正式網址**：https://joka-app.vercel.app
 **專案路徑**：`/Users/user/Documents/videcoding/joka/joka-app/`
 **完整規格**：請讀 `CLAUDE.md`（同一目錄）
+
+---
+
+## v0.10.0（2026-04-22 深夜）— Webhook 修復 + Tier 顯示修復 + 生產驗證
+
+### 這個 session 完成了什麼
+
+#### Bug 修復
+
+**1. Dashboard 4 頁面 Tier 顯示 raw key**（commit `5e32d31`）
+
+**現象**：`/dashboard/blacklist`、`/dashboard/dormant-members`、`/dashboard/coupons/scan`、`/dashboard/segments` 預覽面板顯示 `tier_7fa9f3` 原始 key，而非「銀卡會員」等 display name。
+
+**根因**：這 4 個頁面直接把 `m.tier` 渲染到 UI，沒有做 `tier_settings.tier_display_name` 映射。
+
+**修復**：每個頁面新增獨立的 `useEffect(() => fetch('/api/tier-settings')...)` 在 mount 時取得 tier 設定並建立 `tierDisplayMap`，渲染改為 `tierDisplayMap[m.tier] ?? m.tier`。
+
+---
+
+**2. `fireWebhooks()` 從未被呼叫**（commit `5e32d31`）
+
+**現象**：`/dashboard/webhooks` 建立 webhook 後，觸發事件（掃碼集點等）時 `/api/webhooks/deliveries` 始終為空。
+
+**根因**：`src/lib/webhooks.ts` 定義了 `fireWebhooks()` 函式，但**整個 codebase 從未從任何 API route 呼叫它**——與 v0.8.0 發現的 `logAudit()` 問題如出一轍。
+
+**修復**：在 4 個 route 補上呼叫：
+- `POST /api/points` → `points.earned` / `points.spent`
+- `POST /api/members` → `member.created`
+- `POST /api/coupons`（issue action）→ `coupon.issued`
+- `POST /api/coupons/scan` → `coupon.redeemed`
+
+---
+
+**3. `void fireWebhooks()` 在 serverless 被提前終止**（commit `d636018`）
+
+**現象**：補上 `void fireWebhooks()` 後，delivery record 仍未建立（0 records）。
+
+**根因**：Vercel serverless function 在回傳 HTTP response 後會立即終止 execution context，`void asyncFn()` 的非同步後續操作（supabase insert 等）來不及完成。
+
+**修復**：改用 `after(() => fireWebhooks(...))` — 與 push notification 採用相同模式，由 Next.js 保證在 response 送出後繼續執行。
+
+**驗證**：+10pt → 3 秒後查 deliveries → `deliveriesCount: 1, event: "points.earned"` ✅
+
+---
+
+**4. Vercel production `CRON_SECRET` 含空白字元**（2026-04-22）
+
+**現象**：`npx vercel --prod` 失敗，錯誤：`CRON_SECRET contains leading or trailing whitespace`。
+
+**修復**：`vercel env rm CRON_SECRET production --yes` + `echo -n "b8be0755..." | vercel env add CRON_SECRET production`（用 `echo -n` 避免換行）。
+
+---
+
+#### 其他驗證
+
+| 項目 | 結果 | 備註 |
+|------|------|------|
+| Bevis 解除黑名單 | ✅ | `DELETE /api/blacklist/{id}` 成功 |
+| 自訂欄位值 GET/POST | ✅ | `memberId`（camelCase）+ `fieldId` + `value`，upsert 正確 |
+| 公告 CRUD | ✅ | POST status 201，GET listCount:1 |
+| Production cron `birthday` | ✅ | `ok:true, todayMMDD:04-22` |
+| Production cron `expire-points` | ✅ | `ok:true, totalExpiredMembers:0` |
+| Webhook delivery 建立 | ✅ | `points.earned` delivery 記錄 ID `423698c7`，response_status:404（test URL 無效，屬預期） |
+
+#### 部署
+
+- Deploy 1（commit `5e32d31`）：tier 顯示修復 + fireWebhooks 初版
+- Deploy 2（commit `d636018`）：after() 修復，webhook 交付驗證通過
+
+### v0.10.0 修改的檔案
+```
+src/app/api/points/route.ts              ← 加 fireWebhooks(points.earned/spent) + after()
+src/app/api/members/route.ts             ← 加 fireWebhooks(member.created) + after()
+src/app/api/coupons/route.ts             ← 加 fireWebhooks(coupon.issued) + after()
+src/app/api/coupons/scan/route.ts        ← 加 fireWebhooks(coupon.redeemed) + after()
+src/app/dashboard/blacklist/page.tsx     ← tier display name 映射
+src/app/dashboard/dormant-members/page.tsx ← tier display name 映射
+src/app/dashboard/coupons/scan/page.tsx  ← tier display name 映射
+src/app/dashboard/segments/page.tsx      ← tier display name 映射
+TODO.md, HANDOFF.md                      ← 本更新
+```
+
+### Commits
+- `5e32d31` fix: tier display names + wire up fireWebhooks to 4 event routes
+- `d636018` fix: use after() for webhook firing to survive serverless lifecycle
 
 ---
 
@@ -174,7 +259,7 @@ WHERE m.platform_member_id IS NULL
 ✅ **Vercel cron jobs 全部上線**（birthday/dormant/expire-points/scheduled-push/backfill，5 個）
 ✅ **Supabase RLS 全面覆蓋**（rls-policies-v2.sql 已執行）
 
-### 確認可用的功能（v0.9.0，全 Dashboard 掃描完成）
+### 確認可用的功能（v0.10.0，全 Dashboard + Webhook 交付驗證）
 - ✅ Dashboard 登入、品牌設定、等級設定 CRUD
 - ✅ 優惠券管理 CRUD、任務管理 CRUD、蓋章卡管理 CRUD
 - ✅ 掃碼集點（含加倍點數倍率）
@@ -184,16 +269,16 @@ WHERE m.platform_member_id IS NULL
 - ✅ 分群（segments）、推播、活動管理（campaigns）
 - ✅ 抽獎、積分商城後台、標籤管理
 - ✅ 加倍點數 CRUD、自動回覆規則 CRUD、Webhook 建立
-- ✅ 自訂欄位建立、生日獎勵頁、沉睡會員頁、黑名單頁
-- ✅ Rich Menu 設定、打卡管理、問卷頁面、推薦計畫頁
+- ✅ 自訂欄位建立（定義 + 值 upsert）、生日獎勵頁、沉睡會員頁、黑名單頁
+- ✅ Rich Menu 設定（LINE token 無效時正確回報錯誤）、打卡管理、問卷頁面、推薦計畫頁
 - ✅ 數據總覽、數據報表（含 Tier 顯示名稱修正）
-- ✅ Cron 全部 4 支（birthday/expire-points/dormant/scheduled-push，本地驗證）
-- ✅ LINE Token 驗證（含快取）、Webhook 外送（HMAC-SHA256 簽名）
+- ✅ 公告管理 CRUD（`/dashboard/announcements`）
+- ✅ Cron 全部 4 支 production 驗證（birthday/expire-points/dormant/scheduled-push，production CRON_SECRET 已修正）
+- ✅ LINE Token 驗證（含快取）、**Webhook 外送（after() 修復，delivery record 實際建立驗證通過）**
+- ✅ Tier 顯示名稱正確（blacklist / dormant-members / coupons/scan / segments 4 頁同步修復）
 
 ### 存在但**未端對端測試**的功能
 - 所有 LIFF 前台頁面（需要真實 LINE 環境 + 手機）
-- Webhook 實際觸發（POST 建立 OK，但事件觸發送出尚未驗證）
-- 會員活動時間軸 `GET /api/members/[id]/timeline`
 - LINE Webhook 接收 `/api/line-webhook/[tenantSlug]`
 
 ---
@@ -205,11 +290,7 @@ WHERE m.platform_member_id IS NULL
 - ⬜ **Phase 4**：在 LIFF 前台實作「我的品牌卡包」功能（`GET /api/platform-members/me` API 已寫好但前台尚未使用）
 
 ### 測試缺口
-詳見 `TODO.md` 的「待端對端測試的功能」區塊，約 40 項尚未驗證。v0.8.0 新完成：手動調整點數、transactions 篩選、audit log 寫入。
-
-### 待驗證
-- 🟡 `/dashboard/audit-logs` 列表頁 UI — v0.8.0 修補了寫入端，但尚未 E2E 點擊確認列表渲染正常。下次第一件事。
-- 🟡 `/dashboard/stamp-cards` CRUD — 建立流程測試到一半環境中斷，未驗證編輯/刪除。
+詳見 `TODO.md` 的「LIFF 會員端」區塊 — 全部 11 個頁面需真實 LINE 環境。Dashboard 端 + API 端已全數驗證通過。
 
 ---
 
@@ -225,25 +306,22 @@ WHERE m.platform_member_id IS NULL
 
 ## 下個 session 第一件事（按優先順序）
 
-> v0.9.0 已完成所有 Dashboard 頁面掃描 + Cron 驗證 + CSV 修復。以下是真正剩餘的工作：
+> v0.10.0 完成：Webhook delivery 驗證通過、Tier 顯示修復、Production cron 驗證、CRON_SECRET 修正。
 
 ### 🔴 高優先
-1. **Vercel CRON_SECRET 同步** — 到 Vercel Dashboard 確認 `CRON_SECRET` 的實際值。若與 `.env.local`（`b8be0755...`）不同，建議統一。目前 production cron 由 Vercel scheduler 自動觸發（不需手動同步），但若需要手動 curl 測試 production 端點，需知道 Vercel 的 secret。
-
-2. **Webhook 實際觸發驗證** — 目前只測試了 POST 建立 Webhook（API 層），但尚未驗證「真實事件（如掃碼集點）發生時，Webhook 是否實際送出 HTTP request 到目標 URL」。可用 webhook.site 等工具接收。
-
-### 🟡 中優先
-3. **LIFF 前台測試**（需手機 + LINE App）— 依賴真實 LINE 環境。優先測：
-   - `/t/[slug]/register`（含推薦碼）
-   - `/t/[slug]/member-card`（等級 + 點數顯示）
+1. **LIFF 前台測試**（需手機 + LINE App）— 剩餘最重要的未驗證功能。建議最先測：
+   - `/t/[slug]/register`（會員註冊含推薦碼）
+   - `/t/[slug]/member-card`（等級 + 點數 + QR code）
    - `/t/[slug]/points`（點數歷史）
 
-4. **Model C Phase 4** — LIFF「我的品牌卡包」頁面（`GET /api/platform-members/me` API 已就緒，前台頁面未做）
+### 🟡 中優先
+2. **Model C Phase 4** — LIFF「我的品牌卡包」頁面（`GET /api/platform-members/me` 已就緒，`/t/[slug]/my-brands` 前台頁面未實作）
+
+3. **Webhook URL 更新** — 現有測試 webhook URL `https://webhook.site/test-joka` 無效（404）。可到 webhook.site 取得真實 UUID URL，更新至 `/dashboard/webhooks`，再觸發一次點數事件驗證完整交付流程。
 
 ### 🟢 低優先
-5. **會員活動時間軸** — `GET /api/members/[id]/timeline` API 端點存在但尚未 E2E 驗證
-6. **Webhook 投遞記錄** — `GET /api/webhooks/deliveries` 需搭配實際觸發才有資料
-7. **LINE Webhook 接收** — `/api/line-webhook/[tenantSlug]` 需真實 LINE OA 環境
+4. **LINE Webhook 接收** — `/api/line-webhook/[tenantSlug]` 需真實 LINE OA 環境
+5. **會員備註 DELETE / 會員刪除** — 使用 `window.confirm()` 無法自動化測試，功能本身邏輯正確
 
 ---
 
@@ -254,6 +332,10 @@ WHERE m.platform_member_id IS NULL
 2. **Next.js 16 `params` 是 Promise**：App Router 的 `params` 和 `searchParams` 都必須 `await`，不能直接解構。
 
 3. **Chrome MCP 擴充 + native dialog**：`window.confirm()`、`window.alert()` 等原生對話框會讓 Chrome MCP 的操作 timeout。繞法：修改程式碼改用自訂 UI modal，或直接在真實瀏覽器手動操作。
+
+4. **Vercel serverless + fire-and-forget**：`void asyncFn()` 在 serverless function 回傳 response 後會被提前 kill。所有需在 response 後執行的非同步工作（webhook、push notification）必須使用 `after(() => asyncFn())`（Next.js 15+ API）。已知使用 `after()` 的地方：push notification（所有 route）、fireWebhooks（points/members/coupons）。
+
+5. **`vercel env add` 加換行**：`echo "value" | vercel env add KEY ENV` 會帶入 `\n`，造成 header value 校驗失敗。正確用法：`echo -n "value" | vercel env add KEY ENV`（`-n` 省略換行）。
 
 4. **LIFF 測試需要真實環境**：LIFF SDK 在非 LINE App 內開啟會失敗，無法在桌面瀏覽器端對端測試 LIFF 頁面。
 

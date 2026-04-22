@@ -1,6 +1,6 @@
 # JOKA TODO
 
-> 最後更新：2026-04-22（v0.9.0）
+> 最後更新：2026-04-22（v0.10.0）
 
 ---
 
@@ -44,6 +44,9 @@
 - [x] `referral/route.ts` 欄位名稱錯誤 — 已完整修正（2026-04-22）
 - [x] `analytics` 等級分佈顯示 tier key 而非 display name — `GET /api/analytics` tierDist 改用 tier_display_name（2026-04-22）
 - [x] **Bug 修復**：`POST /api/members/import` line_uid NOT NULL 違反 — 改用 `import_<UUID>` 佔位符（commit 81640f1，2026-04-22）
+- [x] **Bug 修復**：Dashboard 4 個頁面顯示原始 tier key（blacklist / dormant-members / coupons/scan / segments）— 補上 tier_settings 查詢與 display name 映射（commit 5e32d31，2026-04-22）
+- [x] **重大 Bug 修復**：`fireWebhooks()` 從未被呼叫 — 補上 points / members / coupons 的 webhook 觸發，並改用 `after()` 避免 serverless 提前終止（commit 5e32d31 + d636018，2026-04-22）
+- [x] **Bug 修復**：Vercel production `CRON_SECRET` 含多餘空白字元造成部署失敗 — 移除重設（2026-04-22）
 
 ---
 
@@ -58,7 +61,7 @@
 - [x] 自訂會員欄位定義 — `POST /api/custom-fields` — ✅ 建立驗證通過（2026-04-22）
 - [x] Webhook 設定 — `POST /api/webhooks` — ✅ 建立驗證通過（2026-04-22）
 - [x] Webhook 投遞記錄 — `GET /api/webhooks/deliveries?webhookId=...` — ✅ 需帶 webhookId，回傳空陣列正常（2026-04-22）
-- [ ] Webhook 實際觸發（會員事件時是否有送出）— 需配合真實事件觸發驗證
+- [x] Webhook 實際觸發（會員事件時是否有送出）— ✅ points.earned 觸發，delivery record 建立（URL 404 屬預期：test URL 無效）（2026-04-22）
 - [x] 會員活動時間軸 API — `GET /api/members/[id]/timeline` — ✅ 回傳 Bevis 的完整事件流（points/coupon）（2026-04-22）
 - [x] 同期留存分析 — `GET /api/analytics` → `cohortRetention` — ✅ 已包含在 analytics 驗證中（2026-04-22）
 
@@ -106,6 +109,9 @@
 - [x] 品牌設定 — ✅（2026-04-22）
 - [x] 數據總覽 — `/dashboard/overview` — ✅ 四格統計卡、等級圓餅圖、最近推播正常（2026-04-22）
 - [x] 數據報表（含同期留存） — `/dashboard/analytics` — ✅ 修復等級分佈 bug（tier key → display name）（2026-04-22）
+- [x] 公告管理 — `/dashboard/announcements` — ✅ POST/GET CRUD 驗證通過（2026-04-22）
+- [x] 自訂欄位值 — `GET/POST /api/custom-field-values` — ✅ camelCase memberId/fieldId 確認，upsert 通過（2026-04-22）
+- [x] Webhook 投遞記錄實際觸發 — ✅ points.earned delivery 記錄建立，after() 修復確認（2026-04-22）
 - [ ] LINE Webhook 接收 — `/api/line-webhook/[tenantSlug]`（需真實 LINE 環境）
 
 ### Cron 定時任務
@@ -113,7 +119,7 @@
 - [x] 點數到期處理 — `GET /api/cron/expire-points` — ✅ ok:true，0 expired（2026-04-22，本地驗證）
 - [x] 沉睡會員通知 — `GET /api/cron/dormant` — ✅ ok:true，skipped: no dormant_reminder_days set（2026-04-22，本地驗證）
 - [x] 排程推播執行 — `GET /api/cron/scheduled-push` — ✅ ok:true，processed:0（2026-04-22，本地驗證）
-- 備註：Vercel production CRON_SECRET 與 .env.local 不同步，本地 localhost:3000 驗證通過
+- [x] Production cron 驗證 — `birthday` + `expire-points` 在 joka-app.vercel.app 以正確 CRON_SECRET 驗證通過 ✅（2026-04-22）
 
 ---
 
@@ -127,7 +133,7 @@
 - [x] LINE Token 驗證快取（同一 token 5 分鐘內不重複打 LINE API）— `src/lib/line-auth.ts`（2026-04-22）
 - [x] Webhook 簽名驗證（收端）— JOKA 無收端需求，LINE webhook 已有 HMAC 驗證
 - [x] Supabase RLS 政策更新（supabase/rls-policies-v2.sql 已執行，2026-04-22）
-- [ ] Vercel CRON_SECRET 與 .env.local 同步 — production secret 需在 Vercel Dashboard 確認與更新
+- [x] Vercel CRON_SECRET 與 .env.local 同步 — 空白字元問題已修，production cron 驗證通過（2026-04-22）
 
 ### LIFF 前台缺失頁面
 - [x] `/t/[slug]/profile` — 個人資料編輯頁面（已完整實作）
