@@ -56,6 +56,24 @@ interface LineBotSynced {
   basicId?: string
 }
 
+type ConnectionCheckStatus = 'ok' | 'missing' | 'invalid'
+
+interface ConnectionCheck {
+  status: ConnectionCheckStatus
+  message: string
+  detail?: string
+}
+
+interface ConnectionTestResult {
+  liff_id: ConnectionCheck
+  channel_id: ConnectionCheck
+  channel_secret: ConnectionCheck
+  channel_access_token: ConnectionCheck & {
+    bot?: { displayName: string; basicId: string; pictureUrl?: string }
+  }
+  all_passed: boolean
+}
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<TenantSettings>(DEFAULT_SETTINGS)
   const [loading, setLoading] = useState(false)
@@ -64,6 +82,8 @@ export default function SettingsPage() {
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lineBotSynced, setLineBotSynced] = useState<LineBotSynced | null>(null)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null)
 
   useEffect(() => {
     async function loadSettings() {
@@ -138,6 +158,22 @@ export default function SettingsPage() {
       setError(err instanceof Error ? err.message : '同步失敗，請稍後再試。')
     } finally {
       setSyncing(false)
+    }
+  }
+
+  async function handleTestConnection() {
+    setTesting(true)
+    setTestResult(null)
+    setError(null)
+    try {
+      const res = await fetch('/api/dashboard/test-line-connection', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`)
+      setTestResult(data as ConnectionTestResult)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '連線測試失敗，請稍後再試。')
+    } finally {
+      setTesting(false)
     }
   }
 
@@ -220,7 +256,7 @@ export default function SettingsPage() {
     <div className="space-y-6 max-w-2xl">
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">品牌設定</h1>
-        <p className="mt-1 text-sm text-zinc-500">設定您的品牌外觀與 LINE 整合資訊</p>
+        <p className="mt-1 text-sm text-zinc-600">設定您的品牌外觀與 LINE 整合資訊</p>
       </div>
 
       <div className="bg-white rounded-2xl border border-zinc-200 p-8">
@@ -271,8 +307,29 @@ export default function SettingsPage() {
 
             {/* ── LINE 整合 ── */}
             <div>
-              <h2 className="text-sm font-semibold text-zinc-900 mb-1">LINE 整合</h2>
-              <p className="text-xs text-zinc-400 mb-4">以下資訊從 LINE Developers Console 取得</p>
+              <div className="flex items-start justify-between gap-3 mb-1 flex-wrap">
+                <h2 className="text-sm font-semibold text-zinc-900">LINE 整合</h2>
+                <SetupProgress
+                  filled={
+                    (settings.liff_id.trim() ? 1 : 0) +
+                    (settings.line_channel_id.trim() ? 1 : 0) +
+                    (settings.line_channel_secret_set || settings.line_channel_secret.trim() ? 1 : 0) +
+                    (settings.channel_access_token_set || settings.channel_access_token.trim() ? 1 : 0)
+                  }
+                  total={4}
+                />
+              </div>
+              <p className="text-xs text-zinc-500 mb-4">
+                以下資訊從 LINE Developers Console 取得
+                <a
+                  href="https://developers.line.biz/console/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-2 inline-flex items-center gap-0.5 font-medium text-[#06C755] hover:underline"
+                >
+                  開啟 Console ↗
+                </a>
+              </p>
               <div className="space-y-4">
 
                 {/* ── 唯讀：Webhook URL（貼到 LINE Developers Console） ── */}
@@ -320,14 +377,34 @@ export default function SettingsPage() {
                   <label htmlFor="liff_id" className="block text-sm font-medium text-zinc-700 mb-1.5">LIFF ID</label>
                   <input id="liff_id" name="liff_id" type="text" value={settings.liff_id} onChange={handleChange} placeholder="1234567890-abcdefgh"
                     className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition" />
-                  <p className="mt-1 text-xs text-zinc-400">Messaging API Channel → LIFF → LIFF ID</p>
+                  <p className="mt-1 text-xs text-zinc-500 flex items-center gap-2 flex-wrap">
+                    <span>LINE Login Channel → LIFF → LIFF ID</span>
+                    <a
+                      href="https://developers.line.biz/console/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#06C755] hover:underline font-medium"
+                    >
+                      去哪找？↗
+                    </a>
+                  </p>
                 </div>
 
                 <div>
                   <label htmlFor="line_channel_id" className="block text-sm font-medium text-zinc-700 mb-1.5">LINE Channel ID</label>
                   <input id="line_channel_id" name="line_channel_id" type="text" value={settings.line_channel_id} onChange={handleChange} placeholder="1234567890"
                     className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition" />
-                  <p className="mt-1 text-xs text-zinc-400">Messaging API Channel → Basic settings → Channel ID</p>
+                  <p className="mt-1 text-xs text-zinc-500 flex items-center gap-2 flex-wrap">
+                    <span>Messaging API Channel → Basic settings → Channel ID</span>
+                    <a
+                      href="https://developers.line.biz/console/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#06C755] hover:underline font-medium"
+                    >
+                      去哪找？↗
+                    </a>
+                  </p>
                 </div>
 
                 {/* Channel Secret — Webhook 驗簽用 */}
@@ -349,8 +426,16 @@ export default function SettingsPage() {
                     placeholder={settings.line_channel_secret_set ? '輸入新 Secret 以更新（留空不變更）' : '貼上 Channel Secret'}
                     className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition"
                   />
-                  <p className="mt-1 text-xs text-zinc-400">
-                    Messaging API Channel → Basic settings → Channel secret（用於驗證 LINE Webhook 簽章）
+                  <p className="mt-1 text-xs text-zinc-500 flex items-center gap-2 flex-wrap">
+                    <span>Messaging API Channel → Basic settings → Channel secret（用於驗證 LINE Webhook 簽章）</span>
+                    <a
+                      href="https://developers.line.biz/console/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#06C755] hover:underline font-medium"
+                    >
+                      去哪找？↗
+                    </a>
                   </p>
                 </div>
 
@@ -373,9 +458,16 @@ export default function SettingsPage() {
                     placeholder={settings.channel_access_token_set ? '輸入新 Token 以更新（留空不變更）' : '貼上 Channel Access Token'}
                     className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition"
                   />
-                  <p className="mt-1 text-xs text-zinc-400">
-                    LINE Developers → Messaging API Channel → Messaging API → Channel access token
-                    （長期 token，用於向客人推播加點/優惠券通知）
+                  <p className="mt-1 text-xs text-zinc-500 flex items-center gap-2 flex-wrap">
+                    <span>Messaging API Channel → Messaging API → Channel access token（長期 token，用於推播通知）</span>
+                    <a
+                      href="https://developers.line.biz/console/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#06C755] hover:underline font-medium"
+                    >
+                      去哪找？↗
+                    </a>
                   </p>
 
                   {/* 手動從 LINE@ 同步品牌名稱 / 大頭貼 */}
@@ -423,6 +515,68 @@ export default function SettingsPage() {
                           )}
                         </div>
                       </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── 連線測試 ── */}
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-800">連線測試</p>
+                      <p className="text-xs text-zinc-600 mt-0.5">
+                        檢查 LIFF ID、Channel ID、Channel Secret 與 Access Token 是否正確
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleTestConnection}
+                      disabled={testing}
+                      className="shrink-0 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {testing ? '檢查中…' : '🔌 測試連線'}
+                    </button>
+                  </div>
+
+                  {testResult && (
+                    <div className="mt-3 space-y-2">
+                      <div className={`rounded-lg px-3 py-2 text-xs font-medium ${
+                        testResult.all_passed
+                          ? 'bg-green-50 text-green-800 border border-green-200'
+                          : 'bg-amber-50 text-amber-800 border border-amber-200'
+                      }`}>
+                        {testResult.all_passed
+                          ? '✓ 全部檢查通過，LINE 設定可用'
+                          : '⚠ 部分設定尚未完成或有誤，請參考以下詳情'}
+                      </div>
+
+                      <CheckRow label="LIFF ID" check={testResult.liff_id} />
+                      <CheckRow label="LINE Channel ID" check={testResult.channel_id} />
+                      <CheckRow label="Channel Secret" check={testResult.channel_secret} />
+                      <CheckRow label="Channel Access Token" check={testResult.channel_access_token} />
+
+                      {testResult.channel_access_token.status === 'ok' && testResult.channel_access_token.bot && (
+                        <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 p-3">
+                          {testResult.channel_access_token.bot.pictureUrl && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={testResult.channel_access_token.bot.pictureUrl}
+                              alt="Bot 大頭貼"
+                              className="h-10 w-10 rounded-full object-cover border border-green-300 bg-white"
+                            />
+                          )}
+                          <div className="text-xs text-green-900 space-y-0.5">
+                            <p>
+                              <span className="text-green-700">連線到：</span>
+                              <span className="font-medium">{testResult.channel_access_token.bot.displayName}</span>
+                            </p>
+                            <p>
+                              <span className="text-green-700">LINE@ ID：</span>
+                              <span className="font-mono">{testResult.channel_access_token.bot.basicId}</span>
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -616,6 +770,44 @@ export default function SettingsPage() {
             </div>
           </form>
         )}
+      </div>
+    </div>
+  )
+}
+
+function SetupProgress({ filled, total }: { filled: number; total: number }) {
+  const pct = Math.round((filled / total) * 100)
+  const complete = filled === total
+  return (
+    <div className="flex items-center gap-2 min-w-[160px]">
+      <div className="flex-1 h-2 bg-zinc-200 rounded-full overflow-hidden">
+        <div
+          className={`h-full transition-all ${complete ? 'bg-[#06C755]' : 'bg-amber-400'}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className={`text-xs font-medium shrink-0 ${complete ? 'text-[#06C755]' : 'text-zinc-600'}`}>
+        {complete ? '✓ 完成' : `${filled} / ${total}`}
+      </span>
+    </div>
+  )
+}
+
+function CheckRow({ label, check }: { label: string; check: ConnectionCheck }) {
+  const icon = check.status === 'ok' ? '✓' : check.status === 'missing' ? '—' : '✗'
+  const tone =
+    check.status === 'ok'
+      ? 'text-green-700'
+      : check.status === 'missing'
+        ? 'text-zinc-500'
+        : 'text-red-700'
+  return (
+    <div className="flex items-start gap-2 text-xs">
+      <span className={`font-mono shrink-0 ${tone}`}>{icon}</span>
+      <div className="flex-1">
+        <span className="font-medium text-zinc-800">{label}：</span>
+        <span className={tone}>{check.message}</span>
+        {check.detail && <span className="text-zinc-500 ml-1">（{check.detail}）</span>}
       </div>
     </div>
   )
