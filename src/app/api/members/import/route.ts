@@ -211,8 +211,9 @@ export async function POST(req: NextRequest) {
         total_spent: 0,
         tier,
         notes: row.notes ?? null,
-        // No line_uid — imported members haven't linked LINE yet
-        line_uid: null,
+        // Placeholder line_uid for offline-imported members (not yet LINE-linked).
+        // Prefix "import_" ensures uniqueness; will be replaced when the member links LINE.
+        line_uid: `import_${crypto.randomUUID()}`,
         last_activity_at: new Date().toISOString(),
       }
     })
