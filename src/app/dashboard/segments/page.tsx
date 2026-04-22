@@ -155,7 +155,7 @@ export default function SegmentsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">會員分群</h1>
-          <p className="text-sm text-zinc-500 mt-1">依條件建立自訂分群，用於精準推播</p>
+          <p className="text-sm text-zinc-600 mt-1">依條件建立自訂分群，用於精準推播</p>
         </div>
         <button onClick={() => setShowForm(true)}
           className="px-4 py-2 rounded-xl text-sm font-semibold text-white"

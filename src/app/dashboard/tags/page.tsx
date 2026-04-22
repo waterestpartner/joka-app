@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 interface Tag {
   id: string
@@ -34,6 +35,8 @@ export default function TagsPage() {
 
   // Delete
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   async function loadTags() {
     setLoading(true)
@@ -101,18 +104,26 @@ export default function TagsPage() {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('確定要刪除這個標籤？刪除後所有會員的這個標籤也會一併移除。')) return
+  function handleDelete(id: string) {
+    setDeleteError(null)
+    setConfirmDeleteId(id)
+  }
+
+  async function confirmDelete() {
+    if (!confirmDeleteId) return
+    const id = confirmDeleteId
     setDeletingId(id)
+    setDeleteError(null)
     try {
       const res = await fetch(`/api/tags?id=${id}`, { method: 'DELETE' })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
         throw new Error((j as { error?: string }).error ?? '刪除失敗')
       }
+      setConfirmDeleteId(null)
       setTags((prev) => prev.filter((t) => t.id !== id))
     } catch (e) {
-      alert(e instanceof Error ? e.message : '刪除失敗')
+      setDeleteError(e instanceof Error ? e.message : '刪除失敗')
     } finally {
       setDeletingId(null)
     }
@@ -123,7 +134,7 @@ export default function TagsPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">標籤管理</h1>
-        <p className="text-sm text-zinc-500 mt-1">建立自訂標籤，用於會員分群與分眾推播</p>
+        <p className="text-sm text-zinc-600 mt-1">建立自訂標籤，用於會員分群與分眾推播</p>
       </div>
 
       {/* Create form */}
@@ -275,6 +286,19 @@ export default function TagsPage() {
           </ul>
         )}
       </div>
+
+      {confirmDeleteId && (
+        <ConfirmDialog
+          title="確定要刪除標籤？"
+          message="刪除後所有會員的這個標籤也會一併移除，此操作無法復原。"
+          confirmLabel="刪除"
+          danger
+          loading={!!deletingId}
+          error={deleteError}
+          onConfirm={() => void confirmDelete()}
+          onCancel={() => { setConfirmDeleteId(null); setDeleteError(null) }}
+        />
+      )}
     </div>
   )
 }

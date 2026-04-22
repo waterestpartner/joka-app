@@ -44,6 +44,7 @@ export default function StorePage() {
   const [error, setError] = useState<string | null>(null)
   const [redeeming, setRedeeming] = useState<string | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
+  const [confirmItem, setConfirmItem] = useState<StoreItem | null>(null)
 
   const addToast = useCallback((message: string, type: 'success' | 'error') => {
     const id = ++toastId
@@ -81,8 +82,13 @@ export default function StorePage() {
       addToast(`點數不足，需要 ${item.points_cost} pt`, 'error')
       return
     }
-    if (!confirm(`確定要使用 ${item.points_cost} pt 兌換「${item.name}」？`)) return
+    setConfirmItem(item)
+  }
 
+  async function confirmRedeem() {
+    const item = confirmItem
+    if (!item || !idToken || !tenantSlug || !data) return
+    setConfirmItem(null)
     setRedeeming(item.id)
     try {
       const res = await fetch('/api/store', {
@@ -116,6 +122,10 @@ export default function StorePage() {
     } finally {
       setRedeeming(null)
     }
+  }
+
+  function handleRedeemClick(item: StoreItem) {
+    void handleRedeem(item)
   }
 
   if (!isReady || loading) {
@@ -152,6 +162,34 @@ export default function StorePage() {
 
   return (
     <div className="min-h-screen bg-zinc-50 pb-8">
+      {/* Redeem confirm modal */}
+      {confirmItem && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-0 pb-0">
+          <div className="w-full max-w-lg rounded-t-3xl bg-white p-6 shadow-xl">
+            <h2 className="text-base font-bold text-zinc-900 mb-1">確認兌換</h2>
+            <p className="text-sm text-zinc-600 mb-4">
+              確定要使用 <strong className="text-green-600">{confirmItem.points_cost.toLocaleString()} pt</strong> 兌換「<strong>{confirmItem.name}</strong>」？
+            </p>
+            <p className="text-xs text-zinc-400 mb-5">兌換後將扣除點數，此操作不可撤銷。</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmItem(null)}
+                className="flex-1 rounded-2xl border border-zinc-200 py-3 text-sm font-semibold text-zinc-600 active:bg-zinc-50 transition"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => void confirmRedeem()}
+                className="flex-1 rounded-2xl py-3 text-sm font-bold text-white transition active:opacity-90"
+                style={{ backgroundColor: '#06C755' }}
+              >
+                確認兌換
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast notifications */}
       <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-80 max-w-[calc(100vw-2rem)]">
         {toasts.map((t) => (
@@ -232,7 +270,7 @@ export default function StorePage() {
                       )}
                     </div>
                     <button
-                      onClick={() => handleRedeem(item)}
+                      onClick={() => handleRedeemClick(item)}
                       disabled={disabled}
                       className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-95 ${
                         disabled

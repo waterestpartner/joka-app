@@ -45,6 +45,8 @@ export default function CouponsPage() {
   const [myLoading, setMyLoading] = useState(true)
   const [myError, setMyError] = useState<string | null>(null)
   const [redeeming, setRedeeming] = useState<string | null>(null)
+  const [redeemError, setRedeemError] = useState<string | null>(null)
+  const [exchangeError, setExchangeError] = useState<string | null>(null)
 
   // ── QR modal state ────────────────────────────────────────────────────────
   const [qrCoupon, setQrCoupon] = useState<MemberCouponWithCoupon | null>(null)
@@ -120,6 +122,7 @@ export default function CouponsPage() {
   // ── handlers ──────────────────────────────────────────────────────────────
   async function handleRedeem(memberCouponId: string) {
     setRedeeming(memberCouponId)
+    setRedeemError(null)
     try {
       const res = await fetch('/api/coupons', {
         method: 'POST',
@@ -138,7 +141,7 @@ export default function CouponsPage() {
         )
       )
     } catch (err) {
-      alert(err instanceof Error ? err.message : '核銷失敗')
+      setRedeemError(err instanceof Error ? err.message : '核銷失敗')
     } finally {
       setRedeeming(null)
     }
@@ -147,6 +150,7 @@ export default function CouponsPage() {
   async function handleExchange(couponId: string, requiredPoints: number) {
     setExchanging(couponId)
     setExchSuccess(null)
+    setExchangeError(null)
     try {
       const res = await fetch('/api/coupons', {
         method: 'POST',
@@ -166,7 +170,7 @@ export default function CouponsPage() {
       setMyLoading(true)
       fetchMyCoupons()
     } catch (err) {
-      alert(err instanceof Error ? err.message : '兌換失敗')
+      setExchangeError(err instanceof Error ? err.message : '兌換失敗')
     } finally {
       setExchanging(null)
     }
@@ -262,6 +266,20 @@ export default function CouponsPage() {
           </button>
         ))}
       </div>
+
+      {/* ── Action error banners ── */}
+      {redeemError && (
+        <div className="mx-4 mt-3 rounded-xl bg-red-50 border border-red-200 px-4 py-2.5 flex items-center justify-between gap-3">
+          <p className="text-sm text-red-600">⚠️ {redeemError}</p>
+          <button onClick={() => setRedeemError(null)} className="text-red-400 text-lg leading-none">×</button>
+        </div>
+      )}
+      {exchangeError && (
+        <div className="mx-4 mt-3 rounded-xl bg-red-50 border border-red-200 px-4 py-2.5 flex items-center justify-between gap-3">
+          <p className="text-sm text-red-600">⚠️ {exchangeError}</p>
+          <button onClick={() => setExchangeError(null)} className="text-red-400 text-lg leading-none">×</button>
+        </div>
+      )}
 
       {/* ── My Coupons tab ── */}
       {tab === 'mine' && (

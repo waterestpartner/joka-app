@@ -219,7 +219,7 @@ export default function StampCardsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">蓋章卡管理</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-zinc-600">
             數位印章集點卡，集滿即可兌換獎勵
           </p>
         </div>

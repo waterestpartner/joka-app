@@ -204,7 +204,7 @@ export default function CampaignsPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">活動管理</h1>
-        <p className="mt-1 text-sm text-zinc-500">批量對特定會員族群發放優惠券或贈送點數</p>
+        <p className="mt-1 text-sm text-zinc-600">批量對特定會員族群發放優惠券或贈送點數</p>
       </div>
 
       {/* Compose card */}

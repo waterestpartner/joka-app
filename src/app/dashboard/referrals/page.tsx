@@ -97,7 +97,7 @@ export default function ReferralsPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">推薦計畫</h1>
-        <p className="mt-1 text-sm text-zinc-500">追蹤會員推薦好友的成效與獎勵發放情況</p>
+        <p className="mt-1 text-sm text-zinc-600">追蹤會員推薦好友的成效與獎勵發放情況</p>
       </div>
 
       {error && (

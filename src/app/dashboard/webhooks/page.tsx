@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { WEBHOOK_EVENTS, type WebhookEvent } from '@/lib/webhooks'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 interface Webhook {
   id: string
@@ -60,6 +61,7 @@ export default function WebhooksPage() {
   const [deliveriesLoading, setDeliveriesLoading] = useState(false)
 
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [confirmDeleteWebhookId, setConfirmDeleteWebhookId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
 
   async function load() {
@@ -110,11 +112,17 @@ export default function WebhooksPage() {
     } finally { setTogglingId(null) }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('確定刪除此 Webhook？')) return
+  function handleDelete(id: string) {
+    setConfirmDeleteWebhookId(id)
+  }
+
+  async function confirmDeleteWebhook() {
+    if (!confirmDeleteWebhookId) return
+    const id = confirmDeleteWebhookId
     setDeletingId(id)
     try {
       await fetch(`/api/webhooks?id=${id}`, { method: 'DELETE' })
+      setConfirmDeleteWebhookId(null)
       setWebhooks((prev) => prev.filter((w) => w.id !== id))
       if (viewingId === id) setViewingId(null)
     } finally { setDeletingId(null) }
@@ -143,7 +151,7 @@ export default function WebhooksPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">Webhook 設定</h1>
-        <p className="text-sm text-zinc-500 mt-1">當 CRM 事件發生時，自動通知您的外部系統</p>
+        <p className="text-sm text-zinc-600 mt-1">當 CRM 事件發生時，自動通知您的外部系統</p>
       </div>
 
       {/* Create form */}
@@ -333,6 +341,18 @@ export default function WebhooksPage() {
           </ul>
         )}
       </div>
+
+      {confirmDeleteWebhookId && (
+        <ConfirmDialog
+          title="確定刪除此 Webhook？"
+          message="刪除後相關的投遞紀錄也會一併移除，此操作無法復原。"
+          confirmLabel="刪除"
+          danger
+          loading={!!deletingId}
+          onConfirm={() => void confirmDeleteWebhook()}
+          onCancel={() => setConfirmDeleteWebhookId(null)}
+        />
+      )}
     </div>
   )
 }

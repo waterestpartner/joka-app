@@ -121,7 +121,7 @@ export default function CouponScanPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">優惠券核銷</h1>
-        <p className="mt-1 text-sm text-zinc-500">掃描會員 LINE 上的優惠券 QR Code 或貼入優惠券 ID</p>
+        <p className="mt-1 text-sm text-zinc-600">掃描會員 LINE 上的優惠券 QR Code 或貼入優惠券 ID</p>
       </div>
 
       {/* Input form */}

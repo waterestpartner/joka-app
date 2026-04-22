@@ -37,6 +37,8 @@ export default function MemberNotesPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [confirmDeleteNoteId, setConfirmDeleteNoteId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   // ── Debounced member search ────────────────────────────────────────────────
   const handleSearchChange = useCallback((value: string) => {
@@ -94,17 +96,26 @@ export default function MemberNotesPage() {
   }
 
   // ── Delete note ────────────────────────────────────────────────────────────
-  async function handleDelete(id: string) {
-    if (!confirm('確定要刪除這則備註？')) return
+  function handleDelete(id: string) {
+    setDeleteError(null)
+    setConfirmDeleteNoteId(id)
+  }
+
+  async function confirmDeleteNote() {
+    if (!confirmDeleteNoteId) return
+    const id = confirmDeleteNoteId
     setDeletingId(id)
+    setDeleteError(null)
     try {
       const res = await fetch(`/api/member-notes?id=${id}`, { method: 'DELETE' })
       if (!res.ok) {
         const j = await res.json().catch(() => ({})) as { error?: string }
-        throw new Error(j.error ?? '刪除失敗')
+        setDeleteError(j.error ?? '刪除失敗')
+        return
       }
+      setConfirmDeleteNoteId(null)
       setNotes((prev) => prev.filter((n) => n.id !== id))
-    } catch (e) { alert(e instanceof Error ? e.message : '刪除失敗') }
+    } catch (e) { setDeleteError(e instanceof Error ? e.message : '刪除失敗') }
     finally { setDeletingId(null) }
   }
 
@@ -112,7 +123,7 @@ export default function MemberNotesPage() {
     <div className="space-y-8 max-w-2xl">
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">會員備註</h1>
-        <p className="text-sm text-zinc-500 mt-1">搜尋會員並記錄服務備忘事項</p>
+        <p className="text-sm text-zinc-600 mt-1">搜尋會員並記錄服務備忘事項</p>
       </div>
 
       {/* Member search */}
@@ -235,6 +246,37 @@ export default function MemberNotesPage() {
             )}
           </div>
         </>
+      )}
+
+      {/* ── Delete note confirm modal ───────────────────────────────────────── */}
+      {confirmDeleteNoteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-base font-semibold text-zinc-900 mb-2">確定要刪除備註？</h2>
+            <p className="text-sm text-zinc-500 mb-5">此操作無法復原。</p>
+            {deleteError && (
+              <p className="mb-4 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-600">
+                {deleteError}
+              </p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setConfirmDeleteNoteId(null); setDeleteError(null) }}
+                disabled={!!deletingId}
+                className="flex-1 rounded-xl border border-zinc-200 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => void confirmDeleteNote()}
+                disabled={!!deletingId}
+                className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition disabled:opacity-60"
+              >
+                {deletingId ? '刪除中…' : '確認刪除'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

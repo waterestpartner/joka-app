@@ -231,7 +231,7 @@ export default function SurveysPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">問卷調查</h1>
-          <p className="mt-1 text-sm text-zinc-500">建立問卷收集會員意見，可設定點數獎勵鼓勵填寫</p>
+          <p className="mt-1 text-sm text-zinc-600">建立問卷收集會員意見，可設定點數獎勵鼓勵填寫</p>
         </div>
         <button onClick={() => { setShowForm(true); setFormError(null) }}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
@@ -417,7 +417,7 @@ export default function SurveysPage() {
             <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
               <div className="px-6 py-4 border-b border-zinc-100">
                 <h2 className="text-base font-semibold text-zinc-900">{detail.survey.title}</h2>
-                {detail.survey.description && <p className="text-sm text-zinc-500 mt-1">{detail.survey.description}</p>}
+                {detail.survey.description && <p className="text-sm text-zinc-600 mt-1">{detail.survey.description}</p>}
                 <p className="text-xs text-zinc-400 mt-1">{detail.responses.length} 份回覆</p>
               </div>
 

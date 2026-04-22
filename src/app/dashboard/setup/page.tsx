@@ -169,7 +169,7 @@ export default function SetupPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">設定精靈</h1>
-        <p className="mt-1 text-sm text-zinc-500">只需幾個步驟，即可完成 JOKA 與 LINE 的整合</p>
+        <p className="mt-1 text-sm text-zinc-600">只需幾個步驟，即可完成 JOKA 與 LINE 的整合</p>
       </div>
 
       {/* Stepper */}

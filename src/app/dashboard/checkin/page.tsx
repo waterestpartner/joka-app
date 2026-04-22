@@ -83,7 +83,7 @@ export default function CheckinPage() {
     <div className="max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">打卡集點</h1>
-        <p className="text-sm text-zinc-500 mt-1">會員在 LINE LIFF 按下打卡按鈕即可獲得點數</p>
+        <p className="text-sm text-zinc-600 mt-1">會員在 LINE LIFF 按下打卡按鈕即可獲得點數</p>
       </div>
 
       {/* Settings */}

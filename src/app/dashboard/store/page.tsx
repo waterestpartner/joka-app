@@ -222,7 +222,7 @@ export default function StorePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">積分商城</h1>
-          <p className="mt-1 text-sm text-zinc-500">管理可用點數兌換的商品，以及處理會員兌換申請</p>
+          <p className="mt-1 text-sm text-zinc-600">管理可用點數兌換的商品，以及處理會員兌換申請</p>
         </div>
         {tab === 'items' && (
           <button onClick={openCreateForm}

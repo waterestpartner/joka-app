@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -193,7 +194,10 @@ export default function AutoReplyPage() {
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [toggling, setToggling] = useState<string | null>(null)
+  const [toggleError, setToggleError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [confirmDeleteRule, setConfirmDeleteRule] = useState<AutoReplyRule | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const loadRules = useCallback(async () => {
     setLoading(true)
@@ -229,6 +233,7 @@ export default function AutoReplyPage() {
 
   async function handleToggleActive(rule: AutoReplyRule) {
     setToggling(rule.id)
+    setToggleError(null)
     try {
       const res = await fetch('/api/auto-reply-rules', {
         method: 'PATCH',
@@ -239,15 +244,22 @@ export default function AutoReplyPage() {
       const updated: AutoReplyRule = await res.json()
       setRules((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
     } catch {
-      alert('狀態更新失敗，請稍後再試。')
+      setToggleError('狀態更新失敗，請稍後再試。')
     } finally {
       setToggling(null)
     }
   }
 
-  async function handleDelete(rule: AutoReplyRule) {
-    if (!confirm(`確定要刪除關鍵字「${rule.keyword}」的規則嗎？`)) return
+  function handleDelete(rule: AutoReplyRule) {
+    setDeleteError(null)
+    setConfirmDeleteRule(rule)
+  }
+
+  async function confirmDeleteRuleAction() {
+    if (!confirmDeleteRule) return
+    const rule = confirmDeleteRule
     setDeleting(rule.id)
+    setDeleteError(null)
     try {
       const res = await fetch(`/api/auto-reply-rules?id=${encodeURIComponent(rule.id)}`, {
         method: 'DELETE',
@@ -256,9 +268,10 @@ export default function AutoReplyPage() {
         const j = await res.json().catch(() => ({}))
         throw new Error((j as { error?: string }).error ?? '刪除失敗')
       }
+      setConfirmDeleteRule(null)
       setRules((prev) => prev.filter((r) => r.id !== rule.id))
     } catch (err) {
-      alert(err instanceof Error ? err.message : '刪除失敗，請稍後再試。')
+      setDeleteError(err instanceof Error ? err.message : '刪除失敗，請稍後再試。')
     } finally {
       setDeleting(null)
     }
@@ -270,7 +283,7 @@ export default function AutoReplyPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">自動回覆</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-zinc-600">
             當會員傳送符合關鍵字的訊息時，自動發送對應回覆（優先於預設點數查詢回覆）
           </p>
         </div>
@@ -380,11 +393,31 @@ export default function AutoReplyPage() {
         )}
       </div>
 
+      {toggleError && (
+        <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-center justify-between">
+          <span>{toggleError}</span>
+          <button onClick={() => setToggleError(null)} className="ml-3 text-red-400 hover:text-red-700">×</button>
+        </div>
+      )}
+
       {/* Add rule modal */}
       {showModal && (
         <AddRuleModal
           onClose={() => setShowModal(false)}
           onSaved={handleSaved}
+        />
+      )}
+
+      {confirmDeleteRule && (
+        <ConfirmDialog
+          title="確定刪除此規則？"
+          message={`即將刪除關鍵字「${confirmDeleteRule.keyword}」的規則，此操作無法復原。`}
+          confirmLabel="刪除"
+          danger
+          loading={!!deleting}
+          error={deleteError}
+          onConfirm={() => void confirmDeleteRuleAction()}
+          onCancel={() => { setConfirmDeleteRule(null); setDeleteError(null) }}
         />
       )}
     </div>

@@ -112,7 +112,7 @@ export default function PointsExpiryPage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">點數即將到期</h1>
-          <p className="text-sm text-zinc-500 mt-1">找出點數快要到期的會員，提醒他們趕緊使用</p>
+          <p className="text-sm text-zinc-600 mt-1">找出點數快要到期的會員，提醒他們趕緊使用</p>
         </div>
         <button
           onClick={() => setShowPushForm(true)}

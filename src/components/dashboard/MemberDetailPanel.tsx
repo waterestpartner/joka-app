@@ -456,12 +456,25 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
           {/* ── Notes section ── */}
           <div className="rounded-2xl bg-zinc-50 border border-zinc-200 p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <label
-                htmlFor={`notes-${member.id}`}
-                className="text-xs font-semibold uppercase tracking-wide text-zinc-500"
-              >
-                備註
-              </label>
+              <div>
+                <label
+                  htmlFor={`notes-${member.id}`}
+                  className="text-xs font-semibold uppercase tracking-wide text-zinc-500"
+                >
+                  快速備忘
+                </label>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  單筆私人備忘，僅供快速記錄。需多人協作或完整紀錄請用{' '}
+                  <a
+                    href="/dashboard/member-notes"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-500 hover:underline"
+                  >
+                    會員備註頁面 ↗
+                  </a>
+                </p>
+              </div>
               {notesSaveStatus === 'saved' && (
                 <span className="text-xs text-green-600 font-medium">已儲存 ✓</span>
               )}
@@ -475,7 +488,7 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
               onChange={(e) => setNotes(e.target.value)}
               onBlur={handleSaveNotes}
               rows={3}
-              placeholder="輸入會員備註（失焦後自動儲存）…"
+              placeholder="輸入快速備忘（失焦後自動儲存）…"
               className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#06C755] resize-none transition"
             />
             <button
@@ -485,7 +498,7 @@ export default function MemberDetailPanel({ member, onClose }: Props) {
               className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
               style={{ backgroundColor: '#06C755' }}
             >
-              {notesSaving ? '儲存中…' : '儲存備註'}
+              {notesSaving ? '儲存中…' : '儲存'}
             </button>
           </div>
 

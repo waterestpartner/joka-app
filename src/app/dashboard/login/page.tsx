@@ -50,7 +50,7 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">
             JOKA 管理後台
           </h1>
-          <p className="mt-1 text-sm text-zinc-500">請登入以繼續</p>
+          <p className="mt-1 text-sm text-zinc-600">請登入以繼續</p>
         </div>
 
         {/* Login card */}

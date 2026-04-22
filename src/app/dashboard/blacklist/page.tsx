@@ -113,7 +113,7 @@ export default function BlacklistPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">黑名單管理</h1>
-          <p className="text-sm text-zinc-500 mt-1">已封鎖的會員無法進行點數操作</p>
+          <p className="text-sm text-zinc-600 mt-1">已封鎖的會員無法進行點數操作</p>
         </div>
         <button
           onClick={() => setShowBlockForm(true)}

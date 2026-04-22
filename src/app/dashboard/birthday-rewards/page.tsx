@@ -69,7 +69,7 @@ export default function BirthdayRewardsPage() {
     <div className="max-w-3xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">生日獎勵</h1>
-        <p className="text-sm text-zinc-500 mt-1">為生日當天的會員手動發放點數，系統每天 09:00 也會自動執行</p>
+        <p className="text-sm text-zinc-600 mt-1">為生日當天的會員手動發放點數，系統每天 09:00 也會自動執行</p>
       </div>
 
       {/* Settings notice */}

@@ -200,7 +200,7 @@ export default function MissionsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">任務管理</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-zinc-600">
             設定集點任務，會員完成後自動獲得點數獎勵
           </p>
         </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 interface MultiplierEvent {
   id: string
@@ -53,6 +54,8 @@ export default function PointMultipliersPage() {
   const [editError, setEditError] = useState<string | null>(null)
 
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [confirmDeleteMultiplierId, setConfirmDeleteMultiplierId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
@@ -133,14 +136,22 @@ export default function PointMultipliersPage() {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('確定刪除此加倍活動？')) return
+  function handleDelete(id: string) {
+    setDeleteError(null)
+    setConfirmDeleteMultiplierId(id)
+  }
+
+  async function confirmDeleteMultiplier() {
+    if (!confirmDeleteMultiplierId) return
+    const id = confirmDeleteMultiplierId
     setDeletingId(id)
+    setDeleteError(null)
     try {
       const res = await fetch(`/api/point-multipliers?id=${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('刪除失敗')
+      setConfirmDeleteMultiplierId(null)
       setEvents((prev) => prev.filter((ev) => ev.id !== id))
-    } catch (e) { alert(e instanceof Error ? e.message : '刪除失敗') }
+    } catch (e) { setDeleteError(e instanceof Error ? e.message : '刪除失敗') }
     finally { setDeletingId(null) }
   }
 
@@ -148,7 +159,7 @@ export default function PointMultipliersPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">加倍點數活動</h1>
-        <p className="text-sm text-zinc-500 mt-1">設定限時的點數倍率活動，讓會員在活動期間獲得更多點數</p>
+        <p className="text-sm text-zinc-600 mt-1">設定限時的點數倍率活動，讓會員在活動期間獲得更多點數</p>
       </div>
 
       {/* Create form */}
@@ -360,6 +371,19 @@ export default function PointMultipliersPage() {
           </ul>
         )}
       </div>
+
+      {confirmDeleteMultiplierId && (
+        <ConfirmDialog
+          title="確定刪除此加倍活動？"
+          message="刪除後無法復原。"
+          confirmLabel="刪除"
+          danger
+          loading={!!deletingId}
+          error={deleteError}
+          onConfirm={() => void confirmDeleteMultiplier()}
+          onCancel={() => { setConfirmDeleteMultiplierId(null); setDeleteError(null) }}
+        />
+      )}
     </div>
   )
 }

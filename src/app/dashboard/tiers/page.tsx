@@ -4,6 +4,7 @@
 // 商家可自訂：等級識別碼、顯示名稱、升等所需點數、集點倍率
 
 import { useState, useEffect, useCallback } from 'react'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 interface TierSetting {
   id: string
@@ -209,6 +210,8 @@ export default function TiersPage() {
   const [showModal, setShowModal] = useState(false)
   const [editTarget, setEditTarget] = useState<TierSetting | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [confirmDeleteTier, setConfirmDeleteTier] = useState<TierSetting | null>(null)
+  const [deleteTierError, setDeleteTierError] = useState<string | null>(null)
 
   const loadTiers = useCallback(async () => {
     setLoading(true)
@@ -241,16 +244,24 @@ export default function TiersPage() {
     setEditTarget(null)
   }
 
-  async function handleDelete(tier: TierSetting) {
-    if (!confirm(`確定要刪除「${tier.tier_display_name}」等級嗎？`)) return
+  function handleDelete(tier: TierSetting) {
+    setDeleteTierError(null)
+    setConfirmDeleteTier(tier)
+  }
+
+  async function confirmDeleteTierAction() {
+    if (!confirmDeleteTier) return
+    const tier = confirmDeleteTier
     setDeleting(tier.id)
+    setDeleteTierError(null)
     try {
       const res = await fetch(`/api/tier-settings?id=${tier.id}`, { method: 'DELETE' })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
-        alert((j as { error?: string }).error ?? '刪除失敗')
+        setDeleteTierError((j as { error?: string }).error ?? '刪除失敗')
         return
       }
+      setConfirmDeleteTier(null)
       setTiers((prev) => prev.filter((t) => t.id !== tier.id))
     } finally {
       setDeleting(null)
@@ -263,7 +274,7 @@ export default function TiersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">等級設定</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-zinc-600">
             設定會員等級的門檻點數與集點倍率，系統將自動依此升降等
           </p>
         </div>
@@ -390,6 +401,19 @@ export default function TiersPage() {
           initial={editTarget ?? undefined}
           onClose={() => { setShowModal(false); setEditTarget(null) }}
           onSaved={handleSaved}
+        />
+      )}
+
+      {confirmDeleteTier && (
+        <ConfirmDialog
+          title="確定要刪除等級？"
+          message={`即將刪除「${confirmDeleteTier.tier_display_name}」等級，此操作無法復原。`}
+          confirmLabel="刪除"
+          danger
+          loading={!!deleting}
+          error={deleteTierError}
+          onConfirm={() => void confirmDeleteTierAction()}
+          onCancel={() => { setConfirmDeleteTier(null); setDeleteTierError(null) }}
         />
       )}
     </div>

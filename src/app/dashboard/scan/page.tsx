@@ -37,7 +37,7 @@ export default async function ScanPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">掃碼集點</h1>
-        <p className="mt-1 text-sm text-zinc-500">
+        <p className="mt-1 text-sm text-zinc-600">
           掃描會員 QR Code 或手動輸入會員 ID 進行集點
         </p>
       </div>

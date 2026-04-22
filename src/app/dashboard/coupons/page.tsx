@@ -389,7 +389,7 @@ export default function CouponsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">優惠券管理</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-zinc-600">
             {loading ? '載入中…' : `共 ${coupons.length} 張優惠券`}
           </p>
         </div>

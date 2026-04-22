@@ -8,6 +8,14 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import type { PointTransaction } from '@/types/member'
 import { formatDate, formatNumber } from '@/lib/utils'
 
+interface MemberSearchResult {
+  id: string
+  name: string | null
+  phone: string | null
+  tier: string
+  points: number
+}
+
 interface PointScannerProps {
   tenantId: string
   onSuccess?: (transaction: PointTransaction) => void
@@ -52,6 +60,16 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
   const [stampLoading, setStampLoading] = useState<Record<string, boolean>>({})
   const [stampResults, setStampResults] = useState<Record<string, string>>({})
 
+  // Tier display names
+  const [tierDisplayMap, setTierDisplayMap] = useState<Record<string, string>>({})
+
+  // Member search state
+  const [showMemberSearch, setShowMemberSearch] = useState(false)
+  const [memberSearchQuery, setMemberSearchQuery] = useState('')
+  const [memberSearchResults, setMemberSearchResults] = useState<MemberSearchResult[]>([])
+  const [memberSearchLoading, setMemberSearchLoading] = useState(false)
+  const memberSearchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // Camera scanner state
   const [cameraOpen, setCameraOpen] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
@@ -66,6 +84,44 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
   useEffect(() => {
     memberIdRef.current?.focus()
   }, [])
+
+  // Load tier display names
+  useEffect(() => {
+    fetch('/api/tier-settings')
+      .then(r => r.json())
+      .then((data: { tier: string; tier_display_name: string | null }[]) => {
+        const map: Record<string, string> = {}
+        for (const ts of data) map[ts.tier] = ts.tier_display_name ?? ts.tier
+        setTierDisplayMap(map)
+      })
+      .catch(() => {})
+  }, [])
+
+  // Debounced member search
+  const handleMemberSearch = useCallback((query: string) => {
+    setMemberSearchQuery(query)
+    if (memberSearchTimeout.current) clearTimeout(memberSearchTimeout.current)
+    if (!query.trim()) { setMemberSearchResults([]); return }
+    memberSearchTimeout.current = setTimeout(async () => {
+      setMemberSearchLoading(true)
+      try {
+        const res = await fetch(`/api/members?search=${encodeURIComponent(query.trim())}&limit=6`)
+        if (!res.ok) throw new Error()
+        const json = await res.json() as { members?: MemberSearchResult[] } | MemberSearchResult[]
+        const list = Array.isArray(json) ? json : (json.members ?? [])
+        setMemberSearchResults(list)
+      } catch { setMemberSearchResults([]) }
+      finally { setMemberSearchLoading(false) }
+    }, 300)
+  }, [])
+
+  function selectMemberFromSearch(m: MemberSearchResult) {
+    setMemberId(m.id)
+    setShowMemberSearch(false)
+    setMemberSearchQuery('')
+    setMemberSearchResults([])
+    setTimeout(() => spentRef.current?.focus(), 100)
+  }
 
   // Load checkin missions + stamp cards on mount
   useEffect(() => {
@@ -324,6 +380,67 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
           </div>
           {cameraError && (
             <p className="text-xs text-red-500">{cameraError}</p>
+          )}
+        </div>
+
+        {/* Member search toggle */}
+        <div>
+          <button
+            type="button"
+            onClick={() => {
+              setShowMemberSearch((v) => !v)
+              setMemberSearchQuery('')
+              setMemberSearchResults([])
+            }}
+            className="text-xs text-blue-600 hover:text-blue-800 underline underline-offset-2 transition"
+          >
+            {showMemberSearch ? '▲ 收起搜尋' : '找不到 QR Code？搜尋姓名或手機'}
+          </button>
+
+          {showMemberSearch && (
+            <div className="mt-2 space-y-2">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={memberSearchQuery}
+                  onChange={(e) => handleMemberSearch(e.target.value)}
+                  placeholder="輸入姓名或手機號碼…"
+                  autoFocus
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+                {memberSearchLoading && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">搜尋中…</span>
+                )}
+              </div>
+
+              {memberSearchResults.length > 0 && (
+                <ul className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden divide-y divide-gray-100">
+                  {memberSearchResults.map((m) => (
+                    <li key={m.id}>
+                      <button
+                        type="button"
+                        onClick={() => selectMemberFromSearch(m)}
+                        className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-left hover:bg-blue-50 transition"
+                      >
+                        <span>
+                          <span className="font-medium text-gray-900">{m.name ?? '（未命名）'}</span>
+                          {m.phone && (
+                            <span className="ml-2 text-xs text-gray-400">{m.phone}</span>
+                          )}
+                        </span>
+                        <span className="text-xs text-gray-400 whitespace-nowrap ml-4">
+                          {tierDisplayMap[m.tier] ?? m.tier} · {formatNumber(m.points)} pt
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {memberSearchQuery.trim() && !memberSearchLoading && memberSearchResults.length === 0 && (
+                <p className="text-xs text-gray-400 px-1">找不到符合的會員</p>
+              )}
+            </div>
           )}
         </div>
 

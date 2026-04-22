@@ -49,6 +49,10 @@ export default function MemberTable({ members, tierSettings }: Props) {
   const [localMembers, setLocalMembers] = useState<Member[]>(members)
   const [search, setSearch] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  // Confirm modal state
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null)
 
   // Modals / panels
   const [addPointsTarget, setAddPointsTarget] = useState<Member | null>(null)
@@ -56,27 +60,28 @@ export default function MemberTable({ members, tierSettings }: Props) {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  async function handleDelete(memberId: string, memberName: string | null) {
-    const displayName = memberName?.trim() || '此會員'
-    if (
-      !window.confirm(
-        `確定要刪除會員「${displayName}」？\n\n此操作無法復原，點數與優惠券紀錄都會一併刪除。`
-      )
-    )
-      return
+  function handleDelete(memberId: string, memberName: string | null) {
+    setDeleteError(null)
+    setConfirmDelete({ id: memberId, name: memberName?.trim() || '此會員' })
+  }
 
+  async function confirmDeleteMember() {
+    if (!confirmDelete) return
+    const { id: memberId } = confirmDelete
     setDeletingId(memberId)
+    setDeleteError(null)
     try {
       const res = await fetch(`/api/members/${memberId}`, { method: 'DELETE' })
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))
-        alert((json as { error?: string }).error ?? '刪除失敗，請稍後再試。')
+        setDeleteError((json as { error?: string }).error ?? '刪除失敗，請稍後再試。')
         return
       }
+      setConfirmDelete(null)
       setLocalMembers((prev) => prev.filter((m) => m.id !== memberId))
       router.refresh()
     } catch {
-      alert('刪除時發生網路錯誤，請稍後再試。')
+      setDeleteError('刪除時發生網路錯誤，請稍後再試。')
     } finally {
       setDeletingId(null)
     }
@@ -236,6 +241,42 @@ export default function MemberTable({ members, tierSettings }: Props) {
           member={detailTarget}
           onClose={() => setDetailTarget(null)}
         />
+      )}
+
+      {/* ── Delete confirm modal ───────────────────────────────────────────── */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-base font-semibold text-zinc-900 mb-2">確定要刪除會員？</h2>
+            <p className="text-sm text-zinc-500 mb-1">
+              即將刪除會員「<strong className="text-zinc-800">{confirmDelete.name}</strong>」。
+            </p>
+            <p className="text-sm text-zinc-500 mb-5">
+              此操作無法復原，點數與優惠券紀錄都會一併刪除。
+            </p>
+            {deleteError && (
+              <p className="mb-4 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-600">
+                {deleteError}
+              </p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setConfirmDelete(null); setDeleteError(null) }}
+                disabled={!!deletingId}
+                className="flex-1 rounded-xl border border-zinc-200 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => void confirmDeleteMember()}
+                disabled={!!deletingId}
+                className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition disabled:opacity-60"
+              >
+                {deletingId ? '刪除中…' : '確認刪除'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

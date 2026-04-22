@@ -107,7 +107,7 @@ export default function TransactionsPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">點數異動紀錄</h1>
-        <p className="mt-1 text-sm text-zinc-500">查看所有會員的點數變動歷史</p>
+        <p className="mt-1 text-sm text-zinc-600">查看所有會員的點數變動歷史</p>
       </div>
 
       {error && (

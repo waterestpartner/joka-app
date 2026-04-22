@@ -375,7 +375,7 @@ export default function PushPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">發送推播</h1>
-        <p className="mt-1 text-sm text-zinc-500">透過 LINE 官方帳號發送訊息給會員</p>
+        <p className="mt-1 text-sm text-zinc-600">透過 LINE 官方帳號發送訊息給會員</p>
       </div>
 
       {/* Compose card */}

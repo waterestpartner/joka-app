@@ -218,7 +218,7 @@ export default function LotteriesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">抽獎活動</h1>
-          <p className="mt-1 text-sm text-zinc-500">建立隨機抽獎，從符合資格的會員中選出得獎者</p>
+          <p className="mt-1 text-sm text-zinc-600">建立隨機抽獎，從符合資格的會員中選出得獎者</p>
         </div>
         <button onClick={() => { setShowForm(true); setFormData(EMPTY_FORM); setFormError(null) }}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
@@ -363,7 +363,7 @@ export default function LotteriesPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h2 className="text-lg font-bold text-zinc-900">{detail.name}</h2>
-                    {detail.description && <p className="text-sm text-zinc-500 mt-1">{detail.description}</p>}
+                    {detail.description && <p className="text-sm text-zinc-600 mt-1">{detail.description}</p>}
                   </div>
                   {detail.status !== 'cancelled' && (
                     <button onClick={() => handleCancel(detail.id)}

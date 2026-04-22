@@ -328,6 +328,20 @@ export default function MemberCardPage() {
             </Link>
           ))}
         </div>
+        {/* 品牌卡包 — 獨立一排，視覺上與上方快捷功能區隔 */}
+        <Link
+          href={`/t/${tenantSlug}/my-brands`}
+          className="mt-2 flex items-center justify-between rounded-2xl bg-white border border-zinc-100 shadow-sm px-4 py-3 active:scale-[.99] transition"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-xl">🪪</span>
+            <div>
+              <p className="text-sm font-semibold text-gray-800">我的品牌卡包</p>
+              <p className="text-xs text-gray-400">查看所有品牌會員點數</p>
+            </div>
+          </div>
+          <span className="text-sm text-gray-400">›</span>
+        </Link>
       </section>
 
       {/* ── 集章卡進度 ────────────────────────────────────── */}

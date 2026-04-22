@@ -231,7 +231,7 @@ export default async function OverviewPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">數據總覽</h1>
-        <p className="mt-1 text-sm text-zinc-500">
+        <p className="mt-1 text-sm text-zinc-600">
           歡迎回來，{email}
           {tenant && <span className="ml-2 text-zinc-400">— {tenant.name}</span>}
         </p>

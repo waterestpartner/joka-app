@@ -43,6 +43,8 @@ export default function SurveysLiffPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [submitResult, setSubmitResult] = useState<{ pointsEarned: number } | null>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!idToken || !tenantSlug) return
@@ -102,12 +104,14 @@ export default function SurveysLiffPage() {
 
   async function handleSubmit() {
     if (!activeSurvey || !idToken || !tenantSlug) return
+    setValidationError(null)
+    setSubmitError(null)
     // Validate required
     for (const q of activeSurvey.questions) {
       if (!q.is_required) continue
       const ans = answers[q.id]
       if (!ans || (Array.isArray(ans) && ans.length === 0) || (typeof ans === 'string' && !ans.trim())) {
-        alert(`請回答「${q.question_text}」`)
+        setValidationError(`請回答「${q.question_text}」`)
         return
       }
     }
@@ -129,7 +133,7 @@ export default function SurveysLiffPage() {
       // Refresh survey list to mark as completed
       void load()
     } catch (e) {
-      alert(e instanceof Error ? e.message : '提交失敗')
+      setSubmitError(e instanceof Error ? e.message : '提交失敗')
     } finally {
       setSubmitting(false)
     }
@@ -238,6 +242,16 @@ export default function SurveysLiffPage() {
               </div>
             ))}
 
+            {validationError && (
+              <p className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5 text-sm text-amber-700">
+                ⚠️ {validationError}
+              </p>
+            )}
+            {submitError && (
+              <p className="rounded-xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm text-red-600">
+                ⚠️ {submitError}
+              </p>
+            )}
             <button onClick={handleSubmit} disabled={submitting}
               className="w-full py-3.5 rounded-xl text-sm font-bold text-white disabled:opacity-60 transition-all"
               style={{ backgroundColor: '#06C755' }}>

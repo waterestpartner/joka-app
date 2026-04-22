@@ -206,7 +206,7 @@ export default function RichMenuPage() {
     <div className="max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">Rich Menu 管理</h1>
-        <p className="text-sm text-zinc-500 mt-1">設定 LINE 聊天室底部的快捷選單</p>
+        <p className="text-sm text-zinc-600 mt-1">設定 LINE 聊天室底部的快捷選單</p>
       </div>
 
       {error && (

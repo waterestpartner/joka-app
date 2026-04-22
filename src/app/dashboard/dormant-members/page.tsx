@@ -138,7 +138,7 @@ export default function DormantMembersPage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">沉睡會員</h1>
-          <p className="text-sm text-zinc-500 mt-1">找出長時間未消費的會員，發送喚醒訊息</p>
+          <p className="text-sm text-zinc-600 mt-1">找出長時間未消費的會員，發送喚醒訊息</p>
         </div>
         <button
           onClick={() => setShowPushForm(true)}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -59,6 +60,7 @@ export default function AnnouncementsPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [confirmDeleteAnnouncement, setConfirmDeleteAnnouncement] = useState<Announcement | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -145,10 +147,16 @@ export default function AnnouncementsPage() {
     setToggling(null)
   }
 
-  async function handleDelete(a: Announcement) {
-    if (!confirm(`確定要刪除公告「${a.title}」？`)) return
+  function handleDelete(a: Announcement) {
+    setConfirmDeleteAnnouncement(a)
+  }
+
+  async function confirmDeleteAnn() {
+    if (!confirmDeleteAnnouncement) return
+    const a = confirmDeleteAnnouncement
     setDeleting(a.id)
     await fetch(`/api/announcements/${a.id}`, { method: 'DELETE' })
+    setConfirmDeleteAnnouncement(null)
     setAnnouncements((prev) => prev.filter((x) => x.id !== a.id))
     setDeleting(null)
   }
@@ -161,7 +169,7 @@ export default function AnnouncementsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">公告管理</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-zinc-600">
             建立最新消息，顯示在會員 LIFF 頁面上
             {publishedCount > 0 && <span className="ml-2 text-[#06C755] font-medium">目前 {publishedCount} 則公告上架中</span>}
           </p>
@@ -271,7 +279,7 @@ export default function AnnouncementsPage() {
                         <span className="flex-shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-400">草稿</span>
                       )}
                     </div>
-                    <p className="text-sm text-zinc-500 mt-1 line-clamp-2">{a.content}</p>
+                    <p className="text-sm text-zinc-600 mt-1 line-clamp-2">{a.content}</p>
                     <div className="flex gap-4 mt-2 text-xs text-zinc-400">
                       {a.is_published && a.published_at && <span>上架：{formatDate(a.published_at)}</span>}
                       {a.expires_at && <span>到期：{formatDate(a.expires_at)}</span>}
@@ -302,6 +310,18 @@ export default function AnnouncementsPage() {
             )
           })}
         </div>
+      )}
+
+      {confirmDeleteAnnouncement && (
+        <ConfirmDialog
+          title="確定要刪除公告？"
+          message={`即將刪除「${confirmDeleteAnnouncement.title}」，此操作無法復原。`}
+          confirmLabel="刪除"
+          danger
+          loading={!!deleting}
+          onConfirm={() => void confirmDeleteAnn()}
+          onCancel={() => setConfirmDeleteAnnouncement(null)}
+        />
       )}
     </div>
   )

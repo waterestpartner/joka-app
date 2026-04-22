@@ -258,7 +258,7 @@ export default function AnalyticsPage() {
       {/* Page header */}
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">數據報表</h1>
-        <p className="text-sm text-zinc-500 mt-1">整體會員、點數、優惠券與推播概況</p>
+        <p className="text-sm text-zinc-600 mt-1">整體會員、點數、優惠券與推播概況</p>
       </div>
 
       {/* ── Section 1: Member summary ── */}
