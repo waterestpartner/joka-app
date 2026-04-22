@@ -57,10 +57,10 @@
 - [x] 加倍點數活動 CRUD — `/dashboard/point-multipliers` — ✅ Create + Edit 驗證（2026-04-22）
 - [x] 自訂會員欄位定義 — `POST /api/custom-fields` — ✅ 建立驗證通過（2026-04-22）
 - [x] Webhook 設定 — `POST /api/webhooks` — ✅ 建立驗證通過（2026-04-22）
-- [ ] Webhook 投遞記錄 — `GET /api/webhooks/deliveries`
-- [ ] Webhook 實際觸發（會員事件時是否有送出）
-- [ ] 會員活動時間軸 API — `GET /api/members/[id]/timeline`
-- [ ] 同期留存分析 — `GET /api/analytics` → `cohortRetention`
+- [x] Webhook 投遞記錄 — `GET /api/webhooks/deliveries?webhookId=...` — ✅ 需帶 webhookId，回傳空陣列正常（2026-04-22）
+- [ ] Webhook 實際觸發（會員事件時是否有送出）— 需配合真實事件觸發驗證
+- [x] 會員活動時間軸 API — `GET /api/members/[id]/timeline` — ✅ 回傳 Bevis 的完整事件流（points/coupon）（2026-04-22）
+- [x] 同期留存分析 — `GET /api/analytics` → `cohortRetention` — ✅ 已包含在 analytics 驗證中（2026-04-22）
 
 ### LIFF 會員端（需真實 LINE 環境 + 手機）
 - [ ] 會員註冊（含推薦碼） — `/t/[slug]/register`
