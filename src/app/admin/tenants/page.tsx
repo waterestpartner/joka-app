@@ -12,6 +12,13 @@ interface TenantRow {
   logo_url: string | null
 }
 
+interface TemplateOption {
+  key: string
+  display_name: string
+  description: string | null
+  icon: string | null
+}
+
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('zh-TW', {
     year: 'numeric',
@@ -26,9 +33,18 @@ export default function AdminTenantsPage() {
   const [showForm, setShowForm] = useState(false)
 
   // New tenant form state
-  const [form, setForm] = useState({ name: '', slug: '', adminEmail: '', primaryColor: '#06C755' })
+  const [form, setForm] = useState({
+    name: '',
+    slug: '',
+    adminEmail: '',
+    primaryColor: '#06C755',
+    industryTemplateKey: '',
+  })
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+
+  // 產業範本（新增租戶時可選）
+  const [templates, setTemplates] = useState<TemplateOption[]>([])
 
   async function fetchTenants() {
     setLoading(true)
@@ -39,8 +55,16 @@ export default function AdminTenantsPage() {
     setLoading(false)
   }
 
+  async function fetchTemplates() {
+    const res = await fetch('/api/admin/industry-templates')
+    if (res.ok) {
+      setTemplates(await res.json())
+    }
+  }
+
   useEffect(() => {
     fetchTenants()
+    fetchTemplates()
   }, [])
 
   async function handleCreate(e: React.FormEvent) {
@@ -56,7 +80,13 @@ export default function AdminTenantsPage() {
 
     if (res.ok) {
       setShowForm(false)
-      setForm({ name: '', slug: '', adminEmail: '', primaryColor: '#06C755' })
+      setForm({
+        name: '',
+        slug: '',
+        adminEmail: '',
+        primaryColor: '#06C755',
+        industryTemplateKey: '',
+      })
       await fetchTenants()
     } else {
       const data = await res.json().catch(() => ({}))
@@ -147,6 +177,34 @@ export default function AdminTenantsPage() {
                   />
                   <span className="text-sm text-zinc-500">{form.primaryColor}</span>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">
+                  產業範本
+                </label>
+                <select
+                  value={form.industryTemplateKey}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, industryTemplateKey: e.target.value }))
+                  }
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755]"
+                >
+                  <option value="">不套用範本（空白起步）</option>
+                  {templates.map((t) => (
+                    <option key={t.key} value={t.key}>
+                      {t.icon ? `${t.icon} ` : ''}{t.display_name}
+                    </option>
+                  ))}
+                </select>
+                {form.industryTemplateKey && (
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {templates.find((t) => t.key === form.industryTemplateKey)?.description ?? ''}
+                  </p>
+                )}
+                <p className="mt-1 text-xs text-zinc-400">
+                  選擇範本會自動建立對應的會員等級、自訂欄位、推播範本與建議任務清單
+                </p>
               </div>
 
               {formError && (

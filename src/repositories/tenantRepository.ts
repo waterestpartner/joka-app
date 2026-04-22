@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
+import { applyTemplateToTenant } from '@/repositories/industryTemplateRepository'
 import { Tenant, TenantUser, TierSetting } from '@/types/tenant'
 
 // 公開落地頁用：slug 是 URL path，本來就是公開資訊
@@ -120,11 +121,12 @@ export async function createTenant(data: {
   slug: string
   adminEmail: string
   primaryColor?: string
+  industryTemplateKey?: string
 }): Promise<Tenant | null> {
   try {
     const supabase = createSupabaseAdminClient()
 
-    // 1. 建立 tenant row
+    // 1. 建立 tenant row（記錄使用的產業範本 key）
     const { data: tenant, error: tenantError } = await supabase
       .from('tenants')
       .insert({
@@ -132,6 +134,7 @@ export async function createTenant(data: {
         slug: data.slug,
         primary_color: data.primaryColor ?? '#06C755',
         push_enabled: true,
+        industry_template_key: data.industryTemplateKey ?? null,
       })
       .select()
       .single()
@@ -151,6 +154,18 @@ export async function createTenant(data: {
     if (userError) {
       console.error('[createTenant] tenant_users error:', userError)
       // 不 rollback tenant，讓 admin 手動補
+    }
+
+    // 3. 套用產業範本（如果有指定）
+    if (data.industryTemplateKey) {
+      const result = await applyTemplateToTenant(
+        (tenant as Tenant).id,
+        data.industryTemplateKey
+      )
+      if (!result.applied) {
+        console.error('[createTenant] template apply error:', result.error)
+        // 不 rollback tenant，讓 admin 事後手動補
+      }
     }
 
     return tenant as Tenant

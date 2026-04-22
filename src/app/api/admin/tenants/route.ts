@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   if (!isAdminAuth(auth)) return auth
 
   const body = await req.json().catch(() => ({}))
-  const { name, slug, adminEmail, primaryColor } = body ?? {}
+  const { name, slug, adminEmail, primaryColor, industryTemplateKey } = body ?? {}
 
   if (!name || !slug || !adminEmail) {
     return NextResponse.json(
@@ -34,7 +34,13 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const tenant = await createTenant({ name, slug, adminEmail, primaryColor })
+  const tenant = await createTenant({
+    name,
+    slug,
+    adminEmail,
+    primaryColor,
+    industryTemplateKey: industryTemplateKey || undefined,
+  })
   if (!tenant) {
     return NextResponse.json(
       { error: '建立失敗，slug 可能已被使用' },
