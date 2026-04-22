@@ -259,6 +259,25 @@ export default function SettingsPage() {
         <p className="mt-1 text-sm text-zinc-600">設定您的品牌外觀與 LINE 整合資訊</p>
       </div>
 
+      {/* 產業範本入口 */}
+      <a
+        href="/dashboard/settings/template"
+        className="block bg-white rounded-2xl border border-zinc-200 p-5 hover:border-[#06C755] hover:shadow-sm transition group"
+      >
+        <div className="flex items-center gap-4">
+          <span className="text-3xl">📦</span>
+          <div className="flex-1">
+            <div className="text-sm font-semibold text-zinc-900 group-hover:text-[#06C755] transition">
+              產業範本
+            </div>
+            <div className="text-xs text-zinc-500 mt-0.5">
+              一鍵套用美容 / 餐飲 / 健身 / B2B 專屬的會員等級、自訂欄位、推播與建議任務
+            </div>
+          </div>
+          <span className="text-zinc-400 group-hover:text-[#06C755] transition">→</span>
+        </div>
+      </a>
+
       <div className="bg-white rounded-2xl border border-zinc-200 p-8">
         {loading ? (
           <div className="py-12 text-center text-sm text-zinc-400">載入中…</div>

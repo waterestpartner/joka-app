@@ -18,6 +18,7 @@ export interface Tenant {
   points_expire_days: number | null   // 點數到期天數（null = 永不到期）
   birthday_bonus_points: number       // 生日禮物點數（0 = 僅發祝賀訊息）
   dormant_reminder_days: number | null // 沉睡喚醒天數（null = 停用）
+  industry_template_key: string | null // 目前套用的產業範本 key（null = 未套用）
   created_at: string
 }
 

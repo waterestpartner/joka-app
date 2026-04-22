@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { getTenantById } from '@/repositories/tenantRepository'
 import { formatNumber } from '@/lib/utils'
 import type { PushLog } from '@/types/push'
+import SetupTasksCard from '@/components/dashboard/SetupTasksCard'
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -335,6 +336,9 @@ export default async function OverviewPage() {
 
       {/* ── Setup Wizard（LINE 整合未完成時顯示）── */}
       <SetupCard steps={setupSteps} />
+
+      {/* ── 建議任務清單（有 tenant_setup_tasks 時顯示）── */}
+      <SetupTasksCard />
 
       {/* ── Stat cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

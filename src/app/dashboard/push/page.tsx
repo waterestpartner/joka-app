@@ -15,6 +15,7 @@ function formatDate(iso: string) {
 interface TierSetting { id: string; tier: string; tier_display_name: string; min_points: number }
 interface MemberCounts { all: number; byTier: Record<string, number> }
 interface Tag { id: string; name: string; color: string }
+interface PushTemplateRow { id: string; title: string; content: string; sort_order: number }
 interface ScheduledPush {
   id: string; tenant_id: string; message: string; target: string
   scheduled_at: string; status: 'pending' | 'sent' | 'failed' | 'cancelled'
@@ -206,6 +207,7 @@ export default function PushPage() {
   const [tiers, setTiers] = useState<TierSetting[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [counts, setCounts] = useState<MemberCounts | null>(null)
+  const [pushTemplates, setPushTemplates] = useState<PushTemplateRow[]>([])
   const [scheduledPushes, setScheduledPushes] = useState<ScheduledPush[]>([])
   const [scheduledLoading, setScheduledLoading] = useState(true)
   const [cancelling, setCancelling] = useState<string | null>(null)
@@ -214,14 +216,16 @@ export default function PushPage() {
 
   // ── Load metadata ─────────────────────────────────────────────────────────
   const loadMeta = useCallback(async () => {
-    const [tierRes, countRes, tagRes] = await Promise.all([
+    const [tierRes, countRes, tagRes, tplRes] = await Promise.all([
       fetch('/api/tier-settings'),
       fetch('/api/push?count=true'),
       fetch('/api/tags'),
+      fetch('/api/dashboard/push-templates'),
     ])
     if (tierRes.ok) setTiers(await tierRes.json())
     if (countRes.ok) setCounts(await countRes.json())
     if (tagRes.ok) setTags(await tagRes.json())
+    if (tplRes.ok) setPushTemplates(await tplRes.json())
   }, [])
 
   const fetchLogs = useCallback(async () => {
@@ -515,7 +519,37 @@ export default function PushPage() {
           {/* ── Text message ── */}
           {msgType === 'text' && (
             <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1.5">訊息內容</label>
+              <div className="flex items-end justify-between mb-1.5 gap-3">
+                <label className="block text-sm font-medium text-zinc-700">訊息內容</label>
+                {pushTemplates.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-zinc-400">從範本載入：</span>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const tpl = pushTemplates.find((t) => t.id === e.target.value)
+                        if (tpl) {
+                          if (
+                            message.trim() &&
+                            !confirm(`目前已有輸入內容，確認用「${tpl.title}」覆蓋？`)
+                          ) {
+                            return
+                          }
+                          setMessage(tpl.content)
+                        }
+                      }}
+                      className="text-xs rounded-md border border-zinc-300 bg-white px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#06C755]"
+                    >
+                      <option value="">選擇範本…</option>
+                      {pushTemplates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
               <textarea
                 value={message} onChange={(e) => setMessage(e.target.value)}
                 rows={5} maxLength={5000} placeholder="輸入要發送的訊息…"
