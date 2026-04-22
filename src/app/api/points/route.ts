@@ -11,6 +11,7 @@ import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { pushTextMessage } from '@/lib/line-messaging'
 import { getActiveMultiplier } from '@/lib/point-multiplier'
 import { logAudit } from '@/lib/audit'
+import { fireWebhooks } from '@/lib/webhooks'
 import type { PointTransactionType } from '@/types/member'
 
 // ── GET /api/points ───────────────────────────────────────────────────────────
@@ -319,6 +320,25 @@ export async function POST(req: NextRequest) {
         note: txNote ?? undefined,
       },
     })
+
+    // Fire webhook for points events (fire-and-forget)
+    if (numAmount > 0) {
+      void fireWebhooks(auth.tenantId, 'points.earned', {
+        member_id: memberId,
+        amount: numAmount,
+        new_total: newTotalPoints,
+        type: txType,
+        transaction_id: transaction.id,
+      })
+    } else if (numAmount < 0) {
+      void fireWebhooks(auth.tenantId, 'points.spent', {
+        member_id: memberId,
+        amount: numAmount,
+        new_total: newTotalPoints,
+        type: txType,
+        transaction_id: transaction.id,
+      })
+    }
 
     return NextResponse.json(
       { ...transaction, newTotalPoints, tierUpgraded, tierDowngraded, newTier: newTierKey },

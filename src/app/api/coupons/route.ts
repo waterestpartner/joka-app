@@ -13,6 +13,7 @@ import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { pushTextMessage } from '@/lib/line-messaging'
 import { logAudit } from '@/lib/audit'
+import { fireWebhooks } from '@/lib/webhooks'
 import type { CouponType } from '@/types/coupon'
 
 // ── PATCH /api/coupons ────────────────────────────────────────────────────────
@@ -274,6 +275,12 @@ export async function POST(req: NextRequest) {
           target_type: 'member',
           target_id: memberId,
           payload: { couponId },
+        })
+
+        void fireWebhooks(auth.tenantId, 'coupon.issued', {
+          member_id: memberId,
+          coupon_id: couponId,
+          member_coupon_id: memberCoupon.id,
         })
 
         // 推播通知：after() 確保在回應送出後才執行，不阻塞 API 回應

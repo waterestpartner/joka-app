@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
+import { fireWebhooks } from '@/lib/webhooks'
 
 // ── GET ───────────────────────────────────────────────────────────────────────
 
@@ -88,6 +89,12 @@ export async function POST(req: NextRequest) {
     action: 'coupon.scan_redeem',
     target_type: 'member_coupon',
     target_id: memberCouponId,
+  })
+
+  void fireWebhooks(auth.tenantId, 'coupon.redeemed', {
+    member_coupon_id: memberCouponId,
+    member_id: (updated as Record<string, unknown>).member_id,
+    coupon_id: (updated as Record<string, unknown>).coupon_id,
   })
 
   return NextResponse.json({ success: true, memberCoupon: updated })

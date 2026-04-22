@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -38,8 +38,20 @@ export default function CouponScanPage() {
   const [lookupLoading, setLookupLoading] = useState(false)
   const [redeemState, setRedeemState] = useState<'idle' | 'confirming' | 'redeeming' | 'done' | 'error'>('idle')
   const [redeemError, setRedeemError] = useState<string | null>(null)
+  const [tierDisplayMap, setTierDisplayMap] = useState<Record<string, string>>({})
 
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    fetch('/api/tier-settings')
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: { tier: string; tier_display_name: string | null }[]) => {
+        const map: Record<string, string> = {}
+        for (const ts of data) map[ts.tier] = ts.tier_display_name ?? ts.tier
+        setTierDisplayMap(map)
+      })
+      .catch(() => {})
+  }, [])
 
   // ── Lookup ────────────────────────────────────────────────────────────────
   const handleLookup = useCallback(async (id: string) => {
@@ -197,7 +209,7 @@ export default function CouponScanPage() {
             </div>
             <div className="text-right">
               <p className="text-xs text-zinc-400">等級</p>
-              <p className="text-sm font-semibold text-zinc-700">{member?.tier}</p>
+              <p className="text-sm font-semibold text-zinc-700">{member ? (tierDisplayMap[member.tier] ?? member.tier) : ''}</p>
             </div>
           </div>
 

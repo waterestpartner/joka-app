@@ -39,6 +39,7 @@ export default function SegmentsPage() {
   const [segments, setSegments] = useState<Segment[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [loading, setLoading] = useState(true)
+  const [tierDisplayMap, setTierDisplayMap] = useState<Record<string, string>>({})
 
   const [showForm, setShowForm] = useState(false)
   const [formName, setFormName] = useState('')
@@ -69,6 +70,17 @@ export default function SegmentsPage() {
   }, [])
 
   useEffect(() => { void load() }, [load])
+
+  useEffect(() => {
+    fetch('/api/tier-settings')
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: { tier: string; tier_display_name: string | null }[]) => {
+        const map: Record<string, string> = {}
+        for (const ts of data) map[ts.tier] = ts.tier_display_name ?? ts.tier
+        setTierDisplayMap(map)
+      })
+      .catch(() => {})
+  }, [])
 
   async function handleCreate() {
     if (!formName.trim()) { alert('請填寫分群名稱'); return }
@@ -344,7 +356,7 @@ export default function SegmentsPage() {
                       <div key={m.id} className="text-xs text-zinc-500 flex gap-3">
                         <span className="font-medium text-zinc-700">{m.name ?? '—'}</span>
                         <span>{m.phone ?? '—'}</span>
-                        <span>{m.tier}</span>
+                        <span>{tierDisplayMap[m.tier] ?? m.tier}</span>
                         <span>{m.points} pt</span>
                       </div>
                     ))}

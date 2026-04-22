@@ -31,6 +31,7 @@ export default function DormantMembersPage() {
   const [search, setSearch] = useState('')
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const [tierDisplayMap, setTierDisplayMap] = useState<Record<string, string>>({})
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [pushMessage, setPushMessage] = useState('')
   const [showPushForm, setShowPushForm] = useState(false)
@@ -50,6 +51,17 @@ export default function DormantMembersPage() {
   }, [])
 
   useEffect(() => { void load(1, days, '') }, [load, days])
+
+  useEffect(() => {
+    fetch('/api/tier-settings')
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: { tier: string; tier_display_name: string | null }[]) => {
+        const map: Record<string, string> = {}
+        for (const ts of data) map[ts.tier] = ts.tier_display_name ?? ts.tier
+        setTierDisplayMap(map)
+      })
+      .catch(() => {})
+  }, [])
 
   function handleSearchChange(q: string) {
     setSearch(q)
@@ -255,7 +267,7 @@ export default function DormantMembersPage() {
                       <td className="px-4 py-3 font-medium text-zinc-800">{m.name ?? '—'}</td>
                       <td className="px-4 py-3 text-zinc-500">{m.phone ?? '—'}</td>
                       <td className="px-4 py-3">
-                        <span className="text-xs bg-zinc-100 text-zinc-600 rounded px-1.5 py-0.5">{m.tier}</span>
+                        <span className="text-xs bg-zinc-100 text-zinc-600 rounded px-1.5 py-0.5">{tierDisplayMap[m.tier] ?? m.tier}</span>
                       </td>
                       <td className="px-4 py-3 text-right text-zinc-600">{m.points}</td>
                       <td className="px-4 py-3 text-right text-zinc-400 whitespace-nowrap">

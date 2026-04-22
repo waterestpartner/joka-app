@@ -20,6 +20,7 @@ export default function BlacklistPage() {
   const [members, setMembers] = useState<BlockedMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [tierDisplayMap, setTierDisplayMap] = useState<Record<string, string>>({})
 
   // Block member form
   const [showBlockForm, setShowBlockForm] = useState(false)
@@ -46,6 +47,17 @@ export default function BlacklistPage() {
   }, [])
 
   useEffect(() => { void load() }, [load])
+
+  useEffect(() => {
+    fetch('/api/tier-settings')
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: { tier: string; tier_display_name: string | null }[]) => {
+        const map: Record<string, string> = {}
+        for (const ts of data) map[ts.tier] = ts.tier_display_name ?? ts.tier
+        setTierDisplayMap(map)
+      })
+      .catch(() => {})
+  }, [])
 
   async function searchMembers(q: string) {
     if (!q.trim()) { setSearchResults([]); return }
@@ -223,7 +235,7 @@ export default function BlacklistPage() {
                     <td className="px-5 py-3 font-medium text-zinc-800">{m.name ?? '—'}</td>
                     <td className="px-4 py-3 text-zinc-500">{m.phone ?? '—'}</td>
                     <td className="px-4 py-3 text-zinc-500">
-                      <span className="text-xs bg-zinc-100 text-zinc-600 rounded px-1.5 py-0.5 mr-1">{m.tier}</span>
+                      <span className="text-xs bg-zinc-100 text-zinc-600 rounded px-1.5 py-0.5 mr-1">{tierDisplayMap[m.tier] ?? m.tier}</span>
                       {m.points} pt
                     </td>
                     <td className="px-4 py-3 text-zinc-500 max-w-[200px] truncate">{m.blocked_reason ?? '—'}</td>

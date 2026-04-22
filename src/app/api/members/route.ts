@@ -6,6 +6,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { findOrCreatePlatformMember, upsertConsent } from '@/lib/platform-members'
+import { fireWebhooks } from '@/lib/webhooks'
 import type { Member } from '@/types/member'
 
 // ── GET /api/members ──────────────────────────────────────────────────────────
@@ -222,6 +223,14 @@ export async function POST(req: NextRequest) {
       // Fire-and-forget: run after response via after() if available, else as side effect
       void processReferral(supabase, tenant.id, created.id as string, referralCode.trim().toUpperCase())
     }
+
+    // Fire webhook for member.created (fire-and-forget)
+    void fireWebhooks(tenant.id, 'member.created', {
+      member_id: created.id as string,
+      name: (created.name as string) ?? null,
+      phone: (created.phone as string) ?? null,
+      tier: (created.tier as string) ?? 'basic',
+    })
 
     return NextResponse.json(created, { status: 201 })
   } catch (err) {
