@@ -277,11 +277,11 @@ export async function POST(req: NextRequest) {
           payload: { couponId },
         })
 
-        void fireWebhooks(auth.tenantId, 'coupon.issued', {
+        after(() => fireWebhooks(auth.tenantId, 'coupon.issued', {
           member_id: memberId,
           coupon_id: couponId,
           member_coupon_id: memberCoupon.id,
-        })
+        }))
 
         // 推播通知：after() 確保在回應送出後才執行，不阻塞 API 回應
         const tenantIdForPush = auth.tenantId

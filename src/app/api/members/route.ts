@@ -1,6 +1,6 @@
 // 會員 API 路由
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { getMembersByTenant } from '@/repositories/memberRepository'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
@@ -224,13 +224,13 @@ export async function POST(req: NextRequest) {
       void processReferral(supabase, tenant.id, created.id as string, referralCode.trim().toUpperCase())
     }
 
-    // Fire webhook for member.created (fire-and-forget)
-    void fireWebhooks(tenant.id, 'member.created', {
+    // Fire webhook for member.created (after response, to survive serverless lifecycle)
+    after(() => fireWebhooks(tenant.id, 'member.created', {
       member_id: created.id as string,
       name: (created.name as string) ?? null,
       phone: (created.phone as string) ?? null,
       tier: (created.tier as string) ?? 'basic',
-    })
+    }))
 
     return NextResponse.json(created, { status: 201 })
   } catch (err) {

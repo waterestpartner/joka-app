@@ -321,23 +321,23 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Fire webhook for points events (fire-and-forget)
+    // Fire webhook for points events (after response, to survive serverless lifecycle)
     if (numAmount > 0) {
-      void fireWebhooks(auth.tenantId, 'points.earned', {
+      after(() => fireWebhooks(auth.tenantId, 'points.earned', {
         member_id: memberId,
         amount: numAmount,
         new_total: newTotalPoints,
         type: txType,
         transaction_id: transaction.id,
-      })
+      }))
     } else if (numAmount < 0) {
-      void fireWebhooks(auth.tenantId, 'points.spent', {
+      after(() => fireWebhooks(auth.tenantId, 'points.spent', {
         member_id: memberId,
         amount: numAmount,
         new_total: newTotalPoints,
         type: txType,
         transaction_id: transaction.id,
-      })
+      }))
     }
 
     return NextResponse.json(
