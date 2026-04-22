@@ -1,6 +1,6 @@
 # JOKA TODO
 
-> 最後更新：2026-04-22（v0.10.0）
+> 最後更新：2026-04-22（v0.12.0 — Industry Templates 三波完成，待測試）
 
 ---
 
@@ -19,6 +19,109 @@
 - [x] **Bug 修復**：`CRON_SECRET` Vercel 環境變數含空白字元 — 移除重設 ✅（2026-04-22）
 - [x] Production cron 驗證（birthday + expire-points，正確 CRON_SECRET curl 通過）✅（2026-04-22）
 - [x] Webhook 實際觸發驗證 — points.earned delivery 建立，after() 修復確認 ✅（2026-04-22）
+
+---
+
+## 🆕 v0.12.0（本 session 完成，**尚未端對端測試**）
+
+### Industry Templates 系統（三波全部 committed）
+
+**Wave 1 — Foundation** (`commit 3d6052d`)
+- [x] DB migration：`industry_templates` + `tenants.industry_template_key` + `tenant_push_templates` + `tenant_setup_tasks` + RLS policies ✅ 已在 linked Supabase 執行
+- [x] 5 個內建範本 seed（general / beauty / restaurant / fitness / b2b）✅ 已 INSERT
+- [x] `src/types/industryTemplate.ts` — 型別定義
+- [x] `src/repositories/industryTemplateRepository.ts` — CRUD + `applyTemplateToTenant()`
+- [x] `createTenant()` 新增 `industryTemplateKey` 參數，自動套用範本
+
+**Wave 2 — Super Admin 範本 CRUD** (`commit 441a017`)
+- [x] Sidebar 連結「📦 產業範本」
+- [x] `/admin/templates` 列表頁（含 tenant_count、內建/自訂標籤、刪除守護）
+- [x] `/admin/templates/[key]` 編輯頁（5 tabs：基本/等級/欄位/推播/任務）
+- [x] API：POST `/api/admin/industry-templates`（upsert）/ GET/DELETE `/api/admin/industry-templates/[key]`
+
+**Wave 3 — 商家 Dashboard 整合** (`commit a9bddce`)
+- [x] Overview 建議任務卡片（`SetupTasksCard`）
+- [x] `/dashboard/settings/template` 範本切換頁（含 overwriteExisting 選項 + audit log）
+- [x] `/dashboard/push` 訊息內容支援「從範本載入」dropdown
+
+### ⚠️ Industry Templates 測試清單（全部待測）
+
+#### Super Admin — `/admin/*`
+- [ ] `/admin/templates` 看得到 5 個內建範本，每個顯示使用中 tenant 數
+- [ ] 點「編輯」→ `/admin/templates/beauty`，5 tabs 可切換、內容顯示正確
+- [ ] 編輯 beauty 的任一 tab 內容 → 儲存 → 重新整理後變更持續存在
+- [ ] 內建範本的「Key」欄位是 disabled 狀態（不可改）
+- [ ] `/admin/templates/new` → 輸入自訂 key（如 `retail_boutique`）→ 填完 5 tabs → 儲存
+- [ ] 儲存後 URL 跳轉到 `/admin/templates/retail_boutique`
+- [ ] 返回列表，自訂範本顯示「自訂」標籤 + 出現「刪除」按鈕
+- [ ] 刪除自訂範本後列表更新（內建的「刪除」按鈕本來就不會出現）
+- [ ] 切換 `is_active = false` 存檔 → 新增租戶的下拉選單不會出現這個
+
+#### Super Admin — 新增租戶連帶範本套用
+- [ ] `/admin/tenants` → 新增租戶，選「美容美髮 / SPA」→ 建立成功
+- [ ] 到 Supabase 查新建 tenant 的 `industry_template_key = 'beauty'`
+- [ ] 查該 tenant_id 的：
+  - [ ] `tier_settings`：3 筆（basic/silver/gold 或範本定義的等級）
+  - [ ] `custom_member_fields`：若範本有定義則有資料
+  - [ ] `tenant_push_templates`：若範本有定義則有資料
+  - [ ] `tenant_setup_tasks`：若範本有定義則有資料，且 `is_done = false`
+- [ ] 測試「不套用範本」選項建租戶 → 上述表應全部為空
+
+#### 商家 Dashboard — SetupTasksCard (Overview)
+- [ ] 有套範本的 tenant 登入後，overview 顯示建議任務卡片
+- [ ] 進度條比例正確（X / Y 完成）
+- [ ] 點任務左側 ○ → 變成 ✓（文字也變刪除線）
+- [ ] 重新整理後勾選狀態持續（寫回 DB 成功）
+- [ ] 有 `link` 的任務：hover 時整行可點擊跳轉
+- [ ] external link（http 開頭）開新分頁，internal link（/ 開頭）原分頁跳轉
+- [ ] 全部勾完後：標題變「🎉 建議任務已全部完成」+ 「關閉」連結出現
+- [ ] 點「關閉」卡片消失（重新整理又出現，因為 state 僅前端）
+- [ ] 沒有任何 setup tasks 的 tenant（例如選「不套用範本」建立的）→ 卡片自動隱藏
+
+#### 商家 Dashboard — 範本切換
+- [ ] `/dashboard/settings` 最上方看到「📦 產業範本」入口卡片
+- [ ] 點進去到 `/dashboard/settings/template`
+- [ ] 「目前使用中」區塊顯示正確的範本（名稱 + 描述 + icon）
+- [ ] 所有範本以卡片列出，選擇時邊框變綠
+- [ ] 目前使用中的範本卡片上有「使用中」綠色標籤
+- [ ] 選不同範本 + 不勾覆寫 → 點「套用」→ 成功 toast
+- [ ] 切換後：tier_settings / custom_member_fields 有合併新增（不會刪舊的）
+- [ ] 切換後：tenant_push_templates 會新增多筆（**不勾覆寫時會累積**，這是預期行為）
+- [ ] 勾「覆寫模式」再切換 → tenant_push_templates 先刪光再加新
+- [ ] 到 Supabase 查 `audit_logs` 看到 `action='apply_industry_template'` 記錄
+- [ ] 切換後：`tenants.industry_template_key` 已更新為新值
+
+#### 商家 Dashboard — Push 頁面範本載入
+- [ ] 訊息類型選「文字」→ 訊息內容欄右上看到「從範本載入」dropdown
+- [ ] Dropdown 列出所有 tenant_push_templates（title 為選項文字）
+- [ ] 在 textarea 空的狀態下選範本 → 內容直接填入
+- [ ] textarea 已有內容時選範本 → 跳 confirm「覆蓋？」
+- [ ] 沒有任何 tenant_push_templates 的 tenant → dropdown 完全不顯示
+- [ ] 訊息類型切到「Flex」→ dropdown 也消失（只在 text mode 顯示）
+
+#### 資安與 RLS 驗證
+- [ ] 非超管 email 打 `/api/admin/industry-templates` → 403
+- [ ] tenant A 的 owner 打 `/api/dashboard/setup-tasks` 只看到 tenant A 的任務
+- [ ] tenant A 的 owner 打 PATCH `/api/dashboard/setup-tasks` 帶 tenant B 的任務 id → 更新失敗（RLS + eq 雙重擋）
+
+---
+
+## 🆕 v0.11.0（上一個 session 完成）
+
+### Ocard-style settings UX
+- [x] P0 bug fix：LIFF ID 指引文字改為 `LINE Login Channel → LIFF → LIFF ID` ✅（2026-04-22）
+- [x] 每個 LINE 欄位加「去哪找？↗」外部連結 ✅（2026-04-22）
+- [x] 連線測試 API `POST /api/dashboard/test-line-connection` + UI 面板 ✅（2026-04-22）
+- [x] LINE 整合區塊設定完成度進度條（X/4）✅（2026-04-22）
+
+### ConfirmDialog rollout
+- [x] 新元件 `src/components/dashboard/ConfirmDialog.tsx` ✅（2026-04-22）
+- [x] Rollout 到 13+ 頁面取代 window.confirm ✅（2026-04-22）
+- [ ] 清查剩餘 window.confirm（`grep -rn 'window.confirm' src/` 確認無漏網）
+
+### Dashboard 視覺統一
+- [x] helper text text-zinc-400 → text-zinc-500 ✅（2026-04-22）
+- [x] page subtitle text-zinc-500 → text-zinc-600 ✅（2026-04-22）
 
 ---
 
@@ -134,6 +237,20 @@
 - [ ] CSV import 會員的 LINE 綁定機制（手機號比對 → 更新 line_uid）
 - [x] `members.notes` vs `member_notes` UI 整合 — MemberDetailPanel 改名為「快速備忘」並加說明連結 ✅（2026-04-22）
 - [x] 掃碼集點頁面支援用姓名/手機搜尋 — PointScanner 加「找不到 QR Code？搜尋姓名或手機」展開搜尋 ✅（2026-04-22）
+
+---
+
+## 🚀 v0.12+ 規劃（Ocard-style 下一步）
+
+### 中優先
+- [ ] Setup Wizard：新 tenant 第一次進 dashboard 時的導引流程（目前已有進度條，但沒有主動導引）
+- [ ] 清查並補齊剩餘 window.confirm → ConfirmDialog
+- [ ] Push 本地 commit 到 origin/main（本地領先 8 個 commit 未推）
+
+### 低優先 / 未來規劃
+- [ ] DB schema 擴充：`tenants.liff_provider_type`（enum）+ `tenants.line_login_channel_id`（備 LINE MINI App 轉換）
+- [ ] Stateless Token 遷移評估（目前用 30 天 long-lived，LINE 官方推薦 15 分鐘 stateless）
+- [ ] Concierge onboarding：高階方案的人工導入服務（跟 CresClab / Omnichat 看齊）
 
 ---
 
