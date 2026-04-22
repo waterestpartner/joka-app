@@ -1,7 +1,7 @@
 # HANDOFF.md — AI Session 交接記錄
 
 > 給下一個接手的 AI 看。每次 session 結束覆寫此檔案。
-> 最後更新：2026-04-22（v0.10.0）
+> 最後更新：2026-04-22（v0.10.0 — 文件 review session）
 
 ---
 
@@ -18,51 +18,15 @@
 
 ---
 
-## 這個 session（v0.10.0）完成了什麼
+## 這個 session 完成了什麼
 
-### Bug 修復
+這個 session **沒有新的 code 變更**。是一個純文件 review session：
 
-**1. Dashboard 4 頁面 tier 顯示 raw key 而非 display name**（commit `5e32d31`）
-- 問題：`/dashboard/blacklist`、`/dashboard/dormant-members`、`/dashboard/coupons/scan`、`/dashboard/segments` 顯示 `tier_7fa9f3` 而非「銀卡會員」
-- 根因：這 4 個頁面直接渲染 `m.tier`，沒做 tier_settings 映射
-- 修復：各頁面加獨立 `useEffect` 取 `/api/tier-settings` 並建 `tierDisplayMap`
-- 這是繼 `analytics` 之後同款 bug 的第 4~7 個出現點
+- 確認 CLAUDE.md、HANDOFF.md、TODO.md 已是最新狀態（v0.10.0）
+- 最後一個實際程式碼 commit 是 `aed9f50`（docs full rewrite）
+- 上一個功能 commit 是 `d636018`（after() webhook fix）
 
-**2. `fireWebhooks()` 從未被呼叫**（commit `5e32d31`）
-- 問題：Webhook 設定頁正常，但事件發生時 deliveries 始終為空
-- 根因：`src/lib/webhooks.ts` 的 `fireWebhooks()` 定義了但**整個 codebase 無人呼叫**（與 v0.8.0 的 `logAudit()` 完全相同的 bug 類型）
-- 修復：在 4 個 route 補上呼叫：
-  - `POST /api/points` → `points.earned` / `points.spent`
-  - `POST /api/members` → `member.created`
-  - `POST /api/coupons`（issue action）→ `coupon.issued`
-  - `POST /api/coupons/scan` → `coupon.redeemed`
-
-**3. `void fireWebhooks()` 被 serverless 提前終止**（commit `d636018`）
-- 問題：補上呼叫後，delivery record 仍未建立（0 筆）
-- 根因：Vercel serverless 在送出 response 後立即 kill execution context，`void asyncFn()` 後續的 DB insert 全部消失
-- 修復：改用 `after(() => fireWebhooks(...))` — 與 push notification 相同模式
-- 驗證：觸發 +10pt → 等 3 秒 → `deliveriesCount: 1`，event: `points.earned` ✅
-
-**4. Vercel production `CRON_SECRET` 含空白字元導致部署失敗**
-- 問題：`npx vercel --prod` 報錯 `CRON_SECRET contains leading or trailing whitespace`
-- 修復：`vercel env rm CRON_SECRET production --yes` + `echo -n "value" | vercel env add CRON_SECRET production`
-
-### 其他驗證與操作
-
-| 項目 | 結果 |
-|------|------|
-| Bevis 解除黑名單（測試後清理） | ✅ `DELETE /api/blacklist/{id}` 成功 |
-| 自訂欄位值 GET/POST | ✅ `memberId`（camelCase）+ `fieldId` + `value` upsert 正確 |
-| 公告管理 CRUD | ✅ POST status 201，GET listCount:1 |
-| Production cron `birthday` | ✅ `ok:true, todayMMDD:04-22` |
-| Production cron `expire-points` | ✅ `ok:true, totalExpiredMembers:0` |
-| Webhook delivery 端對端 | ✅ record ID `423698c7`，response_status:404（test URL 無效，屬預期） |
-
-### 部署
-
-- Commit `5e32d31` → Deploy 1（tier fix + fireWebhooks 初版）
-- Commit `d636018` → Deploy 2（after() 修復，webhook 交付驗證通過）
-- 兩次皆成功 aliased 到 `joka-app.vercel.app`
+> 下一個 session 可以直接接著做新功能，不需要任何額外 cleanup。
 
 ---
 
@@ -84,7 +48,7 @@
 | CSV 匯入（import_UUID 修復）/ CSV 匯出（tier display name） | ✅ |
 | 點數記錄（搜尋/篩選/分頁） | ✅ |
 | Audit Log 寫入（40 個 API）+ 讀取 | ✅ |
-| **Webhook 外送（after() 修復，delivery record 驗證）** | ✅ |
+| Webhook 外送（after() 修復，delivery record 驗證） | ✅ |
 | 分群 CRUD + 預覽、推播（立即/排程）、活動管理 | ✅ |
 | 抽獎、積分商城、標籤管理 | ✅ |
 | 加倍點數 CRUD、自動回覆規則 CRUD | ✅ |
@@ -129,7 +93,7 @@
 | 會員備註 DELETE / 會員刪除 無法自動測試 | 🟡 低 | 未修 | `window.confirm()` 讓 Chrome MCP timeout；真實瀏覽器操作正常 |
 | Webhook test URL 無效 | 🟡 低 | 待更新 | `https://webhook.site/test-joka` 回 404，delivery record 有建立但 success:false |
 | 掃碼集點需輸入 UUID | 🔵 UX | 未修 | 核銷頁只接受 member_coupon UUID；真實流程靠 QR code 掃碼，不影響邏輯 |
-| `members.notes` vs `member_notes` 表並存 | 🔵 UX | 未修 | 會員詳情有「備註」欄位存到 `members.notes`（行內）；另有 `member_notes` 表（結構化備註）；UI 未說明差異 |
+| `members.notes` vs `member_notes` 表並存 | 🔵 UX | 未修 | 會員詳情有行內備註欄位（`members.notes`）和結構化備註表（`member_notes`）；UI 未說明差異 |
 | LIFF 前台全部未 E2E 測試 | 🔴 未知風險 | 待測 | 需手機 + LINE App |
 
 ---
@@ -193,6 +157,7 @@ const search = (await searchParams).get('q')
 - DB 儲存的是 `tier` raw key（如 `tier_7fa9f3`）
 - 顯示必須從 `GET /api/tier-settings` 取 `tier_display_name` 做映射
 - 已修的頁面：analytics / blacklist / dormant-members / coupons-scan / segments / members
+- 任何新增顯示 tier 的頁面都要照同樣模式處理
 
 **7. CSV import 的 line_uid placeholder**
 - 離線匯入的會員 `line_uid = import_<UUID>`（不是真實 LINE UID）
@@ -203,42 +168,44 @@ const search = (await searchParams).get('q')
 
 ## 關鍵檔案清單
 
-### 最近動過的檔案（v0.10.0）
+### 上一個 session 動過的檔案（v0.10.0）
 ```
 src/app/api/points/route.ts              ← fireWebhooks(points.earned/spent) + after()
-src/app/api/members/route.ts             ← fireWebhooks(member.created) + after() + import after
+src/app/api/members/route.ts             ← fireWebhooks(member.created) + after()
 src/app/api/coupons/route.ts             ← fireWebhooks(coupon.issued) + after()
-src/app/api/coupons/scan/route.ts        ← fireWebhooks(coupon.redeemed) + after() + import after
+src/app/api/coupons/scan/route.ts        ← fireWebhooks(coupon.redeemed) + after()
 src/app/dashboard/blacklist/page.tsx     ← tier display name 映射（useEffect + tierDisplayMap）
 src/app/dashboard/dormant-members/page.tsx ← 同上
 src/app/dashboard/coupons/scan/page.tsx  ← 同上
 src/app/dashboard/segments/page.tsx      ← 同上
-CLAUDE.md / HANDOFF.md / TODO.md        ← 文件更新
 ```
 
 ### 最重要的檔案（永遠要知道這些在哪）
 ```
-src/lib/auth-helpers.ts         — Dashboard 認證守門員
-src/lib/supabase-admin.ts       — LIFF API 用的 Supabase client
-src/lib/webhooks.ts             — Webhook 外送邏輯（after() 模式）
-src/lib/audit.ts                — Audit log 寫入（after() 模式）
-src/lib/line-auth.ts            — LINE token 驗證（含 cache）
-src/repositories/pointRepository.ts — 點數 INSERT（唯一合法寫點數的地方）
-vercel.json                     — Cron 排程設定
+src/lib/auth-helpers.ts              — Dashboard 認證守門員（requireDashboardAuth）
+src/lib/supabase-admin.ts            — LIFF API 用的 Supabase admin client（繞 RLS）
+src/lib/webhooks.ts                  — Webhook 外送邏輯（HMAC-SHA256，after() 模式）
+src/lib/audit.ts                     — Audit log 寫入（after() 模式）
+src/lib/line-auth.ts                 — LINE token 驗證（含 5 分鐘 cache）
+src/lib/line-messaging.ts            — pushTextMessage()（送 LINE push）
+src/lib/platform-members.ts          — findOrCreatePlatformMember()（Model C，競態安全）
+src/repositories/pointRepository.ts  — 點數 INSERT（唯一合法寫點數的地方）
+vercel.json                          — Cron 排程設定（5 個 cron jobs）
+supabase/rls-policies-v2.sql         — 25 張表的完整 RLS 政策（已執行）
 ```
 
 ---
 
 ## Git 最近 10 個 commit
 ```
+aed9f50 docs: full rewrite of CLAUDE.md + HANDOFF.md + TODO.md for v0.10.0
 a035542 docs: update CLAUDE.md verified features to v0.10.0
 f3ad309 docs: update TODO + HANDOFF to v0.10.0
 d636018 fix: use after() for webhook firing to survive serverless lifecycle
 5e32d31 fix: tier display names + wire up fireWebhooks to 4 event routes
-14e31a5 docs: timeline, webhook deliveries, cohort retention as verified
+14e31a5 docs: mark timeline, webhook deliveries, cohort retention as verified
 3dc663c docs: v0.9.0 — full dashboard scan complete, cron verified, CSV import fixed
 81640f1 fix: CSV import line_uid null constraint by using placeholder UUID
 017cdeb docs: 更新 TODO — v0.8.0 後半段測試結果
 d66fd56 fix: analytics 等級分佈改用 tier_display_name 顯示
-02fc92b docs: v0.8.0 交接紀錄 — audit log 大修 + E2E 驗證
 ```

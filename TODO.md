@@ -48,7 +48,7 @@
 - [x] Phase 2：LIFF 註冊頁加同意書 checkbox → 寫入 platform_member_consents
 - [x] Phase 2：設定 Vercel cron schedule for backfill（04:00 UTC daily）
 - [x] Phase 3：backfill 完整性驗證 ✅（2026-04-22）
-- [ ] Phase 4：LIFF「我的品牌卡包」頁面（`/t/[slug]/my-brands`，API 已就緒）
+- [x] Phase 4：LIFF「我的品牌卡包」頁面（`/t/[slug]/my-brands`，已完成 2026-04-22）
 
 ---
 
@@ -126,14 +126,14 @@
 ## 🟢 待開發新功能
 
 ### 中優先
-- [ ] Model C Phase 4：LIFF「我的品牌卡包」頁面（AI 可獨立開發）
+- [x] Model C Phase 4：LIFF「我的品牌卡包」頁面 ✅（2026-04-22）
 - [ ] Webhook test URL 更新（webhook.site 取真實 UUID，驗證 success:true）
-- [ ] `window.confirm()` → React Modal（會員刪除 / 備註刪除，AI 可獨立開發）
+- [x] `window.confirm()` → React Modal（會員刪除 / 備註刪除）✅（2026-04-22）
 
 ### 低優先
 - [ ] CSV import 會員的 LINE 綁定機制（手機號比對 → 更新 line_uid）
-- [ ] `members.notes` vs `member_notes` UI 整合（目前兩個並存，使用者容易混淆）
-- [ ] 掃碼集點頁面支援用姓名/手機搜尋（目前只能輸入 UUID）
+- [x] `members.notes` vs `member_notes` UI 整合 — MemberDetailPanel 改名為「快速備忘」並加說明連結 ✅（2026-04-22）
+- [x] 掃碼集點頁面支援用姓名/手機搜尋 — PointScanner 加「找不到 QR Code？搜尋姓名或手機」展開搜尋 ✅（2026-04-22）
 
 ---
 
