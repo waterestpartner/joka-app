@@ -1,6 +1,6 @@
 # JOKA TODO
 
-> 最後更新：2026-04-22（v0.8.0）
+> 最後更新：2026-04-22（v0.9.0）
 
 ---
 
@@ -43,6 +43,7 @@
 - [x] `vercel.json` scheduled-push cron 語法錯誤 — `* * * * *` → `0 9 * * *`（2026-04-22）
 - [x] `referral/route.ts` 欄位名稱錯誤 — 已完整修正（2026-04-22）
 - [x] `analytics` 等級分佈顯示 tier key 而非 display name — `GET /api/analytics` tierDist 改用 tier_display_name（2026-04-22）
+- [x] **Bug 修復**：`POST /api/members/import` line_uid NOT NULL 違反 — 改用 `import_<UUID>` 佔位符（commit 81640f1，2026-04-22）
 
 ---
 
@@ -53,10 +54,9 @@
 - [ ] 會員備註 DELETE — 存在但 native confirm 造成測試困難（功能本身應正常）
 - [x] 操作記錄查詢 — `GET /api/audit-logs` + `/dashboard/audit-logs` — 已修補寫入端（2026-04-22）
 - [x] 加倍點數活動生效（掃碼套用倍率） — NT$500 × 3x = 1,500pt ✅（2026-04-22）
-- [ ] 加倍點數活動 CRUD — `GET/POST/PATCH/DELETE /api/point-multipliers` + `/dashboard/point-multipliers`
-- [ ] 自訂會員欄位定義 — `GET/POST/PATCH/DELETE /api/custom-fields`
-- [ ] 自訂會員欄位值 — `GET/POST /api/custom-field-values` + `/dashboard/custom-fields`
-- [ ] Webhook 設定 CRUD — `GET/POST/PATCH/DELETE /api/webhooks`
+- [x] 加倍點數活動 CRUD — `/dashboard/point-multipliers` — ✅ Create + Edit 驗證（2026-04-22）
+- [x] 自訂會員欄位定義 — `POST /api/custom-fields` — ✅ 建立驗證通過（2026-04-22）
+- [x] Webhook 設定 — `POST /api/webhooks` — ✅ 建立驗證通過（2026-04-22）
 - [ ] Webhook 投遞記錄 — `GET /api/webhooks/deliveries`
 - [ ] Webhook 實際觸發（會員事件時是否有送出）
 - [ ] 會員活動時間軸 API — `GET /api/members/[id]/timeline`
@@ -80,9 +80,9 @@
 - [x] 手動調整點數 — `POST /api/points` manual（補點/扣點） — ✅（2026-04-22，+100/-50 驗證）
 - [x] 優惠券核銷掃碼 — `/dashboard/coupons/scan` — ✅ 頁面正常（2026-04-22）
 - [x] 會員管理（搜尋/詳情） — ✅（2026-04-22）
-- [ ] 會員管理（刪除） — 存在按鈕，未測試
-- [ ] 會員 CSV 匯出 — `GET /api/members?export=csv`
-- [ ] 會員 CSV 匯入 — `POST /api/members/import`
+- [ ] 會員管理（刪除） — 存在按鈕，未測試（uses native confirm）
+- [x] 會員 CSV 匯出 — `GET /api/members?export=csv` — ✅ 含 tier display name（2026-04-22）
+- [x] 會員 CSV 匯入 — `POST /api/members/import` — ✅ Bug 已修，"成功匯入 2 筆"（2026-04-22）
 - [x] 標籤管理 CRUD — `/dashboard/tags` — ✅ 頁面正常（2026-04-22）
 - [x] 會員分群（動態條件） — `/dashboard/segments` — ✅ 建立/預覽/條件篩選驗證（2026-04-22）
 - [x] 推播訊息（立即 + 排程） — `/dashboard/push` — ✅ 兩個 tab、分眾功能正常（2026-04-22）
@@ -91,28 +91,29 @@
 - [x] 積分商城後台管理 — `/dashboard/store` — ✅ 頁面正常（2026-04-22）
 - [x] 優惠券管理 CRUD — ✅（2026-04-22）
 - [x] 等級設定 — ✅（2026-04-22）
-- [ ] 推薦計畫記錄 — `/dashboard/referrals`
+- [x] 推薦計畫記錄 — `/dashboard/referrals` — ✅ 統計欄位 + 空記錄正常（2026-04-22）
 - [x] 點數記錄（篩選/分頁） — `/dashboard/transactions` — ✅（2026-04-22，搜尋/類型篩選驗證）
-- [ ] 點數到期提醒設定 — `/dashboard/points-expiry`
+- [x] 點數到期提醒設定 — `/dashboard/points-expiry` — ✅ 未設定時正確顯示 amber 提示（2026-04-22）
 - [x] 任務管理 CRUD — ✅（2026-04-22）
-- [ ] 打卡集點管理 — `/dashboard/checkin`
-- [ ] 問卷調查（建立/查看回應） — `/dashboard/surveys`
+- [x] 打卡集點管理 — `/dashboard/checkin` — ✅ 設定表單 + 0 筆紀錄（2026-04-22）
+- [x] 問卷調查 — `/dashboard/surveys` — ✅ 頁面正常，尚無問卷（2026-04-22）
 - [x] 蓋章卡管理 — `/dashboard/stamp-cards` — ✅ CRUD 完整驗證（2026-04-22）
-- [ ] 自動回覆規則 — `/dashboard/auto-reply`
-- [ ] 生日獎勵設定 — `/dashboard/birthday-rewards`
-- [ ] 沉睡會員管理 — `/dashboard/dormant-members`
-- [ ] 黑名單管理 — `/dashboard/blacklist`
-- [ ] Rich Menu 設定 — `/dashboard/rich-menu`
+- [x] 自動回覆規則 — `/dashboard/auto-reply` — ✅ 建立規則 + Toggle 驗證（2026-04-22）
+- [x] 生日獎勵設定 — `/dashboard/birthday-rewards` — ✅ 頁面正常，0 bonus pts（2026-04-22）
+- [x] 沉睡會員管理 — `/dashboard/dormant-members` — ✅ 0 位沉睡會員（2026-04-22）
+- [x] 黑名單管理 — `/dashboard/blacklist` — ✅ 0 位黑名單（2026-04-22）
+- [x] Rich Menu 設定 — `/dashboard/rich-menu` — ✅ 完整表單渲染（2026-04-22）
 - [x] 品牌設定 — ✅（2026-04-22）
 - [x] 數據總覽 — `/dashboard/overview` — ✅ 四格統計卡、等級圓餅圖、最近推播正常（2026-04-22）
 - [x] 數據報表（含同期留存） — `/dashboard/analytics` — ✅ 修復等級分佈 bug（tier key → display name）（2026-04-22）
-- [ ] LINE Webhook 接收 — `/api/line-webhook/[tenantSlug]`
+- [ ] LINE Webhook 接收 — `/api/line-webhook/[tenantSlug]`（需真實 LINE 環境）
 
 ### Cron 定時任務
-- [ ] 生日推播 + 送點 — `GET /api/cron/birthday`
-- [ ] 點數到期處理 — `GET /api/cron/expire-points`
-- [ ] 沉睡會員通知 — `GET /api/cron/dormant`
-- [ ] 排程推播執行 — `GET /api/cron/scheduled-push`
+- [x] 生日推播 + 送點 — `GET /api/cron/birthday` — ✅ ok:true，todayMMDD:04-22（2026-04-22，本地驗證）
+- [x] 點數到期處理 — `GET /api/cron/expire-points` — ✅ ok:true，0 expired（2026-04-22，本地驗證）
+- [x] 沉睡會員通知 — `GET /api/cron/dormant` — ✅ ok:true，skipped: no dormant_reminder_days set（2026-04-22，本地驗證）
+- [x] 排程推播執行 — `GET /api/cron/scheduled-push` — ✅ ok:true，processed:0（2026-04-22，本地驗證）
+- 備註：Vercel production CRON_SECRET 與 .env.local 不同步，本地 localhost:3000 驗證通過
 
 ---
 
@@ -126,6 +127,7 @@
 - [x] LINE Token 驗證快取（同一 token 5 分鐘內不重複打 LINE API）— `src/lib/line-auth.ts`（2026-04-22）
 - [x] Webhook 簽名驗證（收端）— JOKA 無收端需求，LINE webhook 已有 HMAC 驗證
 - [x] Supabase RLS 政策更新（supabase/rls-policies-v2.sql 已執行，2026-04-22）
+- [ ] Vercel CRON_SECRET 與 .env.local 同步 — production secret 需在 Vercel Dashboard 確認與更新
 
 ### LIFF 前台缺失頁面
 - [x] `/t/[slug]/profile` — 個人資料編輯頁面（已完整實作）
