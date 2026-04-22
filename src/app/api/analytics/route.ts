@@ -50,6 +50,7 @@ export async function GET() {
     memberCouponsRes,
     pushLogsRes,
     cohortTxRes,
+    tierSettingsRes,
   ] = await Promise.all([
     supabase
       .from('members')
@@ -78,6 +79,12 @@ export async function GET() {
       .select('member_id, created_at')
       .eq('tenant_id', tenantId)
       .gte('created_at', sevenMonthsAgo),
+
+    // Tier settings for display names
+    supabase
+      .from('tier_settings')
+      .select('tier, tier_display_name')
+      .eq('tenant_id', tenantId),
   ])
 
   const members = membersRes.data ?? []
@@ -85,6 +92,12 @@ export async function GET() {
   const memberCoupons = memberCouponsRes.data ?? []
   const pushLogs = pushLogsRes.data ?? []
   const cohortTxs = cohortTxRes.data ?? []
+
+  // Build tier key → display name lookup
+  const tierDisplayMap: Record<string, string> = {}
+  for (const ts of tierSettingsRes.data ?? []) {
+    tierDisplayMap[ts.tier as string] = (ts.tier_display_name as string) ?? (ts.tier as string)
+  }
 
   // ── 1. Member stats ────────────────────────────────────────────────────────
   const totalMembers = members.length
@@ -97,11 +110,12 @@ export async function GET() {
       ? Math.round(((newThisMonth - newLastMonth) / newLastMonth) * 100)
       : null
 
-  // ── 2. Tier distribution ───────────────────────────────────────────────────
+  // ── 2. Tier distribution（用 display name 作 key，方便前台直接顯示）──────
   const tierDist: Record<string, number> = {}
   for (const m of members) {
-    const t = (m.tier as string) ?? 'basic'
-    tierDist[t] = (tierDist[t] ?? 0) + 1
+    const tierKey = (m.tier as string) ?? 'basic'
+    const label = tierDisplayMap[tierKey] ?? tierKey
+    tierDist[label] = (tierDist[label] ?? 0) + 1
   }
 
   // ── 3. Member growth (last 6 months) ──────────────────────────────────────
