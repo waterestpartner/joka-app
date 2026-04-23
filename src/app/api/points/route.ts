@@ -8,7 +8,7 @@ import {
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
-import { pushTextMessage } from '@/lib/line-messaging'
+import { pushTextMessage, linkRichMenuToUser } from '@/lib/line-messaging'
 import { getActiveMultiplier } from '@/lib/point-multiplier'
 import { logAudit } from '@/lib/audit'
 import { fireWebhooks } from '@/lib/webhooks'
@@ -303,6 +303,23 @@ export async function POST(req: NextRequest) {
 
     if (tenant?.push_enabled) {
       after(() => pushTextMessage(pushUid, pushText, channelToken))
+    }
+
+    // ── Rich Menu 等級自動切換 ───────────────────────────────────────
+    if (tierChanged && channelToken && pushUid) {
+      after(async () => {
+        const supabaseAdmin = createSupabaseAdminClient()
+        const { data: mapping } = await supabaseAdmin
+          .from('rich_menu_tier_mappings')
+          .select('rich_menu_id')
+          .eq('tenant_id', auth.tenantId)
+          .eq('tier', newTierKey)
+          .maybeSingle()
+
+        if (mapping?.rich_menu_id) {
+          await linkRichMenuToUser(pushUid, mapping.rich_menu_id as string, channelToken)
+        }
+      })
     }
 
     after(() => logAudit({

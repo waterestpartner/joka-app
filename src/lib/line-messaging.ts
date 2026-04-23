@@ -346,3 +346,60 @@ export async function fetchLineBotInfo(
     return null
   }
 }
+
+/**
+ * 將指定 Rich Menu 連結給單一 LINE 用戶（覆蓋該用戶的預設 Rich Menu）。
+ * 失敗時只記錄 console.error，不拋例外。
+ */
+export async function linkRichMenuToUser(
+  lineUserId: string,
+  richMenuId: string,
+  channelAccessToken: string
+): Promise<void> {
+  if (!channelAccessToken || !lineUserId || !richMenuId) return
+  try {
+    const res = await fetch(
+      `https://api.line.me/v2/bot/user/${lineUserId}/richmenu/${richMenuId}`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${channelAccessToken}` },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(8000),
+      }
+    )
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      console.error('[line-richmenu] linkRichMenuToUser error:', res.status, body)
+    }
+  } catch (err) {
+    console.error('[line-richmenu] linkRichMenuToUser network error:', err)
+  }
+}
+
+/**
+ * 解除單一 LINE 用戶的專屬 Rich Menu，回到帳號預設。
+ * 失敗時只記錄 console.error，不拋例外。
+ */
+export async function unlinkRichMenuFromUser(
+  lineUserId: string,
+  channelAccessToken: string
+): Promise<void> {
+  if (!channelAccessToken || !lineUserId) return
+  try {
+    const res = await fetch(
+      `https://api.line.me/v2/bot/user/${lineUserId}/richmenu`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${channelAccessToken}` },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(8000),
+      }
+    )
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      console.error('[line-richmenu] unlinkRichMenuFromUser error:', res.status, body)
+    }
+  } catch (err) {
+    console.error('[line-richmenu] unlinkRichMenuFromUser network error:', err)
+  }
+}

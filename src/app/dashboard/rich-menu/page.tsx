@@ -90,6 +90,16 @@ const DEFAULT_BUTTONS: MenuButton[] = [
   { label: '推薦好友', emoji: '🤝', action: { type: 'liff', label: '推薦好友', liffUrl: '' } },
 ]
 
+interface TierSetting {
+  tier: string
+  tier_display_name: string | null
+}
+
+interface TierMapping {
+  tier: string
+  rich_menu_id: string
+}
+
 export default function RichMenuPage() {
   const [pageData, setPageData] = useState<PageData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -108,16 +118,29 @@ export default function RichMenuPage() {
   const [actionLoading, setActionLoading] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
 
+  // Tier mapping state
+  const [tierSettings, setTierSettings] = useState<TierSetting[]>([])
+  const [tierMappings, setTierMappings] = useState<TierMapping[]>([])
+  const [mappingSaving, setMappingSaving] = useState(false)
+  const [mappingSaveResult, setMappingSaveResult] = useState<'success' | 'error' | null>(null)
+  const [mappingError, setMappingError] = useState<string | null>(null)
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/rich-menu')
-      if (!res.ok) {
-        const j = await res.json() as { error?: string }
+      const [menuRes, tierRes, mappingRes] = await Promise.all([
+        fetch('/api/rich-menu'),
+        fetch('/api/tier-settings'),
+        fetch('/api/rich-menu/tier-mappings'),
+      ])
+      if (!menuRes.ok) {
+        const j = await menuRes.json() as { error?: string }
         throw new Error(j.error ?? '載入失敗')
       }
-      setPageData(await res.json() as PageData)
+      setPageData(await menuRes.json() as PageData)
+      if (tierRes.ok) setTierSettings(await tierRes.json() as TierSetting[])
+      if (mappingRes.ok) setTierMappings(await mappingRes.json() as TierMapping[])
     } catch (e) {
       setError(e instanceof Error ? e.message : '載入失敗')
     } finally {
@@ -126,6 +149,43 @@ export default function RichMenuPage() {
   }, [])
 
   useEffect(() => { void load() }, [load])
+
+  function getMappingForTier(tier: string): string {
+    return tierMappings.find((m) => m.tier === tier)?.rich_menu_id ?? ''
+  }
+
+  function setMappingForTier(tier: string, richMenuId: string) {
+    setTierMappings((prev) => {
+      const existing = prev.find((m) => m.tier === tier)
+      if (richMenuId === '') return prev.filter((m) => m.tier !== tier)
+      if (existing) return prev.map((m) => m.tier === tier ? { ...m, rich_menu_id: richMenuId } : m)
+      return [...prev, { tier, rich_menu_id: richMenuId }]
+    })
+  }
+
+  async function handleSaveMappings() {
+    setMappingSaving(true)
+    setMappingSaveResult(null)
+    setMappingError(null)
+    try {
+      const res = await fetch('/api/rich-menu/tier-mappings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mappings: tierMappings.filter((m) => m.rich_menu_id) }),
+      })
+      if (!res.ok) {
+        const j = await res.json() as { error?: string }
+        throw new Error(j.error ?? '儲存失敗')
+      }
+      setMappingSaveResult('success')
+      setTimeout(() => setMappingSaveResult(null), 3000)
+    } catch (e) {
+      setMappingError(e instanceof Error ? e.message : '儲存失敗')
+      setMappingSaveResult('error')
+    } finally {
+      setMappingSaving(false)
+    }
+  }
 
   function handleLayoutChange(l: LayoutKey) {
     setLayout(l)
@@ -399,6 +459,63 @@ export default function RichMenuPage() {
           {creating ? '建立中…' : '建立 Rich Menu'}
         </button>
       </div>
+
+      {/* ── 等級 Rich Menu 對應 ───────────────────────────────────────── */}
+      {tierSettings.length > 0 && pageData && pageData.menus.length > 0 && (
+        <div className="bg-white rounded-2xl border border-zinc-200 p-5 space-y-4">
+          <div>
+            <h2 className="text-base font-semibold text-zinc-900">依等級自動切換 Rich Menu</h2>
+            <p className="text-xs text-zinc-400 mt-1">
+              設定每個等級對應的 Rich Menu，當會員升/降等時系統自動切換（需搭配點數集點功能）
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {tierSettings
+              .slice()
+              .sort((a, b) => a.tier.localeCompare(b.tier))
+              .map((ts) => {
+                const label = ts.tier_display_name ?? ts.tier
+                const selected = getMappingForTier(ts.tier)
+                return (
+                  <div key={ts.tier} className="flex items-center gap-3">
+                    <span className="w-28 text-sm font-medium text-zinc-700 shrink-0 truncate">{label}</span>
+                    <select
+                      value={selected}
+                      onChange={(e) => setMappingForTier(ts.tier, e.target.value)}
+                      className="flex-1 border border-zinc-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755]"
+                    >
+                      <option value="">（不設定，使用預設）</option>
+                      {pageData.menus.map((m) => (
+                        <option key={m.richMenuId} value={m.richMenuId}>
+                          {m.name || m.richMenuId}
+                          {m.richMenuId === pageData.defaultId ? ' ★ 預設' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )
+              })}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSaveMappings}
+              disabled={mappingSaving}
+              className="px-5 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
+              style={{ backgroundColor: '#06C755' }}
+            >
+              {mappingSaving ? '儲存中…' : '儲存等級對應'}
+            </button>
+            {mappingSaveResult === 'success' && (
+              <span className="text-sm text-green-600 font-medium">✓ 設定已儲存</span>
+            )}
+            {mappingSaveResult === 'error' && (
+              <span className="text-sm text-red-500">{mappingError}</span>
+            )}
+          </div>
+        </div>
+      )}
 
       {confirmUnlink && (
         <ConfirmDialog
