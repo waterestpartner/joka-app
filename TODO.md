@@ -1,10 +1,25 @@
 # JOKA TODO
 
-> 最後更新：2026-04-23（v0.12.1 — Security Hardening + Bug Fixes ✅）
+> 最後更新：2026-04-23（v0.12.2 — Setup Wizard 完善 + CSV LINE 綁定 ✅）
 
 ---
 
-## 🆕 v0.12.1（本 session 完成）— Security Hardening + Bug Fixes
+## 🆕 v0.12.2（本 session 完成）— Setup Wizard 完善 + CSV LINE 綁定
+
+### 新功能
+- [x] **CSV → LINE 綁定**：`POST /api/members` LIFF 註冊時，若手機號碼符合 `import_` 前綴離線會員，直接 UPDATE 綁定 `line_uid`，保留點數/等級 ✅
+- [x] **Setup Wizard 智慧起始步驟**：載入時偵測設定狀態，自動跳到第一個未完成的步驟 ✅
+- [x] **SetupCard 指向精靈**：overview 的「前往設定」按鈕改為「🚀 開始設定精靈 →」，連結至 `/dashboard/setup` ✅
+
+### Bug 修復
+- [x] **`processReferral` void 呼叫** → serverless 可能提前 kill 推薦獎勵；改用 `after()` ✅
+
+### 安全掃描
+- [x] 全面安全掃描（5 類）→ 零新漏洞 ✅
+
+---
+
+## 🆕 v0.12.1（上一個 session 完成）— Security Hardening + Bug Fixes
 
 ### 缺少 tenant_id 的 UPDATE/DELETE（防禦縱深，全部已修）
 - [x] `lotteries/[id]/route.ts` — `executeDraw` status UPDATE + `lottery_winners` DELETE + notify UPDATE 補 tenant_id ✅
@@ -280,7 +295,7 @@
 - [x] `window.confirm()` → React Modal（會員刪除 / 備註刪除）✅（2026-04-22）
 
 ### 低優先
-- [ ] CSV import 會員的 LINE 綁定機制（手機號比對 → 更新 line_uid）
+- [x] CSV import 會員的 LINE 綁定機制（手機號比對 → 更新 line_uid）✅（v0.12.2）
 - [x] `members.notes` vs `member_notes` UI 整合 — MemberDetailPanel 改名為「快速備忘」並加說明連結 ✅（2026-04-22）
 - [x] 掃碼集點頁面支援用姓名/手機搜尋 — PointScanner 加「找不到 QR Code？搜尋姓名或手機」展開搜尋 ✅（2026-04-22）
 
@@ -290,8 +305,8 @@
 
 ### 中優先
 - [ ] Setup Wizard：新 tenant 第一次進 dashboard 時的導引流程（目前已有進度條，但沒有主動導引）
-- [ ] 清查並補齊剩餘 window.confirm → ConfirmDialog
-- [ ] Push 本地 commit 到 origin/main（本地領先 8 個 commit 未推）
+- [x] 清查並補齊剩餘 window.confirm → ConfirmDialog（本 session 確認零殘留）✅
+- [x] Push 本地 commit 到 origin/main ✅（v0.12.2 已全部推送）
 
 ### 低優先 / 未來規劃
 - [ ] DB schema 擴充：`tenants.liff_provider_type`（enum）+ `tenants.line_login_channel_id`（備 LINE MINI App 轉換）

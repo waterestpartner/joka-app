@@ -1,7 +1,7 @@
 # HANDOFF.md — AI Session 交接記錄
 
 > 給下一個接手的 AI 看。每次 session 結束覆寫此檔案。
-> 最後更新：2026-04-23（v0.12.1 — Security Hardening + Bug Fixes）
+> 最後更新：2026-04-23（v0.12.2 — Setup Wizard 完善 + CSV LINE 綁定）
 
 ---
 
@@ -18,7 +18,31 @@
 
 ---
 
-## 這個 session 完成了什麼（v0.12.1）
+## 這個 session 完成了什麼（v0.12.2）
+
+功能補強 + Bug 修復。所有修改皆已 commit 並 push。
+
+### 新功能
+
+| 修改 | 說明 |
+|------|------|
+| `src/app/api/members/route.ts` | **CSV → LINE 綁定**：LIFF 用戶註冊時，若手機號碼符合 `import_` 前綴的離線會員，直接更新 `line_uid` 完成綁定，保留原有點數/等級歷史紀錄，不建重複紀錄。支援 Model C platformMember 同步。 |
+| `src/app/dashboard/setup/page.tsx` | **Setup Wizard 智慧起始步驟**：載入時自動偵測目前設定狀態，直接跳到第一個尚未完成的步驟（品牌 → LINE → LIFF → 完成）。已全部設定者直接顯示「完成」頁。 |
+| `src/app/dashboard/overview/page.tsx` | **SetupCard 按鈕**：原本「前往設定 →」指向 `/dashboard/settings`，改成「🚀 開始設定精靈 →」指向 `/dashboard/setup`，提供主動導引。 |
+
+### Bug 修復
+
+| 檔案 | 問題 | 修復 |
+|------|------|------|
+| `src/app/api/members/route.ts` | `processReferral` 用 `void` 呼叫，Vercel serverless 送出 response 後可能被提前 kill，推薦獎勵丟失 | 改用 `after(() => processReferral(...))` |
+
+### 安全掃描
+
+全面掃描（5 類：tenant_id 缺失 / ilike injection / 缺 auth / child-before-parent delete / lineUid from body）→ **零新漏洞**。
+
+---
+
+## 上一個 session（v0.12.1）做了什麼
 
 純安全加固 + Bug 修復，無新功能。所有修改皆已 commit。
 
@@ -136,32 +160,30 @@
 
 ## 下個 session 第一件事（按優先順序）
 
-### 🔴 高優先
-1. **確認要不要 push 本地 commit 到 origin/main**
-   - 多個 commit 未推送到正式環境
+> ✅ 本地 commit 已全部 push 到 origin/main（v0.12.2），正式環境已是最新版。
 
-2. **LIFF 前台測試**（需手機 + LINE App）
-   - 最高優先：`/t/[slug]/register`（含推薦碼）
+### 🔴 高優先（需用戶執行）
+1. **LIFF 前台測試**（需手機 + LINE App）
+   - 最高優先：`/t/[slug]/register`（含 CSV 綁定邏輯測試）
    - 然後：`/t/[slug]/member-card`、`/t/[slug]/points`
    - **新**：`/t/[slug]/my-brands`（Model C 品牌卡包）
    - 其餘按順序：coupons / stamps / missions / store / referral / profile / surveys / checkin
 
-### 🟡 中優先
-3. **清查剩餘的 `window.confirm`**
-   ```bash
-   grep -rn 'window.confirm' src/app/dashboard src/components/dashboard
-   ```
-
-4. **更新 Webhook Test URL**
+2. **更新 Webhook Test URL**（用戶需操作）
    - 到 webhook.site 取真實 UUID URL
    - `PATCH /api/webhooks/{id}` 更新 URL
    - 觸發一次事件，確認 success:true
 
-### 🟢 低優先
-5. **Ocard-style 下一步：Setup Wizard**
-   - 新 tenant 第一次進 dashboard 時的導引流程
+### 🟡 中優先（AI 可執行）
+3. **DB schema 擴充**：`tenants.liff_provider_type` + `tenants.line_login_channel_id`
+   - 寫 SQL migration + 更新 type 定義
+   - 用戶需在 Supabase Console 執行 SQL
 
-6. **LINE Webhook 接收測試**（`/api/line-webhook/[tenantSlug]`）
+4. **LINE Webhook 接收測試**（`/api/line-webhook/[tenantSlug]`）（需 LINE OA）
+
+### 🟢 低優先（AI 可執行）
+5. **window.confirm 掃描** — 本 session 已確認零殘留，可跳過
+6. **Stateless Token 遷移評估**
 
 ---
 
