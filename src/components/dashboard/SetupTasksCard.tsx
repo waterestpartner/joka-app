@@ -17,6 +17,8 @@ interface SetupTask {
   sort_order: number
 }
 
+const DISMISS_KEY = 'joka.setup-tasks.dismissed-at'
+
 export default function SetupTasksCard() {
   const [tasks, setTasks] = useState<SetupTask[]>([])
   const [loading, setLoading] = useState(true)
@@ -28,7 +30,30 @@ export default function SetupTasksCard() {
     ;(async () => {
       const res = await fetch('/api/dashboard/setup-tasks')
       if (!cancelled && res.ok) {
-        setTasks(await res.json())
+        const data = (await res.json()) as SetupTask[]
+        setTasks(data)
+        // If user previously dismissed AND nothing new has been added since,
+        // keep the card hidden across reloads.
+        try {
+          const stored = localStorage.getItem(DISMISS_KEY)
+          if (stored && data.length > 0) {
+            const { count, allDone } = JSON.parse(stored) as {
+              count: number
+              allDone: boolean
+            }
+            const currentDone = data.filter((t) => t.is_done).length
+            const currentAllDone = currentDone === data.length
+            if (
+              allDone &&
+              currentAllDone &&
+              count === data.length
+            ) {
+              setHidden(true)
+            }
+          }
+        } catch {
+          /* ignore */
+        }
       }
       if (!cancelled) setLoading(false)
     })()
@@ -36,6 +61,18 @@ export default function SetupTasksCard() {
       cancelled = true
     }
   }, [])
+
+  function dismiss() {
+    try {
+      localStorage.setItem(
+        DISMISS_KEY,
+        JSON.stringify({ count: tasks.length, allDone: true })
+      )
+    } catch {
+      /* ignore */
+    }
+    setHidden(true)
+  }
 
   async function toggle(task: SetupTask) {
     setTogglingId(task.id)
@@ -84,7 +121,7 @@ export default function SetupTasksCard() {
           </span>
           {allDone && (
             <button
-              onClick={() => setHidden(true)}
+              onClick={dismiss}
               className="text-xs text-zinc-400 hover:text-zinc-700 underline"
             >
               關閉
