@@ -322,7 +322,7 @@
 
 ### 中優先
 - [x] Model C Phase 4：LIFF「我的品牌卡包」頁面 ✅（2026-04-22）
-- [ ] Webhook test URL 更新（webhook.site 取真實 UUID，驗證 success:true）
+- [ ] Webhook test URL 驗證（需手動：到 webhook.site 建 URL，Dashboard 新增 webhook，觸發集點，確認 delivery success:true）
 - [x] `window.confirm()` → React Modal（會員刪除 / 備註刪除）✅（2026-04-22）
 
 ### 低優先
@@ -340,8 +340,12 @@
 - [x] Push 本地 commit 到 origin/main ✅（v0.12.2 已全部推送）
 
 ### 低優先 / 未來規劃
-- [x] DB schema 擴充：`tenants.liff_provider_type`（enum）+ `tenants.line_login_channel_id`（備 LINE MINI App 轉換）✅（v0.12.2，⚠️ 需執行 `supabase/liff-provider-type.sql`）
-- [ ] Stateless Token 遷移評估（目前用 30 天 long-lived，LINE 官方推薦 15 分鐘 stateless）
+- [x] DB schema 擴充：`tenants.liff_provider_type`（enum）+ `tenants.line_login_channel_id`（備 LINE MINI App 轉換）✅（v0.12.2，已執行）
+- [x] Stateless Token 遷移評估 ✅ **不遷移（評估完畢）**
+  - Vercel serverless 無共享 in-memory，每次冷啟動都要打 LINE API 換 token
+  - 需 Redis/Upstash 才能有效快取 → 架構複雜度 ↑、費用 ↑
+  - 安全收益有限（token 存後端 DB，已受 Supabase RLS 保護）
+  - 結論：維持 30 天長效 token，定期手動輪換即可
 - [ ] Concierge onboarding：高階方案的人工導入服務（跟 CresClab / Omnichat 看齊）
 
 ---

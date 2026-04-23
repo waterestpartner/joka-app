@@ -56,21 +56,14 @@
 
 ## 下一個 session 要做的事
 
-### 🔴 優先
-1. **Rich Menu 依等級動態切換**（Feature 5，本 session 跳過）
-   - DB migration：建 `rich_menu_tier_mappings` 表（tenant_id, tier, rich_menu_id）
-   - `src/lib/line-messaging.ts`：加 `linkRichMenuToUser(uid, richMenuId, token)` + `unlinkRichMenuFromUser(uid, token)`
-   - `src/app/api/rich-menu/route.ts`：加 tier mapping CRUD
-   - `src/app/dashboard/rich-menu/page.tsx`：加「等級對應設定」區塊
-   - `src/app/api/points/route.ts`（或 addPointTransaction）：當 tier 升級時呼叫 linkRichMenuToUser
+### 🟡 需真實環境（人工操作）
+1. **LIFF 前台 E2E 測試**（需真實手機 + LINE 環境，11 個頁面）
+2. **Webhook test URL 驗證**：到 webhook.site 建一個臨時 URL，在 Dashboard 建 webhook，觸發集點，確認 delivery success:true
 
-### 🟡 中優先
-2. **LIFF 前台 E2E 測試**（需真實手機 + LINE 環境，11 個頁面）
-3. **window.confirm 殘留**：會員刪除 / 備註刪除 → 改 ConfirmDialog
-
-### 🟢 低優先
-4. Webhook test URL 更新（驗證 success:true 的真實 delivery）
-5. Stateless Token 遷移評估（LINE 建議 15 分鐘）
+### ✅ 已評估不需做
+- **Stateless Token 遷移**：Vercel serverless 無共享記憶體，需 Redis 才能快取；安全收益有限；維持 30 天長效 token
+- **window.confirm 殘留**：已為零（之前 session 全清完）
+- **Rich Menu 依等級切換**：v0.13.1 已完成
 
 ---
 
