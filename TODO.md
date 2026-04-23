@@ -1,6 +1,29 @@
 # JOKA TODO
 
-> 最後更新：2026-04-23（v0.13.0 — 競品功能補齊 ✅）
+> 最後更新：2026-04-23（v0.13.1 — Rich Menu 等級自動切換 + 競品功能全部完收）
+
+---
+
+## 🆕 v0.13.1（本 session 完成）— Rich Menu 等級自動切換
+
+### 新功能
+- [x] **Rich Menu 等級對應表**：`supabase/rich-menu-tier-mappings.sql`，UNIQUE(tenant_id, tier)，含 RLS ✅
+- [x] **Tier Mappings API**：`GET/PUT/DELETE /api/rich-menu/tier-mappings`（PUT/DELETE owner only）✅
+- [x] **等級升降自動觸發**：`/api/points` 點數異動後 tier 改變 → `after()` 查對應 → `linkRichMenuToUser()` ✅
+- [x] **LINE API helpers**：`linkRichMenuToUser()` + `unlinkRichMenuFromUser()`，含 AbortSignal.timeout(8000) ✅
+- [x] **Dashboard UI**：`/dashboard/rich-menu` 新增「依等級自動切換」section ✅
+
+### SQL Migrations（已執行）
+- [x] `supabase/rich-menu-tier-mappings.sql` ✅
+
+### 技術評估（不做）
+- [x] **Stateless Token 遷移**：評估後決定不做。Vercel serverless 無共享記憶體，需 Redis 才能快取，安全收益有限，維持 30 天長效 token ✅
+- [x] **window.confirm 殘留**：驗證確認零殘留（之前 session 已全清完）✅
+
+### 文件更新
+- [x] `CLAUDE.md` — 全面改寫（含所有架構決定 Why、所有 migration 清單、7 個 cron）✅
+- [x] `HANDOFF.md` — 更新至 v0.13.1 ✅
+- [x] `TODO.md` — 更新至 v0.13.1 ✅
 
 ---
 
@@ -21,8 +44,8 @@
 - [x] `supabase/push-triggers.sql` ✅
 - [x] `supabase/liff-provider-type.sql`（v0.12.2 欠的，補執行）✅
 
-### 尚未實作（下個 session）
-- [ ] **Rich Menu 依等級動態切換**（Feature 5）：DB migration + linkRichMenuToUser helper + UI + 等級升級觸發
+### ✅ 已在 v0.13.1 完成
+- [x] **Rich Menu 依等級動態切換**：DB migration + linkRichMenuToUser helper + UI + 等級升級觸發 ✅
 
 ---
 
