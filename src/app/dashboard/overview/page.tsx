@@ -80,10 +80,10 @@ function SetupCard({
       <div className="flex items-start justify-between gap-4 mb-5">
         <div>
           <h2 className="text-base font-semibold text-zinc-900">
-            完成設定，開始使用 JOKA
+            完成 LINE 整合，啟用會員系統
           </h2>
           <p className="mt-1 text-sm text-zinc-500">
-            完成以下步驟，啟用 LINE 推播與會員系統
+            以下 LINE 設定尚未完成，點「設定精靈」一步步完成串接
           </p>
         </div>
         <span className="shrink-0 text-sm font-semibold text-amber-700 bg-amber-100 rounded-full px-3 py-1">
@@ -97,10 +97,11 @@ function SetupCard({
       </div>
       <div className="mt-6">
         <a
-          href="/dashboard/settings"
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-white bg-zinc-900 rounded-xl px-4 py-2.5 hover:bg-zinc-700 transition-colors"
+          href="/dashboard/setup"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-white rounded-xl px-4 py-2.5 hover:opacity-90 transition-colors"
+          style={{ backgroundColor: '#06C755' }}
         >
-          前往設定 →
+          🚀 開始設定精靈 →
         </a>
       </div>
     </div>
