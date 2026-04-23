@@ -275,6 +275,8 @@ supabase/custom-member-fields.sql        ✅ 執行
 supabase/webhooks.sql                    ✅ 執行
 supabase/platform-members.sql            ✅ 執行（2026-04-21，Model C Phase 1）
 supabase/rls-policies-v2.sql             ✅ 執行（2026-04-22，25 張表完整覆蓋）
+supabase/industry-templates.sql          ✅ 執行（v0.12.0，範本系統）
+supabase/tier-settings-unique.sql        ✅ 執行（2026-04-23，修復 applyTemplate 靜默失敗）
 ```
 
 ---
