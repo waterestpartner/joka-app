@@ -113,6 +113,7 @@ export async function GET(req: NextRequest) {
               messages: [{ type: 'text', text: message }],
             }),
             cache: 'no-store',
+            signal: AbortSignal.timeout(8000),
           })
           if (res.ok) {
             successCount++

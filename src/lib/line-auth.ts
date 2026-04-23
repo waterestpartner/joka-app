@@ -77,6 +77,7 @@ export async function verifyLineIdToken(
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ id_token: idToken, client_id: channelId }),
     cache: 'no-store',
+    signal: AbortSignal.timeout(5000),
   })
 
   if (!res.ok) {
@@ -101,6 +102,7 @@ export async function verifyLineAccessToken(
   const res = await fetch('https://api.line.me/v2/profile', {
     headers: { Authorization: `Bearer ${accessToken}` },
     cache: 'no-store',
+    signal: AbortSignal.timeout(5000),
   })
 
   if (!res.ok) {
