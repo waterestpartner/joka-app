@@ -66,9 +66,9 @@ export async function GET(req: NextRequest) {
 
     // 4. 平行取得：最近 3 筆點數異動 + 所有分級設定 + 可用優惠券數
     const [
-      { data: recentTransactions },
-      { data: tierSettings },
-      { count: activeCouponsCount },
+      { data: recentTransactions, error: txErr },
+      { data: tierSettings, error: tierErr },
+      { count: activeCouponsCount, error: couponErr },
     ] = await Promise.all([
       supabase
         .from('point_transactions')
@@ -89,6 +89,10 @@ export async function GET(req: NextRequest) {
         .eq('member_id', member.id)
         .eq('status', 'active'),
     ])
+
+    if (txErr) throw new Error(txErr.message)
+    if (tierErr) throw new Error(tierErr.message)
+    if (couponErr) throw new Error(couponErr.message)
 
     return NextResponse.json({
       member: member as Member,

@@ -203,6 +203,7 @@ export async function createRichMenu(
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(definition),
       cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) { console.error('[rich-menu] create error:', await res.text()); return null }
     const { richMenuId } = await res.json() as { richMenuId: string }
@@ -223,6 +224,7 @@ export async function uploadRichMenuImage(
       headers: { 'Content-Type': contentType, Authorization: `Bearer ${token}` },
       body: imageBuffer,
       cache: 'no-store',
+      signal: AbortSignal.timeout(30000), // 圖片上傳較慢，給較長 timeout
     })
     return res.ok
   } catch (e) { console.error('[rich-menu] upload image error:', e); return false }
@@ -233,6 +235,7 @@ export async function setDefaultRichMenu(richMenuId: string, token: string): Pro
   try {
     const res = await fetch(`https://api.line.me/v2/bot/user/all/richmenu/${richMenuId}`, {
       method: 'POST', headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
     })
     return res.ok
   } catch (e) { console.error('[rich-menu] set default error:', e); return false }
@@ -243,6 +246,7 @@ export async function listRichMenus(token: string): Promise<{ richMenuId: string
   try {
     const res = await fetch('https://api.line.me/v2/bot/richmenu/list', {
       headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return []
     const { richmenus } = await res.json() as { richmenus: { richMenuId: string; name: string; chatBarText: string; selected: boolean }[] }
@@ -255,6 +259,7 @@ export async function getDefaultRichMenuId(token: string): Promise<string | null
   try {
     const res = await fetch('https://api.line.me/v2/bot/user/all/richmenu', {
       headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return null
     const { richMenuId } = await res.json() as { richMenuId: string }
@@ -267,6 +272,7 @@ export async function deleteRichMenu(richMenuId: string, token: string): Promise
   try {
     const res = await fetch(`https://api.line.me/v2/bot/richmenu/${richMenuId}`, {
       method: 'DELETE', headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
     })
     return res.ok
   } catch { return false }
@@ -277,6 +283,7 @@ export async function unlinkDefaultRichMenu(token: string): Promise<boolean> {
   try {
     const res = await fetch('https://api.line.me/v2/bot/user/all/richmenu', {
       method: 'DELETE', headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
     })
     return res.ok
   } catch { return false }
@@ -323,6 +330,7 @@ export async function fetchLineBotInfo(
         Authorization: `Bearer ${channelAccessToken}`,
       },
       cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
     })
 
     if (!res.ok) {

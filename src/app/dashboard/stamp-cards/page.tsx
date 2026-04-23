@@ -97,6 +97,7 @@ export default function StampCardsPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<StampCard | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   // ── Load ──────────────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -201,11 +202,17 @@ export default function StampCardsPage() {
   async function handleDelete() {
     if (!deleteTarget) return
     setDeleting(true)
+    setDeleteError(null)
     try {
       const res = await fetch(`/api/stamp-cards?id=${deleteTarget.id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error()
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(j.error ?? '刪除失敗')
+      }
       setDeleteTarget(null)
       await load()
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : '刪除失敗')
     } finally {
       setDeleting(false)
     }
@@ -465,8 +472,11 @@ export default function StampCardsPage() {
               確定要刪除蓋章卡「<strong>{deleteTarget.name}</strong>」？
               所有會員的集章進度將一併刪除，此操作無法還原。
             </p>
+            {deleteError && (
+              <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{deleteError}</p>
+            )}
             <div className="mt-5 flex gap-3">
-              <button onClick={() => setDeleteTarget(null)}
+              <button onClick={() => { setDeleteTarget(null); setDeleteError(null) }}
                 className="flex-1 rounded-lg border border-zinc-200 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition">
                 取消
               </button>

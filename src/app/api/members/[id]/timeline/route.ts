@@ -39,10 +39,10 @@ export async function GET(
 
   // Parallel queries for last 90 days
   const [
-    { data: pointTxs },
-    { data: missionCompletions },
-    { data: memberCoupons },
-    { data: redemptions },
+    { data: pointTxs, error: pointTxsErr },
+    { data: missionCompletions, error: missionsErr },
+    { data: memberCoupons, error: couponsErr },
+    { data: redemptions, error: redemptionsErr },
   ] = await Promise.all([
     supabase
       .from('point_transactions')
@@ -80,6 +80,11 @@ export async function GET(
       .order('created_at', { ascending: false })
       .limit(50),
   ])
+
+  if (pointTxsErr) return NextResponse.json({ error: pointTxsErr.message }, { status: 500 })
+  if (missionsErr) return NextResponse.json({ error: missionsErr.message }, { status: 500 })
+  if (couponsErr) return NextResponse.json({ error: couponsErr.message }, { status: 500 })
+  if (redemptionsErr) return NextResponse.json({ error: redemptionsErr.message }, { status: 500 })
 
   const events: TimelineEvent[] = []
 

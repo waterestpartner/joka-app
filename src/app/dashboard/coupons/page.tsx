@@ -153,6 +153,7 @@ function CouponModal({ initial, tiers, onClose, onSaved }: CouponModalProps) {
       onSaved(saved)
     } catch (err) {
       setError(err instanceof Error ? err.message : '發生錯誤')
+    } finally {
       setSubmitting(false)
     }
   }

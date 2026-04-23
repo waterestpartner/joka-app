@@ -87,6 +87,14 @@ export async function GET() {
       .eq('tenant_id', tenantId),
   ])
 
+  // ── Error handling ─────────────────────────────────────────────────────────
+  if (membersRes.error) return NextResponse.json({ error: membersRes.error.message }, { status: 500 })
+  if (pointsRes.error) return NextResponse.json({ error: pointsRes.error.message }, { status: 500 })
+  if (memberCouponsRes.error) return NextResponse.json({ error: memberCouponsRes.error.message }, { status: 500 })
+  if (pushLogsRes.error) return NextResponse.json({ error: pushLogsRes.error.message }, { status: 500 })
+  if (cohortTxRes.error) return NextResponse.json({ error: cohortTxRes.error.message }, { status: 500 })
+  if (tierSettingsRes.error) return NextResponse.json({ error: tierSettingsRes.error.message }, { status: 500 })
+
   const members = membersRes.data ?? []
   const transactions = pointsRes.data ?? []
   const memberCoupons = memberCouponsRes.data ?? []
