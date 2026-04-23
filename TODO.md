@@ -1,10 +1,32 @@
 # JOKA TODO
 
-> 最後更新：2026-04-23（v0.12.3 — Serverless 可靠性全面補強 ✅）
+> 最後更新：2026-04-23（v0.13.0 — 競品功能補齊 ✅）
 
 ---
 
-## 🆕 v0.12.3（本 session 完成）— Serverless 可靠性全面補強
+## 🆕 v0.13.0（本 session 完成）— 競品功能補齊
+
+### 新功能
+- [x] **Staff 角色權限控管**：`requireOwnerAuth()` 保護 14 個 API，Dashboard nav 依角色過濾，sidebar role badge ✅
+- [x] **RFM 分析頁**：`/dashboard/analytics/rfm`，5 分制 6 分群，可點擊篩選會員列表 ✅
+- [x] **推播成效分析**：`/dashboard/analytics/push`，近 12 週趨勢圖 + 每則推播成功率 ✅
+- [x] **Webhook 失敗自動重試**：指數退避 1m→5m→30m→2h，Cron 每 5 分鐘執行 ✅
+- [x] **連續打卡獎勵**：設定連續 N 天送 X 點，Asia/Taipei 時區計算，Dashboard UI 更新 ✅
+- [x] **推播觸發規則**：`/dashboard/push-triggers`，5 種類型，訊息變數替換，每日 Cron ✅
+- [x] **團隊管理**：`/dashboard/team`，邀請/移除 staff，角色切換（owner only）✅
+
+### SQL Migrations（已執行）
+- [x] `supabase/checkin-consecutive.sql` ✅
+- [x] `supabase/webhook-retry.sql` ✅
+- [x] `supabase/push-triggers.sql` ✅
+- [x] `supabase/liff-provider-type.sql`（v0.12.2 欠的，補執行）✅
+
+### 尚未實作（下個 session）
+- [ ] **Rich Menu 依等級動態切換**（Feature 5）：DB migration + linkRichMenuToUser helper + UI + 等級升級觸發
+
+---
+
+## 🆕 v0.12.3（上一個 session 完成）— Serverless 可靠性全面補強
 
 ### 效能 / 可靠性
 - [x] **`src/lib/line-auth.ts` — 兩個 LINE API fetch 缺 AbortSignal.timeout** — `verifyLineIdToken` + `verifyLineAccessToken` 加上 `signal: AbortSignal.timeout(5000)` ✅

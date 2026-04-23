@@ -3,7 +3,7 @@
 # JOKA — 專案完整說明書
 
 > 給 AI 看的完整指南。每次開 session 必讀。包含架構決定的「為什麼」，不只是「是什麼」。
-> 最後更新：2026-04-23（v0.12.1 — 系統安全強化 + Bug 修復 session）
+> 最後更新：2026-04-23（v0.13.0 — 競品功能補齊）
 
 ---
 
@@ -364,6 +364,10 @@ supabase/platform-members.sql            ✅ 執行（2026-04-21，Model C Phase
 supabase/rls-policies-v2.sql             ✅ 執行（2026-04-22，25 張表完整覆蓋）
 supabase/industry-templates.sql          ✅ 執行（v0.12.0，範本系統）
 supabase/tier-settings-unique.sql        ✅ 執行（2026-04-23，修復 applyTemplate 靜默失敗）
+supabase/liff-provider-type.sql          ✅ 執行（v0.12.2，備 LINE MINI App 轉換）
+supabase/checkin-consecutive.sql         ✅ 執行（v0.13.0，連續打卡獎勵）
+supabase/webhook-retry.sql              ✅ 執行（v0.13.0，Webhook 失敗自動重試）
+supabase/push-triggers.sql              ✅ 執行（v0.13.0，推播觸發規則）
 ```
 
 ---
@@ -376,13 +380,15 @@ supabase/tier-settings-unique.sql        ✅ 執行（2026-04-23，修復 applyT
 /api/cron/backfill-platform-members 0 4 * * *    — 每日 04:00 UTC，Model C backfill
 /api/cron/dormant                   0 2 * * 1    — 每週一 02:00 UTC，沉睡會員通知
 /api/cron/scheduled-push            0 9 * * *    — 每日 09:00 UTC，排程推播執行
+/api/cron/webhook-retry             */5 * * * *  — 每 5 分鐘，Webhook 失敗自動重試（v0.13.0）
+/api/cron/push-triggers             0 10 * * *   — 每日 10:00 UTC，推播觸發規則執行（v0.13.0）
 ```
 
 授權方式：`Authorization: Bearer <CRON_SECRET>`
 
 ---
 
-## 已驗證可用的功能（2026-04-23，v0.12.1）
+## 已驗證可用的功能（2026-04-23，v0.13.0）
 
 **Dashboard（全部 34+ 頁面已驗證）：**
 - ✅ 登入、品牌設定、等級設定 CRUD
@@ -399,7 +405,9 @@ supabase/tier-settings-unique.sql        ✅ 執行（2026-04-23，修復 applyT
 - ✅ Production cron（birthday/expire-points 已 curl 驗證）
 - ✅ **v0.11.0**：Ocard-style settings UX + ConfirmDialog 全面取代 window.confirm
 - ✅ **v0.12.0**：Industry Templates 系統（Super Admin + 商家切換 + Setup Tasks）
-- ✅ **v0.12.1（本 session）**：系統安全強化 + Bug 修復（詳見 HANDOFF.md）
+- ✅ **v0.12.1**：系統安全強化 + Bug 修復
+- ✅ **v0.12.2/v0.12.3**：CSV LINE 綁定、Setup Wizard、Serverless 可靠性補強
+- ✅ **v0.13.0（本 session）**：Staff 角色權限、RFM 分析、推播成效、Webhook 重試、連續打卡獎勵、推播觸發規則、團隊管理（詳見 HANDOFF.md）
 
 **LIFF 前台（需真實 LINE 環境，尚未 E2E 測試）：**
 - 13 個頁面：register / member-card / points / coupons / stamps / missions / store / referral / profile / surveys / checkin / my-brands
