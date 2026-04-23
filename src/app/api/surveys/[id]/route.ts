@@ -137,6 +137,10 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   const { id } = await params
   const supabase = createSupabaseAdminClient()
 
+  // Verify survey belongs to this tenant before touching any related data
+  const { data: surveyCheck } = await supabase.from('surveys').select('id').eq('id', id).eq('tenant_id', auth.tenantId).maybeSingle()
+  if (!surveyCheck) return NextResponse.json({ error: '找不到問卷' }, { status: 404 })
+
   const { count } = await supabase.from('survey_responses').select('id', { count: 'exact', head: true }).eq('survey_id', id)
   if ((count ?? 0) > 0) return NextResponse.json({ error: '問卷已有回覆，無法刪除（可停用代替）' }, { status: 409 })
 
