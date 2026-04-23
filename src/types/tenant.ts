@@ -19,6 +19,8 @@ export interface Tenant {
   birthday_bonus_points: number       // 生日禮物點數（0 = 僅發祝賀訊息）
   dormant_reminder_days: number | null // 沉睡喚醒天數（null = 停用）
   industry_template_key: string | null // 目前套用的產業範本 key（null = 未套用）
+  liff_provider_type: 'liff' | 'mini_app' // LIFF 佈署方式（預設 'liff'）
+  line_login_channel_id: string | null    // LINE Login Channel ID（與 Messaging API Channel 不同）
   created_at: string
 }
 
