@@ -281,10 +281,11 @@ export async function POST(req: NextRequest) {
 
     if (error) throw new Error(error.message)
 
-    // ── 5. 推薦好友獎勵（非同步，不影響主流程）────────────────────────────────
+    // ── 5. 推薦好友獎勵（response 後執行，避免 serverless 提前 kill）──────────
     if (referralCode && typeof referralCode === 'string') {
-      // Fire-and-forget: run after response via after() if available, else as side effect
-      void processReferral(supabase, tenant.id, created.id as string, referralCode.trim().toUpperCase())
+      const code = referralCode.trim().toUpperCase()
+      const newMemberId = created.id as string
+      after(() => processReferral(supabase, tenant.id, newMemberId, code))
     }
 
     // Fire webhook for member.created (after response, to survive serverless lifecycle)

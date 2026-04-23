@@ -83,19 +83,36 @@ export default function SetupPage() {
         const res = await fetch('/api/tenants')
         if (res.ok) {
           const d = await res.json() as Record<string, unknown>
+          const secretSet  = (d.line_channel_secret_set as boolean) ?? false
+          const tokenSet   = (d.channel_access_token_set as boolean) ?? false
+          const channelId  = (d.line_channel_id as string) ?? ''
+          const liffId     = (d.liff_id as string) ?? ''
+          const name       = (d.name as string) ?? ''
+
           setState({
             id:                       (d.id as string) ?? '',
             slug:                     (d.slug as string) ?? '',
-            name:                     (d.name as string) ?? '',
+            name,
             logo_url:                 (d.logo_url as string) ?? '',
             primary_color:            (d.primary_color as string) ?? '#06C755',
-            line_channel_id:          (d.line_channel_id as string) ?? '',
+            line_channel_id:          channelId,
             line_channel_secret:      '',
             channel_access_token:     '',
-            liff_id:                  (d.liff_id as string) ?? '',
-            line_channel_secret_set:  (d.line_channel_secret_set as boolean) ?? false,
-            channel_access_token_set: (d.channel_access_token_set as boolean) ?? false,
+            liff_id:                  liffId,
+            line_channel_secret_set:  secretSet,
+            channel_access_token_set: tokenSet,
           })
+
+          // 跳到最接近完成的步驟
+          if (!name.trim()) {
+            setStep(1)
+          } else if (!channelId || !secretSet || !tokenSet) {
+            setStep(2)
+          } else if (!liffId) {
+            setStep(3)
+          } else {
+            setStep(4) // 全部完成
+          }
         }
       } catch { /* ignore */ }
       finally { setLoading(false) }
