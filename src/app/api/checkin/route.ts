@@ -12,6 +12,35 @@ import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { addPointTransaction } from '@/repositories/pointRepository'
 
+// ── 連續打卡天數計算 ─────────────────────────────────────────────────────────
+// 給定已按時間倒序排列的打卡紀錄，計算從今天往回的連續天數（Asia/Taipei）
+function computeCheckinStreak(records: { checked_in_at: string }[]): number {
+  if (records.length === 0) return 0
+  const toTaipeiDate = (iso: string) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date(iso))
+
+  const today = toTaipeiDate(new Date().toISOString())
+  const dates = [...new Set(records.map((r) => toTaipeiDate(r.checked_in_at)))]
+  // dates is sorted descending (already ordered by checked_in_at DESC)
+
+  if (dates[0] !== today) return 1 // today not in list = just checked in (1st record = today)
+
+  let streak = 0
+  let expected = today
+  for (const d of dates) {
+    if (d === expected) {
+      streak++
+      // Go back one day
+      const prev = new Date(expected + 'T12:00:00+08:00')
+      prev.setDate(prev.getDate() - 1)
+      expected = toTaipeiDate(prev.toISOString())
+    } else {
+      break
+    }
+  }
+  return streak
+}
+
 // ── GET (Dashboard) ──────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
@@ -79,9 +108,11 @@ export async function POST(req: NextRequest) {
   if (!settings?.is_enabled)
     return NextResponse.json({ error: '打卡功能尚未開放' }, { status: 403 })
 
-  const pointsPerCheckin = (settings.points_per_checkin as number) ?? 1
-  const cooldownHours = (settings.cooldown_hours as number) ?? 24
-  const maxPerDay = (settings.max_per_day as number) ?? 1
+  const pointsPerCheckin   = (settings.points_per_checkin    as number) ?? 1
+  const cooldownHours      = (settings.cooldown_hours         as number) ?? 24
+  const maxPerDay          = (settings.max_per_day            as number) ?? 1
+  const bonusDays          = (settings.consecutive_bonus_days  as number) ?? 7
+  const bonusPoints        = (settings.consecutive_bonus_points as number) ?? 0
 
   // Get member
   const { data: member } = await supabase
@@ -128,7 +159,7 @@ export async function POST(req: NextRequest) {
   })
   if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 })
 
-  // Award points
+  // Award base points
   if (pointsPerCheckin > 0) {
     await addPointTransaction({
       tenant_id: tenant.id as string,
@@ -139,5 +170,34 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  return NextResponse.json({ success: true, pointsEarned: pointsPerCheckin })
+  // ── 連續打卡獎勵 ──────────────────────────────────────────────────────────
+  let streak = 1
+  let bonusAwarded = 0
+
+  if (bonusPoints > 0 && bonusDays > 0) {
+    // 取最近 bonusDays+1 筆打卡紀錄（含今日剛插入的）
+    const { data: recentCheckins } = await supabase
+      .from('checkin_records')
+      .select('checked_in_at')
+      .eq('tenant_id', tenant.id)
+      .eq('member_id', memberId)
+      .order('checked_in_at', { ascending: false })
+      .limit(bonusDays + 1)
+
+    streak = computeCheckinStreak(recentCheckins ?? [])
+
+    // 每 bonusDays 天連續打卡觸發一次
+    if (streak > 0 && streak % bonusDays === 0) {
+      await addPointTransaction({
+        tenant_id: tenant.id as string,
+        member_id: memberId,
+        type: 'earn',
+        amount: bonusPoints,
+        note: `連續打卡 ${streak} 天獎勵`,
+      })
+      bonusAwarded = bonusPoints
+    }
+  }
+
+  return NextResponse.json({ success: true, pointsEarned: pointsPerCheckin, streak, bonusAwarded })
 }

@@ -19,6 +19,14 @@
     {
       "path": "/api/cron/backfill-platform-members",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/webhook-retry",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/push-triggers",
+      "schedule": "0 10 * * *"
     }
   ]
 }

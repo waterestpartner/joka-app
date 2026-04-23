@@ -4,10 +4,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
-import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { requireDashboardAuth, isDashboardAuth, requireOwnerAuth } from '@/lib/auth-helpers'
 
 export async function GET(req: NextRequest) {
-  const auth = await requireDashboardAuth()
+  const auth = await requireOwnerAuth()
   if (!isDashboardAuth(auth)) return auth
 
   const webhookId = req.nextUrl.searchParams.get('webhookId')

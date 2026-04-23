@@ -9,6 +9,8 @@ interface Settings {
   points_per_checkin: number
   cooldown_hours: number
   max_per_day: number
+  consecutive_bonus_days: number
+  consecutive_bonus_points: number
 }
 
 interface CheckinRecord {
@@ -32,6 +34,8 @@ export default function CheckinPage() {
     points_per_checkin: 1,
     cooldown_hours: 24,
     max_per_day: 1,
+    consecutive_bonus_days: 7,
+    consecutive_bonus_points: 0,
   })
   const [saving, setSaving] = useState(false)
   const [saveResult, setSaveResult] = useState<'success' | 'error' | null>(null)
@@ -144,6 +148,43 @@ export default function CheckinPage() {
               <span className="text-sm text-zinc-500">次</span>
             </div>
           </div>
+        </div>
+
+        {/* Consecutive bonus */}
+        <div className="border-t border-zinc-100 pt-5">
+          <h3 className="text-sm font-semibold text-zinc-800 mb-1">連續打卡獎勵</h3>
+          <p className="text-xs text-zinc-400 mb-3">每達到指定連續天數，自動額外贈點（0 點 = 停用）</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1.5">連續天數門檻</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number" min={1}
+                  value={settings.consecutive_bonus_days}
+                  onChange={(e) => setSettings((s) => ({ ...s, consecutive_bonus_days: Math.max(1, parseInt(e.target.value) || 1) }))}
+                  className="w-20 border border-zinc-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755]"
+                />
+                <span className="text-sm text-zinc-500">天</span>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1.5">達標獎勵點數</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number" min={0}
+                  value={settings.consecutive_bonus_points}
+                  onChange={(e) => setSettings((s) => ({ ...s, consecutive_bonus_points: Math.max(0, parseInt(e.target.value) || 0) }))}
+                  className="w-20 border border-zinc-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755]"
+                />
+                <span className="text-sm text-zinc-500">點</span>
+              </div>
+            </div>
+          </div>
+          {settings.consecutive_bonus_points > 0 && (
+            <p className="mt-2 text-xs text-[#06C755]">
+              ✓ 每連續打卡 {settings.consecutive_bonus_days} 天，額外贈送 {settings.consecutive_bonus_points} 點
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-3">

@@ -70,13 +70,16 @@ export async function fireWebhooks(
             .digest('hex')
           headers['X-Joka-Signature'] = `sha256=${sig}`
         }
-        const deliveryRecord = {
+        const deliveryRecord: Record<string, unknown> = {
           webhook_id: wh.id as string,
           event,
           payload: payload as unknown as Record<string, unknown>,
           success: false,
           response_status: 0,
           response_body: '',
+          attempt_count: 1,
+          next_retry_at: null as string | null,
+          last_error: null as string | null,
         }
         try {
           const res = await fetch(wh.url as string, {
@@ -89,6 +92,11 @@ export async function fireWebhooks(
           deliveryRecord.response_status = res.status
           deliveryRecord.response_body = resText
           deliveryRecord.success = res.ok
+          if (!res.ok) {
+            // 首次失敗：1 分鐘後重試
+            deliveryRecord.next_retry_at = new Date(Date.now() + 60_000).toISOString()
+            deliveryRecord.last_error = `HTTP ${res.status}: ${resText.slice(0, 200)}`
+          }
           await supabase.from('webhook_deliveries').insert(deliveryRecord)
           await supabase
             .from('webhooks')
@@ -96,7 +104,10 @@ export async function fireWebhooks(
             .eq('id', wh.id as string)
             .eq('tenant_id', tenantId)
         } catch (err) {
-          deliveryRecord.response_body = String(err).slice(0, 500)
+          const errMsg = String(err).slice(0, 500)
+          deliveryRecord.response_body = errMsg
+          deliveryRecord.last_error = errMsg
+          deliveryRecord.next_retry_at = new Date(Date.now() + 60_000).toISOString()
           await supabase.from('webhook_deliveries').insert(deliveryRecord)
         }
       })

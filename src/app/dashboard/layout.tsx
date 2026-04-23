@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 
 async function signOutAction() {
   'use server'
@@ -9,17 +10,28 @@ async function signOutAction() {
   redirect('/dashboard/login')
 }
 
-const navLinks = [
-  { href: '/dashboard/setup', label: '🚀 設定精靈' },
+// owner + staff 都可看到的連結
+const staffLinks = [
   { href: '/dashboard/overview', label: '數據總覽' },
-  { href: '/dashboard/analytics', label: '數據報表' },
   { href: '/dashboard/members', label: '會員管理' },
+  { href: '/dashboard/scan', label: '掃碼集點' },
+  { href: '/dashboard/coupons/scan', label: '優惠券核銷' },
+  { href: '/dashboard/transactions', label: '點數紀錄' },
+  { href: '/dashboard/push', label: '推播訊息' },
+  { href: '/dashboard/referrals', label: '推薦計畫' },
+  { href: '/dashboard/checkin', label: '打卡集點' },
+  { href: '/dashboard/surveys', label: '問卷調查' },
+]
+
+// 只有 owner 才能看到
+const ownerOnlyLinks = [
+  { href: '/dashboard/setup', label: '🚀 設定精靈' },
+  { href: '/dashboard/analytics', label: '數據報表' },
+  { href: '/dashboard/analytics/rfm', label: 'RFM 分析' },
+  { href: '/dashboard/analytics/push', label: '推播成效分析' },
   { href: '/dashboard/member-notes', label: '會員備註' },
   { href: '/dashboard/custom-fields', label: '自訂會員欄位' },
   { href: '/dashboard/tags', label: '標籤管理' },
-  { href: '/dashboard/scan', label: '掃碼集點' },
-  { href: '/dashboard/coupons/scan', label: '優惠券核銷' },
-  { href: '/dashboard/push', label: '推播訊息' },
   { href: '/dashboard/segments', label: '會員分群' },
   { href: '/dashboard/announcements', label: '公告管理' },
   { href: '/dashboard/campaigns', label: '活動管理' },
@@ -28,19 +40,17 @@ const navLinks = [
   { href: '/dashboard/store', label: '積分商城' },
   { href: '/dashboard/coupons', label: '優惠券管理' },
   { href: '/dashboard/tiers', label: '等級設定' },
-  { href: '/dashboard/referrals', label: '推薦計畫' },
-  { href: '/dashboard/transactions', label: '點數紀錄' },
   { href: '/dashboard/points-expiry', label: '點數到期提醒' },
   { href: '/dashboard/missions', label: '任務管理' },
-  { href: '/dashboard/checkin', label: '打卡集點' },
-  { href: '/dashboard/surveys', label: '問卷調查' },
   { href: '/dashboard/stamp-cards', label: '蓋章卡管理' },
   { href: '/dashboard/auto-reply', label: '自動回覆' },
+  { href: '/dashboard/push-triggers', label: '推播觸發規則' },
   { href: '/dashboard/birthday-rewards', label: '生日獎勵' },
   { href: '/dashboard/dormant-members', label: '沉睡會員' },
   { href: '/dashboard/blacklist', label: '黑名單管理' },
   { href: '/dashboard/rich-menu', label: 'Rich Menu' },
   { href: '/dashboard/settings', label: '品牌設定' },
+  { href: '/dashboard/team', label: '團隊成員' },
   { href: '/dashboard/webhooks', label: 'Webhook 設定' },
   { href: '/dashboard/audit-logs', label: '操作記錄' },
 ]
@@ -64,6 +74,20 @@ export default async function DashboardLayout({
     )
   }
 
+  // Fetch role
+  const adminClient = createSupabaseAdminClient()
+  const { data: tu } = await adminClient
+    .from('tenant_users')
+    .select('role')
+    .eq('email', user.email!)
+    .maybeSingle()
+  const role = (tu?.role as 'owner' | 'staff') ?? 'owner'
+  const isOwner = role === 'owner'
+
+  const navLinks = isOwner
+    ? [...staffLinks, ...ownerOnlyLinks]
+    : staffLinks
+
   // Authenticated — render full sidebar layout
   return (
     <div className="min-h-screen flex bg-zinc-50">
@@ -81,7 +105,7 @@ export default async function DashboardLayout({
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navLinks.map((link) => (
             <Link
               key={link.href}
@@ -95,7 +119,16 @@ export default async function DashboardLayout({
 
         {/* User area + logout */}
         <div className="border-t border-zinc-200 p-4 space-y-2">
-          <p className="text-xs text-zinc-500 truncate px-1">{user.email}</p>
+          <div className="flex items-center gap-2 px-1">
+            <p className="text-xs text-zinc-500 truncate flex-1">{user.email}</p>
+            <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+              isOwner
+                ? 'bg-green-100 text-green-700'
+                : 'bg-zinc-100 text-zinc-600'
+            }`}>
+              {isOwner ? 'Owner' : 'Staff'}
+            </span>
+          </div>
           <form action={signOutAction}>
             <button
               type="submit"

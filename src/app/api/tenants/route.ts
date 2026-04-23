@@ -7,7 +7,7 @@ import {
   updateTenant,
 } from '@/repositories/tenantRepository'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
-import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { requireDashboardAuth, isDashboardAuth, requireOwnerAuth } from '@/lib/auth-helpers'
 import { fetchLineBotInfo } from '@/lib/line-messaging'
 import { logAudit } from '@/lib/audit'
 import type { Tenant } from '@/types/tenant'
@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     // 只有已登入的 Dashboard 管理者才能修改 tenant
-    const auth = await requireDashboardAuth()
+    const auth = await requireOwnerAuth()
     if (!isDashboardAuth(auth)) return auth
 
     const body = await req.json()

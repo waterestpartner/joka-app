@@ -7,12 +7,12 @@
 
 import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
-import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { requireDashboardAuth, isDashboardAuth, requireOwnerAuth } from '@/lib/auth-helpers'
 import { WEBHOOK_EVENTS, type WebhookEvent } from '@/lib/webhooks'
 import { logAudit } from '@/lib/audit'
 
 export async function GET(_req: NextRequest) {
-  const auth = await requireDashboardAuth()
+  const auth = await requireOwnerAuth()
   if (!isDashboardAuth(auth)) return auth
 
   const supabase = createSupabaseAdminClient()
@@ -27,7 +27,7 @@ export async function GET(_req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireDashboardAuth()
+  const auth = await requireOwnerAuth()
   if (!isDashboardAuth(auth)) return auth
 
   let body: unknown
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const auth = await requireDashboardAuth()
+  const auth = await requireOwnerAuth()
   if (!isDashboardAuth(auth)) return auth
 
   let body: unknown
@@ -139,7 +139,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const auth = await requireDashboardAuth()
+  const auth = await requireOwnerAuth()
   if (!isDashboardAuth(auth)) return auth
 
   const id = req.nextUrl.searchParams.get('id')

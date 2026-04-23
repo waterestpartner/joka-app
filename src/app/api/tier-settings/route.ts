@@ -6,7 +6,7 @@
 // DELETE /api/tier-settings?id=    → 刪除一個等級（不可刪最後一個）
 
 import { NextRequest, NextResponse, after } from 'next/server'
-import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { requireDashboardAuth, isDashboardAuth, requireOwnerAuth } from '@/lib/auth-helpers'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { logAudit } from '@/lib/audit'
 
@@ -39,7 +39,7 @@ function generateTierKey(): string {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireDashboardAuth()
+  const auth = await requireOwnerAuth()
   if (!isDashboardAuth(auth)) return auth
 
   try {
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const auth = await requireDashboardAuth()
+  const auth = await requireOwnerAuth()
   if (!isDashboardAuth(auth)) return auth
 
   try {
@@ -187,7 +187,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const auth = await requireDashboardAuth()
+  const auth = await requireOwnerAuth()
   if (!isDashboardAuth(auth)) return auth
 
   const id = req.nextUrl.searchParams.get('id')

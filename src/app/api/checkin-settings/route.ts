@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
-import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { requireDashboardAuth, isDashboardAuth, requireOwnerAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
 
 export async function GET(_req: NextRequest) {
@@ -20,12 +20,19 @@ export async function GET(_req: NextRequest) {
     .maybeSingle()
 
   return NextResponse.json(
-    data ?? { is_enabled: false, points_per_checkin: 1, cooldown_hours: 24, max_per_day: 1 }
+    data ?? {
+      is_enabled: false,
+      points_per_checkin: 1,
+      cooldown_hours: 24,
+      max_per_day: 1,
+      consecutive_bonus_days: 7,
+      consecutive_bonus_points: 0,
+    }
   )
 }
 
 export async function PATCH(req: NextRequest) {
-  const auth = await requireDashboardAuth()
+  const auth = await requireOwnerAuth()
   if (!isDashboardAuth(auth)) return auth
 
   let body: unknown
@@ -33,7 +40,10 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const { is_enabled, points_per_checkin, cooldown_hours, max_per_day } = body as Record<string, unknown>
+  const {
+    is_enabled, points_per_checkin, cooldown_hours, max_per_day,
+    consecutive_bonus_days, consecutive_bonus_points,
+  } = body as Record<string, unknown>
   const supabase = createSupabaseAdminClient()
 
   const { error } = await supabase
@@ -48,6 +58,10 @@ export async function PATCH(req: NextRequest) {
           ? Math.floor(cooldown_hours) : 24,
         max_per_day: typeof max_per_day === 'number' && max_per_day >= 1
           ? Math.floor(max_per_day) : 1,
+        consecutive_bonus_days: typeof consecutive_bonus_days === 'number' && consecutive_bonus_days >= 1
+          ? Math.floor(consecutive_bonus_days) : 7,
+        consecutive_bonus_points: typeof consecutive_bonus_points === 'number' && consecutive_bonus_points >= 0
+          ? Math.floor(consecutive_bonus_points) : 0,
       },
       { onConflict: 'tenant_id' }
     )

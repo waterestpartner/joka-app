@@ -5,11 +5,11 @@
 
 import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
-import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { requireDashboardAuth, isDashboardAuth, requireOwnerAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
 
 export async function GET(req: NextRequest) {
-  const auth = await requireDashboardAuth()
+  const auth = await requireOwnerAuth()
   if (!isDashboardAuth(auth)) return auth
   void req
 
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireDashboardAuth()
+  const auth = await requireOwnerAuth()
   if (!isDashboardAuth(auth)) return auth
 
   let body: unknown

@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
-import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
+import { requireDashboardAuth, isDashboardAuth, requireOwnerAuth } from '@/lib/auth-helpers'
 import { pushTextMessage } from '@/lib/line-messaging'
 import { logAudit } from '@/lib/audit'
 
@@ -16,7 +16,7 @@ type Params = { params: Promise<{ id: string }> }
 // ── GET ───────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest, { params }: Params) {
-  const auth = await requireDashboardAuth()
+  const auth = await requireOwnerAuth()
   if (!isDashboardAuth(auth)) return auth
   void req
 
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 // ── PATCH ─────────────────────────────────────────────────────────────────────
 
 export async function PATCH(req: NextRequest, { params }: Params) {
-  const auth = await requireDashboardAuth()
+  const auth = await requireOwnerAuth()
   if (!isDashboardAuth(auth)) return auth
 
   const { id } = await params
@@ -126,7 +126,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 // ── POST (action routing) ─────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest, { params }: Params) {
-  const auth = await requireDashboardAuth()
+  const auth = await requireOwnerAuth()
   if (!isDashboardAuth(auth)) return auth
 
   const { id } = await params
