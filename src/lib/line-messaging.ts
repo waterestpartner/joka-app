@@ -40,6 +40,7 @@ export async function pushTextMessage(
         messages: [{ type: 'text', text }],
       }),
       cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
     })
 
     if (!res.ok) {
@@ -76,6 +77,7 @@ export async function pushTextMessageBatch(
           messages: [{ type: 'text', text }],
         }),
         cache: 'no-store',
+        signal: AbortSignal.timeout(8000),
       })
 
       if (res.ok) {
@@ -121,6 +123,7 @@ export async function pushFlexMessage(
         messages: [{ type: 'flex', altText, contents: flexContents }],
       }),
       cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
@@ -156,6 +159,7 @@ export async function pushFlexMessageBatch(
           messages: [{ type: 'flex', altText, contents: flexContents }],
         }),
         cache: 'no-store',
+        signal: AbortSignal.timeout(8000),
       })
       if (res.ok) {
         successCount++
