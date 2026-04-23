@@ -94,6 +94,7 @@ export async function fireWebhooks(
             .from('webhooks')
             .update({ last_triggered_at: new Date().toISOString(), last_status: res.status })
             .eq('id', wh.id as string)
+            .eq('tenant_id', tenantId)
         } catch (err) {
           deliveryRecord.response_body = String(err).slice(0, 500)
           await supabase.from('webhook_deliveries').insert(deliveryRecord)
