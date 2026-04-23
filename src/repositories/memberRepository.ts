@@ -54,8 +54,10 @@ export async function getMembersByTenant(
       .eq('tenant_id', tenantId)
 
     if (options?.search) {
+      // Escape special PostgREST filter characters to prevent query injection
+      const safeSearch = options.search.replace(/[%_,()]/g, (c) => `\\${c}`)
       query = query.or(
-        `name.ilike.%${options.search}%,phone.ilike.%${options.search}%`
+        `name.ilike.%${safeSearch}%,phone.ilike.%${safeSearch}%`
       )
     }
 
