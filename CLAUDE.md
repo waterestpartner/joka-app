@@ -3,7 +3,7 @@
 # JOKA — 專案完整說明書
 
 > 給 AI 看的完整指南。每次開 session 必讀。包含架構決定的「為什麼」，不只是「是什麼」。
-> 最後更新：2026-04-22（v0.11.0 — Ocard-style settings UX）
+> 最後更新：2026-04-23（v0.12.1 — 系統安全強化 + Bug 修復 session）
 
 ---
 
@@ -57,6 +57,7 @@ point_transactions              — 積分流水帳（只能 INSERT，永不 UPD
 member_coupons                  — 會員持有的優惠券（含 status: active/used/expired）
 coupons                         — 優惠券範本
 tier_settings                   — 等級設定（tier key, tier_display_name, min_points, point_rate）
+                                  ⚠️ UNIQUE(tenant_id, tier) 已加入（2026-04-23）
 
 missions / mission_completions  — 任務系統
 stamp_cards / stamp_card_progresses — 蓋章卡
@@ -68,6 +69,7 @@ push_messages / push_logs       — 推播訊息 + 投遞紀錄
 scheduled_pushes                — 排程推播
 
 lotteries / lottery_entries     — 抽獎活動
+lottery_winners                 — 抽獎得獎名單（含 tenant_id）
 reward_items / member_redemptions — 積分商城
 
 segments / segment_conditions   — 會員動態分群
@@ -80,7 +82,11 @@ webhooks / webhook_deliveries   — 外部 Webhook 設定 + 投遞紀錄
 point_multiplier_events         — 加倍點數活動（有效期間 + 倍率）
 auto_reply_rules                — LINE 自動回覆規則
 announcements                   — 公告
-checkin_settings                — 打卡集點設定
+checkin_settings / checkin_records — 打卡集點設定與紀錄
+
+industry_templates              — 產業範本定義（v0.12.0）
+tenant_push_templates           — 各 tenant 的推播訊息範本（v0.12.0）
+tenant_setup_tasks              — 各 tenant 的建議任務清單（v0.12.0）
 
 platform_members                — 跨品牌平台身分（Model C，line_uid 唯一）
 platform_member_consents        — 每位會員在每個品牌的同意書（Model C）
@@ -109,7 +115,13 @@ platform_member_consents        — 每位會員在每個品牌的同意書（Mo
 ### 5. fire-and-forget 用 `after()` 而非 `void asyncFn()`
 **Why：** Vercel serverless function 在送出 HTTP response 後會立即終止 execution context。`void asyncFn()` 的後續非同步工作（寫 DB、送 push、打 webhook）全部被 kill。必須用 Next.js 15+ 的 `after()` API，它保證 response 後的工作完成才釋放。**所有 push / audit / webhook 都必須用 `after()`。**
 
-### 6. Model C 漸進式設計
+### 6. UPDATE / DELETE 雙層 tenant_id 保護
+**Why：** 先用 SELECT 驗 ownership 再 UPDATE，但 UPDATE 本身也要加 `.eq('tenant_id', ...)` 做防禦縱深（defense-in-depth）。萬一 SELECT 邏輯有 bug 或未來有人遺漏，UPDATE 的 tenant_id 條件是最後一道防線，防止跨品牌修改。
+
+### 7. ilike 搜尋前需 escape 特殊字元
+**Why：** PostgREST 的 `.or()` 接受字串格式的 filter（e.g., `name.ilike.%foo%,phone.ilike.%bar%`）。直接內插使用者輸入可能讓逗號、括號等字元改變 query 結構（Filter Injection）。必須先 escape `%_,()` 再內插。
+
+### 8. Model C 漸進式設計
 **Why：** 商業上目前不需要跨品牌功能，但未來可能有。現在在 DB 層預留 `platform_members` 表和 `platform_participation` 欄位，等需要再打開，不需大改架構。`platform_participation = 'disabled'` 代表完全不影響現有邏輯，cron 也跳過。
 
 ---
@@ -122,9 +134,12 @@ platform_member_consents        — 每位會員在每個品牌的同意書（Mo
 | `SUPABASE_SERVICE_ROLE_KEY` 加 `NEXT_PUBLIC_` 前綴 | 外洩 = 任何人可繞過 RLS，完全控制 DB |
 | `lineUid` 從 body / query 取 | 偽造風險，必須從 `verifyLineToken().sub` 取 |
 | 查詢不帶 `tenant_id` 條件 | 跨品牌資料外洩 |
+| UPDATE/DELETE 不帶 `tenant_id` 條件 | 跨品牌資料篡改（即使前面有 SELECT 驗 ownership） |
 | LIFF 頁面不加 `'use client'` | LIFF SDK 需要 `window`，Server Component 會炸 |
 | 繞過 `requireDashboardAuth()` | Dashboard API 唯一安全守門員，少了它 = 任何人都能操作 |
 | `void asyncFn()` 做 after-response 工作 | Serverless 提前 kill，用 `after()` 取代 |
+| `.or()` 內插未 escape 的使用者輸入 | PostgREST Filter Injection |
+| 刪 child rows 前不驗 parent 所有權 | 攻擊者可透過猜 UUID 刪除別家資料 |
 
 ---
 
@@ -155,21 +170,34 @@ if (!isDashboardAuth(auth)) return auth   // 401/403 直接 return
 // 2. tenantId 從 auth 取（絕不從 body 取）
 const { tenantId, email } = auth
 
-// 3. 查詢一律帶 tenant_id
+// 3. req.json() 包 try-catch
+let body: unknown
+try { body = await req.json() } catch {
+  return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+}
+
+// 4. 查詢一律帶 tenant_id
 const { data, error } = await supabase
   .from('members')
   .select('*')
   .eq('tenant_id', tenantId)  // 必須
 
-// 4. 錯誤不 throw 到外面
+// 5. UPDATE / DELETE 也帶 tenant_id（雙層保護）
+await supabase.from('table').update(updates).eq('id', id).eq('tenant_id', tenantId)
+
+// 6. 搜尋字串 escape 後再 ilike
+const safe = search.replace(/[%_,()]/g, (c) => `\\${c}`)
+query = query.or(`name.ilike.%${safe}%,phone.ilike.%${safe}%`)
+
+// 7. 錯誤不 throw 到外面
 if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-// 5. fire-and-forget 側邊效果用 after()
+// 8. fire-and-forget 側邊效果用 after()
 after(() => logAudit({ tenant_id: tenantId, operator_email: email, ... }))
 after(() => fireWebhooks(tenantId, 'member.created', payload))
 ```
 
-### Supabase Join 型別轉換（必要的 hack）
+### Supabase JOIN 型別轉換（必要的 hack）
 ```typescript
 // Supabase join 回傳的型別是 any[] 或 object | object[]，不是具體型別
 // 必須用 as unknown as 中轉，否則 TypeScript 報錯
@@ -198,6 +226,70 @@ useEffect(() => {
 <span>{tierDisplayMap[m.tier] ?? m.tier}</span>
 ```
 
+### setLoading 必須用 finally
+```typescript
+// ❌ 錯誤：fetch 失敗 → spinner 卡死
+setLoading(true)
+const res = await fetch('/api/...')
+setLoading(false)  // 若 fetch throws，這行不執行
+
+// ✅ 正確：
+setLoading(true)
+try {
+  const res = await fetch('/api/...')
+  if (res.ok) setData(await res.json())
+} catch (e) {
+  setError(e instanceof Error ? e.message : '載入失敗')
+} finally {
+  setLoading(false)  // 永遠執行
+}
+```
+
+### head:true 查詢取 count，不取 data
+```typescript
+// ❌ 錯誤：head:true 時 data 永遠是 null
+const [{ data: todayCount }] = await Promise.all([
+  supabase.from('table').select('id', { count: 'exact', head: true })...
+])
+// todayCount 永遠是 null → ?? 0 = 0
+
+// ✅ 正確：
+const [{ count: todayCount }] = await Promise.all([
+  supabase.from('table').select('id', { count: 'exact', head: true })...
+])
+```
+
+### 平行 GET 查詢需 error 處理
+```typescript
+// ❌ 錯誤：DB 失敗回傳空陣列，看起來像「無資料」
+const [{ data: fields }, { data: values }] = await Promise.all([...])
+return NextResponse.json({ fields: fields ?? [] })
+
+// ✅ 正確：
+const [{ data: fields, error: fieldsErr }, { data: values, error: valuesErr }] = await Promise.all([...])
+if (fieldsErr) return NextResponse.json({ error: fieldsErr.message }, { status: 500 })
+if (valuesErr) return NextResponse.json({ error: valuesErr.message }, { status: 500 })
+```
+
+### LINE push 呼叫需加 timeout
+```typescript
+// ✅ 正確（所有 push 呼叫都已加）：
+const res = await fetch('https://api.line.me/v2/bot/message/push', {
+  ...,
+  signal: AbortSignal.timeout(8000),
+})
+```
+
+### 刪除子資料前先驗 parent ownership
+```typescript
+// ✅ 正確：先驗 parent 所有權，再刪 children
+const { data: check } = await supabase.from('surveys').select('id')
+  .eq('id', id).eq('tenant_id', auth.tenantId).maybeSingle()
+if (!check) return NextResponse.json({ error: '找不到問卷' }, { status: 404 })
+await supabase.from('survey_questions').delete().eq('survey_id', id)
+const { error } = await supabase.from('surveys').delete().eq('id', id).eq('tenant_id', auth.tenantId)
+```
+
 ---
 
 ## 重要 lib 檔案
@@ -207,28 +299,22 @@ src/lib/supabase.ts              — createSupabaseBrowserClient()（LIFF browse
 src/lib/supabase-server.ts       — createSupabaseServerClient()（Dashboard cookie session）
 src/lib/supabase-admin.ts        — createSupabaseAdminClient()（LIFF API，繞過 RLS）
 src/lib/auth-helpers.ts          — requireDashboardAuth() / isDashboardAuth() type guard
+                                   requireAdminAuth() / isAdminAuth()（超管用）
 src/lib/line-auth.ts             — verifyLineToken()（含 5 分鐘 in-memory cache）/ extractBearerToken()
-src/lib/line-messaging.ts        — pushTextMessage()（送 LINE push message）
+src/lib/line-messaging.ts        — pushTextMessage() / pushTextMessageBatch()
+                                   pushFlexMessage() / pushFlexMessageBatch()
+                                   ⚠️ 所有 LINE push 呼叫均有 AbortSignal.timeout(8000)
 src/lib/audit.ts                 — logAudit()（寫 audit_logs，用 after()）
 src/lib/webhooks.ts              — fireWebhooks()（外送 Webhook，HMAC-SHA256 簽名，用 after()）
 src/lib/point-multiplier.ts      — getActiveMultiplier(tenantId) → 當前最高加倍倍率
 src/lib/platform-members.ts      — findOrCreatePlatformMember()（Model C，競態安全 upsert）
 ```
 
-### 新增 API（v0.11.0）
+### 重要元件
 ```
-POST /api/dashboard/test-line-connection  — 檢查當前 tenant 的 LIFF ID / Channel ID /
-                                             Channel Secret / Access Token 是否正確，
-                                             呼叫 /v2/bot/info 取得 bot displayName
-```
-
-### 新增 UI 元件（v0.11.0）
-```
-src/components/dashboard/ConfirmDialog.tsx  — 統一的 React 確認對話框（取代 window.confirm）
-                                               已 rollout 到 members / tags / tiers /
-                                               webhooks / auto-reply / announcements /
-                                               point-multipliers / push / lotteries /
-                                               surveys / member-notes / stamp-cards 等
+src/components/dashboard/ConfirmDialog.tsx  — 統一確認對話框（取代所有 window.confirm / alert）
+                                               Props: title, message, confirmLabel, loading,
+                                               error, onConfirm, onCancel
 ```
 
 ---
@@ -241,6 +327,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY    — anon key（前台可見，LIFF Realtime 用
 SUPABASE_SERVICE_ROLE_KEY        — service role key（server-only！絕不加 NEXT_PUBLIC_）
 LINE_CHANNEL_ACCESS_TOKEN        — LINE Messaging API token（push 用，server-only）
 CRON_SECRET                      — cron API 保護 secret（Authorization: Bearer <secret>）
+JOKA_ADMIN_EMAIL                 — 超管 email（requireAdminAuth() 用）
 ```
 
 > ⚠️ `vercel env add` 會加換行符，必須用 `echo -n "value" | vercel env add KEY ENV`
@@ -295,9 +382,9 @@ supabase/tier-settings-unique.sql        ✅ 執行（2026-04-23，修復 applyT
 
 ---
 
-## 已驗證可用的功能（2026-04-22，v0.11.0）
+## 已驗證可用的功能（2026-04-23，v0.12.1）
 
-**Dashboard（全部 34 頁面已驗證）：**
+**Dashboard（全部 34+ 頁面已驗證）：**
 - ✅ 登入、品牌設定、等級設定 CRUD
 - ✅ 優惠券 CRUD、任務 CRUD、蓋章卡 CRUD
 - ✅ 掃碼集點（NT$500 × 3x = 1,500pt 驗證）、手動調整點數
@@ -310,14 +397,13 @@ supabase/tier-settings-unique.sql        ✅ 執行（2026-04-23，修復 applyT
 - ✅ 生日獎勵、沉睡會員、黑名單、Rich Menu
 - ✅ 數據總覽、數據報表（含 Cohort Retention）
 - ✅ Production cron（birthday/expire-points 已 curl 驗證）
-- ✅ Tier 顯示名稱全修（analytics/blacklist/dormant/coupons-scan/segments）
-- ✅ **v0.11.0**：Ocard-style settings UX（LIFF ID 路徑修正 / 去哪找連結 / 連線測試 / 完成度進度條）
-- ✅ **v0.11.0**：ConfirmDialog 元件統一取代 window.confirm（13+ 頁面已 rollout）
-- ✅ **v0.11.0**：Dashboard helper text 字色統一變深（zinc-400 → zinc-500；subtitle 500 → 600）
+- ✅ **v0.11.0**：Ocard-style settings UX + ConfirmDialog 全面取代 window.confirm
+- ✅ **v0.12.0**：Industry Templates 系統（Super Admin + 商家切換 + Setup Tasks）
+- ✅ **v0.12.1（本 session）**：系統安全強化 + Bug 修復（詳見 HANDOFF.md）
 
 **LIFF 前台（需真實 LINE 環境，尚未 E2E 測試）：**
-- 11 個頁面：register / member-card / points / coupons / stamps / missions / store / referral / profile / surveys / checkin
+- 13 個頁面：register / member-card / points / coupons / stamps / missions / store / referral / profile / surveys / checkin / my-brands
 
 ---
 
-_最後更新：2026-04-22（v0.11.0 — Ocard-style settings UX + ConfirmDialog rollout）_
+_最後更新：2026-04-23（v0.12.1 — 系統安全強化 session）_

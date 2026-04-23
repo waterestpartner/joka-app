@@ -1,6 +1,41 @@
 # JOKA TODO
 
-> 最後更新：2026-04-23（v0.12.0 — Industry Templates 端對端測試完成 ✅）
+> 最後更新：2026-04-23（v0.12.1 — Security Hardening + Bug Fixes ✅）
+
+---
+
+## 🆕 v0.12.1（本 session 完成）— Security Hardening + Bug Fixes
+
+### 缺少 tenant_id 的 UPDATE/DELETE（防禦縱深，全部已修）
+- [x] `lotteries/[id]/route.ts` — `executeDraw` status UPDATE + `lottery_winners` DELETE + notify UPDATE 補 tenant_id ✅
+- [x] `cron/scheduled-push/route.ts` — 4 個 UPDATE（3×failed + 1×sent）補 tenant_id ✅
+- [x] `lib/webhooks.ts` — `last_triggered_at` UPDATE 補 tenant_id ✅
+- [x] `missions/checkin/route.ts` — `last_activity_at` UPDATE 補 tenant_id ✅
+- [x] `missions/complete/route.ts` — `last_activity_at` UPDATE 補 tenant_id ✅
+- [x] `referral/route.ts` — `referral_code` UPDATE 補 tenant_id ✅
+- [x] `stamp-cards/stamp/route.ts` — `member_stamp_cards` UPDATE 補 tenant_id ✅
+- [x] `redemptions/route.ts` — `reward_items` UPDATE 補 tenant_id ✅
+- [x] `cron/expire-points/route.ts` — `points=0` UPDATE 補 tenant_id ✅
+
+### 安全漏洞修復
+- [x] **🔴 surveys/[id]/route.ts — child-before-parent DELETE** — 刪 `survey_questions` 前未驗 survey 屬於本 tenant；補 ownership check ✅
+- [x] **🟠 PostgREST Filter Injection** — `memberRepository.ts` / `dormant-members/route.ts` / `transactions/route.ts` 的 ilike search 未 escape `%_,()`，已加 `.replace(/[%_,()]/g, (c) => \`\\${c}\`)` ✅
+
+### Bug 修復
+- [x] **`checkin/route.ts` — `head:true` query 誤解構 `data`** — `todayCount` 永遠是 0；改成解構 `count` ✅
+- [x] **`dashboard/checkin/page.tsx` — 無 try-finally** — fetch 拋錯時 `setLoading(false)` 永不執行；加 try-finally ✅
+- [x] **`custom-field-values/route.ts` — 並行 query 無 error 處理** — DB 錯誤靜默回空陣列；補 error 檢查 + 500 ✅
+- [x] **`surveys/[id]/route.ts` — GET 並行 query 無 error 處理** — 同上 ✅
+- [x] **`members/route.ts` — CSV export 並行 query 無 error 處理** — 同上 ✅
+- [x] **`dashboard/coupons/page.tsx` — toggleError 未渲染** — 啟用/停用失敗時使用者看不到錯誤；加 error banner ✅
+
+### 效能 / 可靠性
+- [x] **`lib/line-messaging.ts` — 所有 4 個 push 函式缺 AbortSignal.timeout** — LINE API 若緩慢會讓 serverless 掛起；加 `signal: AbortSignal.timeout(8000)` ✅
+
+### 文件
+- [x] `CLAUDE.md` — 全面改寫加入 v0.12.1 架構決策、反模式文件 ✅
+- [x] `HANDOFF.md` — 更新至 v0.12.1 ✅
+- [x] `TODO.md` — 新增 v0.12.1 區塊 ✅
 
 ---
 
