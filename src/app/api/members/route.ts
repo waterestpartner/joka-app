@@ -167,6 +167,68 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Member already registered' }, { status: 409 })
     }
 
+    // ── 3b. CSV import → LINE 綁定 ──────────────────────────────────────────
+    // 若 CSV 匯入的離線會員（line_uid 以 import_ 開頭）手機號碼與本次 LIFF
+    // 註冊相符，直接更新 line_uid 完成綁定，不建立重複紀錄。
+    const { data: importedMember } = await supabase
+      .from('members')
+      .select('id, points, tier')
+      .eq('tenant_id', tenant.id)
+      .eq('phone', phone.trim())
+      .like('line_uid', 'import_%')
+      .maybeSingle()
+
+    if (importedMember) {
+      let bindPlatformMemberId: string | null = null
+      if (tenant.platform_participation !== 'disabled') {
+        try {
+          bindPlatformMemberId = await findOrCreatePlatformMember(supabase, {
+            line_uid:     lineUid,
+            display_name: name.trim(),
+            birthday:     birthday ?? null,
+          })
+          if (bindPlatformMemberId && consentPlatform === true) {
+            await upsertConsent(supabase, {
+              platform_member_id:               bindPlatformMemberId,
+              tenant_id:                        tenant.id,
+              share_basic_profile:              true,
+              share_transaction_history:        true,
+              allow_cross_brand_recommendation: true,
+              consent_version:                  'v1.0',
+            })
+          }
+        } catch (pmErr) {
+          console.error('[members/POST] binding platform member error:', pmErr)
+        }
+      }
+
+      const { data: bound, error: bindErr } = await supabase
+        .from('members')
+        .update({
+          line_uid:           lineUid,
+          name:               name.trim(),
+          birthday:           birthday ?? null,
+          last_activity_at:   new Date().toISOString(),
+          platform_member_id: bindPlatformMemberId,
+        })
+        .eq('id', importedMember.id as string)
+        .eq('tenant_id', tenant.id)
+        .select()
+        .single()
+
+      if (bindErr) throw new Error(bindErr.message)
+
+      const boundData = bound as Record<string, unknown>
+      after(() => fireWebhooks(tenant.id, 'member.created', {
+        member_id: boundData.id as string,
+        name:      boundData.name as string ?? null,
+        phone:     boundData.phone as string ?? null,
+        tier:      boundData.tier as string ?? 'basic',
+      }))
+
+      return NextResponse.json(bound, { status: 200 })
+    }
+
     // ── 4. 取得或建立平台級會員 ID（Model C Hybrid Federated）────────────────
     //    只有在 platform_participation 不是 'disabled' 時才觸發
     //    若失敗不中斷主流程（品牌會員資料更重要）
