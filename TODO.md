@@ -1,10 +1,19 @@
 # JOKA TODO
 
-> 最後更新：2026-04-23（v0.12.2 — Setup Wizard 完善 + CSV LINE 綁定 ✅）
+> 最後更新：2026-04-23（v0.12.3 — Serverless 可靠性全面補強 ✅）
 
 ---
 
-## 🆕 v0.12.2（本 session 完成）— Setup Wizard 完善 + CSV LINE 綁定
+## 🆕 v0.12.3（本 session 完成）— Serverless 可靠性全面補強
+
+### 效能 / 可靠性
+- [x] **`src/lib/line-auth.ts` — 兩個 LINE API fetch 缺 AbortSignal.timeout** — `verifyLineIdToken` + `verifyLineAccessToken` 加上 `signal: AbortSignal.timeout(5000)` ✅
+- [x] **`cron/scheduled-push/route.ts` — LINE push fetch 缺 AbortSignal.timeout** — 每封推播的 fetch 加上 `signal: AbortSignal.timeout(8000)` ✅
+- [x] **`line-webhook/[tenantSlug]/route.ts` — handleFollow/handleMessage 用 `.catch()` fire-and-forget** — Vercel serverless 回傳 200 後可能提前 kill；改用 `after(() => handler(...).catch(...))` ✅
+
+---
+
+## 🆕 v0.12.2（上一個 session 完成）— Setup Wizard 完善 + CSV LINE 綁定
 
 ### 新功能
 - [x] **CSV → LINE 綁定**：`POST /api/members` LIFF 註冊時，若手機號碼符合 `import_` 前綴離線會員，直接 UPDATE 綁定 `line_uid`，保留點數/等級 ✅
@@ -309,7 +318,7 @@
 - [x] Push 本地 commit 到 origin/main ✅（v0.12.2 已全部推送）
 
 ### 低優先 / 未來規劃
-- [ ] DB schema 擴充：`tenants.liff_provider_type`（enum）+ `tenants.line_login_channel_id`（備 LINE MINI App 轉換）
+- [x] DB schema 擴充：`tenants.liff_provider_type`（enum）+ `tenants.line_login_channel_id`（備 LINE MINI App 轉換）✅（v0.12.2，⚠️ 需執行 `supabase/liff-provider-type.sql`）
 - [ ] Stateless Token 遷移評估（目前用 30 天 long-lived，LINE 官方推薦 15 分鐘 stateless）
 - [ ] Concierge onboarding：高階方案的人工導入服務（跟 CresClab / Omnichat 看齊）
 

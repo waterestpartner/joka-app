@@ -7,7 +7,7 @@
 // 這裡從 DB 取出對應租戶的 line_channel_secret 做驗證，確保安全。
 
 import * as crypto from 'crypto'
-import { NextRequest } from 'next/server'
+import { NextRequest, after } from 'next/server'
 import { getTenantBySlug } from '@/repositories/tenantRepository'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { pushTextMessage } from '@/lib/line-messaging'
@@ -226,7 +226,7 @@ export async function POST(
   const tenantName = tenant.name ?? tenantSlug
   const cardLink = liffUrl(tenant.liff_id)
 
-  // ── 4. 逐一處理 events（不 await，讓 LINE 快速收到 200）────────────────
+  // ── 4. 逐一處理 events（用 after() 確保 response 後工作完成）─────────────
   for (const event of events) {
     const userId = event.source?.userId
 
@@ -239,15 +239,17 @@ export async function POST(
     switch (event.type) {
       case 'follow':
         console.log(`[webhook:${tenantSlug}] follow uid=${userId}`)
-        // 非同步推播，不 await（避免影響回應速度）
-        handleFollow(
-          userId,
-          tenant.id,
-          tenantName,
-          channelToken,
-          cardLink
-        ).catch((err) =>
-          console.error(`[webhook:${tenantSlug}] handleFollow error:`, err)
+        // after() 保證 response 後工作不被 serverless kill
+        after(() =>
+          handleFollow(
+            userId,
+            tenant.id,
+            tenantName,
+            channelToken,
+            cardLink
+          ).catch((err) =>
+            console.error(`[webhook:${tenantSlug}] handleFollow error:`, err)
+          )
         )
         break
 
@@ -262,15 +264,18 @@ export async function POST(
         )
         // 只回覆文字訊息，其他類型（圖片/貼圖）忽略
         if (event.message?.type === 'text') {
-          handleMessage(
-            userId,
-            tenant.id,
-            tenantName,
-            channelToken,
-            cardLink,
-            event.message.text ?? ''
-          ).catch((err) =>
-            console.error(`[webhook:${tenantSlug}] handleMessage error:`, err)
+          // after() 保證 response 後工作不被 serverless kill
+          after(() =>
+            handleMessage(
+              userId,
+              tenant.id,
+              tenantName,
+              channelToken,
+              cardLink,
+              event.message?.text ?? ''
+            ).catch((err) =>
+              console.error(`[webhook:${tenantSlug}] handleMessage error:`, err)
+            )
           )
         }
         break
