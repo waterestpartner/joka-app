@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
   } catch { /* addPointTransaction already logged */ }
 
   // ── Update last_activity_at ───────────────────────────────────────────────
-  await supabase.from('members').update({ last_activity_at: new Date().toISOString() }).eq('id', member.id)
+  await supabase.from('members').update({ last_activity_at: new Date().toISOString() }).eq('id', member.id as string).eq('tenant_id', auth.tenantId)
 
   after(() => logAudit({
     tenant_id: auth.tenantId,

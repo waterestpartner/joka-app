@@ -60,6 +60,7 @@ export async function GET(req: NextRequest) {
           .from('scheduled_pushes')
           .update({ status: 'failed', sent_at: new Date().toISOString() })
           .eq('id', pushId)
+          .eq('tenant_id', tenantId)
         results.push({ id: pushId, status: 'failed', sentToCount: 0, successCount: 0, failCount: 0 })
         continue
       }
@@ -85,6 +86,7 @@ export async function GET(req: NextRequest) {
           .from('scheduled_pushes')
           .update({ status: 'failed', sent_at: new Date().toISOString() })
           .eq('id', pushId)
+          .eq('tenant_id', tenantId)
         results.push({ id: pushId, status: 'failed', sentToCount: 0, successCount: 0, failCount: 0 })
         continue
       }
@@ -136,6 +138,7 @@ export async function GET(req: NextRequest) {
           fail_count: failCount,
         })
         .eq('id', pushId)
+        .eq('tenant_id', tenantId)
 
       console.log(`[cron/scheduled-push] push=${pushId} done. sent=${sentToCount} ok=${successCount} fail=${failCount}`)
       results.push({ id: pushId, status: 'sent', sentToCount, successCount, failCount })
@@ -145,6 +148,7 @@ export async function GET(req: NextRequest) {
         .from('scheduled_pushes')
         .update({ status: 'failed', sent_at: new Date().toISOString() })
         .eq('id', pushId)
+        .eq('tenant_id', tenantId)
       results.push({ id: pushId, status: 'failed', sentToCount: 0, successCount: 0, failCount: 0 })
     }
   }

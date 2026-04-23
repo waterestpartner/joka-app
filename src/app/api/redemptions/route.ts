@@ -112,6 +112,7 @@ export async function PATCH(req: NextRequest) {
     .from('member_redemptions')
     .update(updates)
     .eq('id', id)
+    .eq('tenant_id', auth.tenantId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

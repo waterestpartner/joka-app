@@ -47,9 +47,12 @@ export default function CheckinPage() {
 
   const loadRecords = useCallback(async (p: number) => {
     setLoading(true)
-    const res = await fetch(`/api/checkin?page=${p}`)
-    if (res.ok) setRecordsData(await res.json() as RecordsData)
-    setLoading(false)
+    try {
+      const res = await fetch(`/api/checkin?page=${p}`)
+      if (res.ok) setRecordsData(await res.json() as RecordsData)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => {

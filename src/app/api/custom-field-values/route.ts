@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
   if (!member) return NextResponse.json({ error: '找不到會員' }, { status: 404 })
 
   // Fetch field definitions + values in parallel
-  const [{ data: fields }, { data: values }] = await Promise.all([
+  const [{ data: fields, error: fieldsErr }, { data: values, error: valuesErr }] = await Promise.all([
     supabase
       .from('custom_member_fields')
       .select('id, field_key, field_label, field_type, options, is_required, sort_order')
@@ -42,6 +42,8 @@ export async function GET(req: NextRequest) {
       .select('field_id, value')
       .eq('member_id', memberId),
   ])
+  if (fieldsErr) return NextResponse.json({ error: fieldsErr.message }, { status: 500 })
+  if (valuesErr) return NextResponse.json({ error: valuesErr.message }, { status: 500 })
 
   const valueMap: Record<string, string | null> = {}
   for (const v of values ?? []) {

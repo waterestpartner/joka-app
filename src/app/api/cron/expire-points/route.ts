@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
         })
 
         // 2. Zero out points
-        await supabase.from('members').update({ points: 0 }).eq('id', member.id)
+        await supabase.from('members').update({ points: 0 }).eq('id', member.id as string).eq('tenant_id', tenantId)
 
         // 3. Push notification if possible
         if (pushEnabled && token && member.line_uid) {

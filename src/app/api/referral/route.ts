@@ -65,7 +65,8 @@ export async function GET(req: NextRequest) {
     await supabase
       .from('members')
       .update({ referral_code: referralCode })
-      .eq('id', member.id)
+      .eq('id', member.id as string)
+      .eq('tenant_id', tenant.id as string)
   }
 
   // Stats: how many people this member referred + total points earned from referrals

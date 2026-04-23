@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
   } catch { /* addPointTransaction already logged */ }
 
   // ── Update last_activity_at ───────────────────────────────────────────────
-  await supabase.from('members').update({ last_activity_at: new Date().toISOString() }).eq('id', member.id as string)
+  await supabase.from('members').update({ last_activity_at: new Date().toISOString() }).eq('id', member.id as string).eq('tenant_id', tenant.id as string)
 
   return NextResponse.json({
     success: true,

@@ -72,7 +72,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     .from('surveys').select('*').eq('id', id).eq('tenant_id', auth.tenantId).maybeSingle()
   if (!survey) return NextResponse.json({ error: '找不到問卷' }, { status: 404 })
 
-  const [{ data: questions }, { data: responses }] = await Promise.all([
+  const [{ data: questions, error: questionsErr }, { data: responses, error: responsesErr }] = await Promise.all([
     supabase.from('survey_questions').select('*').eq('survey_id', id).order('sort_order'),
     supabase.from('survey_responses')
       .select('id, answers, created_at, member:member_id ( id, name, phone )')
@@ -80,6 +80,8 @@ export async function GET(req: NextRequest, { params }: Params) {
       .order('created_at', { ascending: false })
       .limit(200),
   ])
+  if (questionsErr) return NextResponse.json({ error: questionsErr.message }, { status: 500 })
+  if (responsesErr) return NextResponse.json({ error: responsesErr.message }, { status: 500 })
 
   return NextResponse.json({ survey, questions: questions ?? [], responses: responses ?? [] })
 }

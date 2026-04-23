@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
   // ── CSV Export ────────────────────────────────────────────────────────────
   if (exportCsv) {
     // Fetch all members (no pagination) and tier settings in parallel
-    const [{ data: allMembers }, { data: tierSettings }] = await Promise.all([
+    const [{ data: allMembers, error: membersExportErr }, { data: tierSettings }] = await Promise.all([
       supabase
         .from('members')
         .select('*')
@@ -53,6 +53,7 @@ export async function GET(req: NextRequest) {
         .select('tier, tier_display_name')
         .eq('tenant_id', resolvedTenantId),
     ])
+    if (membersExportErr) return NextResponse.json({ error: membersExportErr.message }, { status: 500 })
 
     const tierMap: Record<string, string> = {}
     for (const ts of tierSettings ?? []) {

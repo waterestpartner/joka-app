@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   const pageSize = 30
   const offset = (page - 1) * pageSize
 
-  const [{ data: records, count }, { data: todayCount }] = await Promise.all([
+  const [{ data: records, count }, { count: todayCount }] = await Promise.all([
     supabase
       .from('checkin_records')
       .select('id, checked_in_at, points_earned, member:member_id ( id, name, phone )', { count: 'exact' })

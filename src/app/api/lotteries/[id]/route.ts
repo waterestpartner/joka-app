@@ -233,7 +233,7 @@ async function executeDraw(
   const winners = shuffled.slice(0, winnerCount)
 
   // ── Delete any previous winners (re-draw) ─────────────────────────────────
-  await supabase.from('lottery_winners').delete().eq('lottery_id', lotteryId)
+  await supabase.from('lottery_winners').delete().eq('lottery_id', lotteryId).eq('tenant_id', auth.tenantId)
 
   // ── Insert winners ────────────────────────────────────────────────────────
   const { error: insertErr } = await supabase.from('lottery_winners').insert(
@@ -250,6 +250,7 @@ async function executeDraw(
     .from('lotteries')
     .update({ status: 'drawn', drawn_at: new Date().toISOString() })
     .eq('id', lotteryId)
+    .eq('tenant_id', auth.tenantId)
 
   after(() => logAudit({
     tenant_id: auth.tenantId,
@@ -318,7 +319,7 @@ async function notifyWinners(
     const text = `🎉 恭喜您在「${lotteryName}」抽獎活動中獲獎！\n\n獎項：${prizeName}\n\n請至門市出示此訊息或聯絡店員領取您的獎品。`
     try {
       await pushTextMessage(member.line_uid, text, token)
-      await supabase.from('lottery_winners').update({ notified: true }).eq('id', row.id as string)
+      await supabase.from('lottery_winners').update({ notified: true }).eq('id', row.id as string).eq('tenant_id', auth.tenantId)
       successCount++
     } catch {
       failCount++

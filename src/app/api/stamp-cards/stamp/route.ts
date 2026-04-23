@@ -102,7 +102,8 @@ export async function POST(req: NextRequest) {
       completed_count: newCompletedCount,
       last_stamped_at: now,
     })
-    .eq('id', safeProgress.id)
+    .eq('id', safeProgress.id as string)
+    .eq('tenant_id', auth.tenantId)
 
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
 

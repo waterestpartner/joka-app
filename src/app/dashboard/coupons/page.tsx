@@ -413,6 +413,12 @@ export default function CouponsPage() {
           <button onClick={loadData} className="ml-3 underline font-medium">重試</button>
         </div>
       )}
+      {toggleError && (
+        <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-center justify-between">
+          <span>{toggleError}</span>
+          <button onClick={() => setToggleError(null)} className="ml-3 text-red-500 hover:text-red-700">✕</button>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden">
