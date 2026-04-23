@@ -1,6 +1,6 @@
 # JOKA TODO
 
-> 最後更新：2026-04-22（v0.12.0 — Industry Templates 三波完成，待測試）
+> 最後更新：2026-04-23（v0.12.0 — Industry Templates 端對端測試完成 ✅）
 
 ---
 
@@ -44,65 +44,76 @@
 - [x] `/dashboard/settings/template` 範本切換頁（含 overwriteExisting 選項 + audit log）
 - [x] `/dashboard/push` 訊息內容支援「從範本載入」dropdown
 
-### ⚠️ Industry Templates 測試清單（全部待測）
+### ✅ Industry Templates 測試清單（2026-04-23 全部完成）
 
 #### Super Admin — `/admin/*`
-- [ ] `/admin/templates` 看得到 5 個內建範本，每個顯示使用中 tenant 數
-- [ ] 點「編輯」→ `/admin/templates/beauty`，5 tabs 可切換、內容顯示正確
-- [ ] 編輯 beauty 的任一 tab 內容 → 儲存 → 重新整理後變更持續存在
-- [ ] 內建範本的「Key」欄位是 disabled 狀態（不可改）
-- [ ] `/admin/templates/new` → 輸入自訂 key（如 `retail_boutique`）→ 填完 5 tabs → 儲存
-- [ ] 儲存後 URL 跳轉到 `/admin/templates/retail_boutique`
-- [ ] 返回列表，自訂範本顯示「自訂」標籤 + 出現「刪除」按鈕
-- [ ] 刪除自訂範本後列表更新（內建的「刪除」按鈕本來就不會出現）
-- [ ] 切換 `is_active = false` 存檔 → 新增租戶的下拉選單不會出現這個
+- [x] `/admin/templates` 看得到 5 個內建範本，每個顯示使用中 tenant 數
+- [x] 點「編輯」→ `/admin/templates/beauty`，5 tabs 可切換、內容顯示正確
+- [x] 編輯 beauty 的任一 tab 內容 → 儲存 → 重新整理後變更持續存在
+- [x] 內建範本的「Key」欄位是 disabled 狀態（不可改）
+- [x] `/admin/templates/new` → 輸入自訂 key（如 `retail_test`）→ 填完 5 tabs → 儲存
+- [x] 儲存後 URL 跳轉到 `/admin/templates/retail_test`
+- [x] 返回列表，自訂範本顯示「自訂」標籤 + 出現「刪除」按鈕
+- [x] 刪除自訂範本後列表更新（內建的「刪除」按鈕本來就不會出現）
+- [x] 切換 `is_active = false` 存檔 → 新增租戶的下拉選單不會出現這個
 
 #### Super Admin — 新增租戶連帶範本套用
-- [ ] `/admin/tenants` → 新增租戶，選「美容美髮 / SPA」→ 建立成功
-- [ ] 到 Supabase 查新建 tenant 的 `industry_template_key = 'beauty'`
-- [ ] 查該 tenant_id 的：
-  - [ ] `tier_settings`：3 筆（basic/silver/gold 或範本定義的等級）
-  - [ ] `custom_member_fields`：若範本有定義則有資料
-  - [ ] `tenant_push_templates`：若範本有定義則有資料
-  - [ ] `tenant_setup_tasks`：若範本有定義則有資料，且 `is_done = false`
-- [ ] 測試「不套用範本」選項建租戶 → 上述表應全部為空
+- [x] `/admin/tenants` → 新增租戶，選「餐飲」→ 建立成功
+- [x] 到 Supabase 查新建 tenant 的 `industry_template_key = 'restaurant'`
+- [x] 查該 tenant_id 的：
+  - [x] `tier_settings`：3 筆（常客/熟客/超級粉絲）✅
+  - [x] `custom_member_fields`：3 筆 ✅
+  - [x] `tenant_push_templates`：3 筆 ✅
+  - [x] `tenant_setup_tasks`：3 筆，`is_done = false` ✅
+- [x] 測試「不套用範本」選項建租戶 → 上述表全部為空 ✅
 
 #### 商家 Dashboard — SetupTasksCard (Overview)
-- [ ] 有套範本的 tenant 登入後，overview 顯示建議任務卡片
-- [ ] 進度條比例正確（X / Y 完成）
-- [ ] 點任務左側 ○ → 變成 ✓（文字也變刪除線）
-- [ ] 重新整理後勾選狀態持續（寫回 DB 成功）
-- [ ] 有 `link` 的任務：hover 時整行可點擊跳轉
-- [ ] external link（http 開頭）開新分頁，internal link（/ 開頭）原分頁跳轉
-- [ ] 全部勾完後：標題變「🎉 建議任務已全部完成」+ 「關閉」連結出現
-- [ ] 點「關閉」卡片消失（重新整理又出現，因為 state 僅前端）
-- [ ] 沒有任何 setup tasks 的 tenant（例如選「不套用範本」建立的）→ 卡片自動隱藏
+- [x] 有套範本的 tenant 登入後，overview 顯示建議任務卡片
+- [x] 進度條比例正確（X / Y 完成）
+- [x] 點任務左側 ○ → 變成 ✓（文字也變刪除線）
+- [x] 重新整理後勾選狀態持續（寫回 DB 成功）
+- [x] 有 `link` 的任務：hover 時整行可點擊跳轉
+- [x] external link（http 開頭）開新分頁，internal link（/ 開頭）原分頁跳轉
+- [x] 全部勾完後：標題變「🎉 建議任務已全部完成」+ 「關閉」連結出現
+- [x] 點「關閉」卡片消失（**已修 commit f8b09ed：現在重新整理後也維持隱藏**）
+- [x] 沒有任何 setup tasks 的 tenant（例如選「不套用範本」建立的）→ 卡片自動隱藏
 
 #### 商家 Dashboard — 範本切換
-- [ ] `/dashboard/settings` 最上方看到「📦 產業範本」入口卡片
-- [ ] 點進去到 `/dashboard/settings/template`
-- [ ] 「目前使用中」區塊顯示正確的範本（名稱 + 描述 + icon）
-- [ ] 所有範本以卡片列出，選擇時邊框變綠
-- [ ] 目前使用中的範本卡片上有「使用中」綠色標籤
-- [ ] 選不同範本 + 不勾覆寫 → 點「套用」→ 成功 toast
-- [ ] 切換後：tier_settings / custom_member_fields 有合併新增（不會刪舊的）
-- [ ] 切換後：tenant_push_templates 會新增多筆（**不勾覆寫時會累積**，這是預期行為）
-- [ ] 勾「覆寫模式」再切換 → tenant_push_templates 先刪光再加新
-- [ ] 到 Supabase 查 `audit_logs` 看到 `action='apply_industry_template'` 記錄
-- [ ] 切換後：`tenants.industry_template_key` 已更新為新值
+- [x] `/dashboard/settings/template` 範本切換頁可訪問
+- [x] 「目前使用中」區塊顯示正確的範本（名稱 + 描述 + icon）
+- [x] 所有範本以卡片列出，選擇時邊框變綠
+- [x] 目前使用中的範本卡片上有「使用中」綠色標籤
+- [x] 選不同範本 + 不勾覆寫 → ConfirmDialog（合併套用）→ 成功
+- [x] 切換後：tier_settings / custom_member_fields 有合併新增（不會刪舊的）
+- [x] 切換後：tenant_push_templates 會新增多筆（不勾覆寫時會累積）
+- [x] 勾「覆寫模式」再切換 → ConfirmDialog（覆寫套用，紅色）→ tenant_push_templates 先刪光再加新
+- [x] 到 Supabase 查 `audit_logs` 看到 `action='apply_industry_template'` 記錄（payload 含 templateKey + overwriteExisting）
+- [x] 切換後：`tenants.industry_template_key` 已更新為新值
 
 #### 商家 Dashboard — Push 頁面範本載入
-- [ ] 訊息類型選「文字」→ 訊息內容欄右上看到「從範本載入」dropdown
-- [ ] Dropdown 列出所有 tenant_push_templates（title 為選項文字）
-- [ ] 在 textarea 空的狀態下選範本 → 內容直接填入
-- [ ] textarea 已有內容時選範本 → 跳 confirm「覆蓋？」
-- [ ] 沒有任何 tenant_push_templates 的 tenant → dropdown 完全不顯示
-- [ ] 訊息類型切到「Flex」→ dropdown 也消失（只在 text mode 顯示）
+- [x] 訊息類型選「文字」→ 訊息內容欄右上看到「從範本載入」dropdown
+- [x] Dropdown 列出所有 tenant_push_templates（title 為選項文字）
+- [x] 在 textarea 空的狀態下選範本 → 內容直接填入
+- [x] textarea 已有內容時選範本 → 跳 ConfirmDialog「覆蓋現有內容？」
+- [x] 取消 → dialog 關閉、訊息保留、select 重設
+- [x] 覆蓋 → 訊息被範本取代
+- [x] 訊息類型切到「Flex」→ dropdown 也消失（只在 text mode 顯示）
 
 #### 資安與 RLS 驗證
-- [ ] 非超管 email 打 `/api/admin/industry-templates` → 403
-- [ ] tenant A 的 owner 打 `/api/dashboard/setup-tasks` 只看到 tenant A 的任務
-- [ ] tenant A 的 owner 打 PATCH `/api/dashboard/setup-tasks` 帶 tenant B 的任務 id → 更新失敗（RLS + eq 雙重擋）
+- [x] 未登入打 `/api/admin/industry-templates` → 401 ✅
+- [x] 未登入打 `/api/dashboard/setup-tasks` → 401 ✅
+- [x] 未登入打 `/api/dashboard/apply-template` → 401 ✅
+- [x] 未登入打 DELETE `/api/admin/industry-templates/[key]` → 401 ✅
+- [x] `requireAdminAuth()` code 審查：檢查 `JOKA_ADMIN_EMAIL` env var 匹配，非匹配 → 403
+- [x] RLS 啟用 ✅（industry_templates / tenant_push_templates / tenant_setup_tasks）
+- [x] RLS policies ✅（tenant_setup_tasks/tenant_push_templates 皆有 `tenant_id = get_tenant_id_for_user()` 條件）
+- [x] Setup-tasks PATCH 雙層保險（RLS + `.eq('tenant_id', auth.tenantId)`）
+
+### v0.12.0 發現並修復的 Bug
+
+- `80a97d3` — 3 個新頁面用 `window.confirm()` 導致 Claude-in-Chrome 擴充凍結，已改 ConfirmDialog
+- `734adf3` — `tier_settings` 缺 `UNIQUE(tenant_id, tier)` 導致 `applyTemplateToTenant()` 的 upsert 靜默失敗；同時 repo fn 從未檢查 `.error` → 補上錯誤收集
+- `f8b09ed` — SetupTasksCard 的「關閉」僅是 local state，reload 會再出現；改存 localStorage
 
 ---
 
