@@ -5,7 +5,7 @@
 // DELETE – delete segment
 // POST   ?action=push – send push message to all segment members
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { pushTextMessage } from '@/lib/line-messaging'
@@ -129,14 +129,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     .eq('id', id).eq('tenant_id', auth.tenantId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'segment.update',
     target_type: 'segment',
     target_id: id,
     payload: { fields: Object.keys(updates) },
-  })
+  }))
 
   return NextResponse.json({ success: true })
 }
@@ -153,13 +153,13 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     .eq('id', id).eq('tenant_id', auth.tenantId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'segment.delete',
     target_type: 'segment',
     target_id: id,
-  })
+  }))
 
   return NextResponse.json({ success: true })
 }
@@ -209,14 +209,14 @@ export async function POST(req: NextRequest, { params }: Params) {
     })
   )
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'segment.push',
     target_type: 'segment',
     target_id: id,
     payload: { sent, failed, total: uids.length },
-  })
+  }))
 
   return NextResponse.json({ sent, failed, total: uids.length })
 }

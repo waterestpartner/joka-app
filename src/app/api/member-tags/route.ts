@@ -4,7 +4,7 @@
 // POST   /api/member-tags               – 替會員加上標籤  { memberId, tagId }
 // DELETE /api/member-tags?memberId=...&tagId=...  – 移除會員標籤
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
@@ -75,14 +75,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'member_tag.add',
     target_type: 'member',
     target_id: memberId,
     payload: { tagId },
-  })
+  }))
 
   return NextResponse.json(data, { status: 201 })
 }
@@ -109,14 +109,14 @@ export async function DELETE(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'member_tag.remove',
     target_type: 'member',
     target_id: memberId,
     payload: { tagId },
-  })
+  }))
 
   return NextResponse.json({ success: true })
 }

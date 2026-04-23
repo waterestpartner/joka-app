@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
         if (pushEnabled && token && member.line_uid) {
           const name = (member.name as string) ?? ''
           const msg = `${name ? name + '，' : ''}您的 ${pts} 點已於今日到期。快來消費重新累積點數吧！`
-          void pushTextMessage(member.line_uid as string, msg, token)
+          await pushTextMessage(member.line_uid as string, msg, token)
         }
 
         totalExpired += pts

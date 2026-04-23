@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -88,6 +89,10 @@ export default function LotteriesPage() {
   const [drawResult, setDrawResult] = useState<{ poolSize: number; winnersDrawn: number } | null>(null)
   const [notifying, setNotifying] = useState(false)
   const [notifyResult, setNotifyResult] = useState<string | null>(null)
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null)
+  const [confirmDraw, setConfirmDraw] = useState(false)
+  const [drawError, setDrawError] = useState<string | null>(null)
+  const [confirmNotify, setConfirmNotify] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -155,41 +160,41 @@ export default function LotteriesPage() {
     }
   }
 
-  async function handleCancel(id: string) {
-    if (!confirm('確定要取消此抽獎活動？')) return
+  async function confirmCancelAction() {
+    if (!confirmCancelId) return
+    const id = confirmCancelId
     await fetch(`/api/lotteries/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'cancelled' }),
     })
+    setConfirmCancelId(null)
     await load()
     if (detail?.id === id) setDetail(null)
   }
 
-  async function handleDraw() {
+  async function confirmDrawAction() {
     if (!detail) return
-    if (!confirm(`確定要對「${detail.name}」執行抽獎？${detail.status === 'drawn' ? '\n\n注意：這將重新抽獎並覆蓋上次結果！' : ''}`)) return
-
     setDrawing(true)
     setDrawResult(null)
+    setDrawError(null)
     try {
       const res = await fetch(`/api/lotteries/${detail.id}?action=draw`, { method: 'POST' })
       const json = await res.json() as { success?: boolean; error?: string; poolSize?: number; winnersDrawn?: number }
       if (!res.ok) throw new Error(json.error ?? '抽獎失敗')
       setDrawResult({ poolSize: json.poolSize ?? 0, winnersDrawn: json.winnersDrawn ?? 0 })
+      setConfirmDraw(false)
       await loadDetail(detail)
       await load()
     } catch (e) {
-      alert(e instanceof Error ? e.message : '抽獎失敗')
+      setDrawError(e instanceof Error ? e.message : '抽獎失敗')
     } finally {
       setDrawing(false)
     }
   }
 
-  async function handleNotify() {
+  async function confirmNotifyAction() {
     if (!detail) return
-    if (!confirm(`確定要推播通知給 ${detail.winners.filter((w) => !w.notified).length} 位得獎者？`)) return
-
     setNotifying(true)
     setNotifyResult(null)
     try {
@@ -197,6 +202,7 @@ export default function LotteriesPage() {
       const json = await res.json() as { success?: boolean; error?: string; successCount?: number; failCount?: number }
       if (!res.ok) throw new Error(json.error ?? '通知失敗')
       setNotifyResult(`成功通知 ${json.successCount ?? 0} 人${(json.failCount ?? 0) > 0 ? `，失敗 ${json.failCount} 人` : ''}`)
+      setConfirmNotify(false)
       await loadDetail(detail)
     } catch (e) {
       setNotifyResult(e instanceof Error ? e.message : '通知失敗')
@@ -366,7 +372,7 @@ export default function LotteriesPage() {
                     {detail.description && <p className="text-sm text-zinc-600 mt-1">{detail.description}</p>}
                   </div>
                   {detail.status !== 'cancelled' && (
-                    <button onClick={() => handleCancel(detail.id)}
+                    <button onClick={() => setConfirmCancelId(detail.id)}
                       className="text-xs text-red-400 hover:text-red-600 whitespace-nowrap flex-shrink-0">
                       取消活動
                     </button>
@@ -405,15 +411,15 @@ export default function LotteriesPage() {
                     </div>
                   )}
                   <div className="flex gap-2">
-                    <button onClick={handleDraw} disabled={drawing || detail.eligibleCount === 0}
+                    <button onClick={() => { setDrawError(null); setConfirmDraw(true) }} disabled={drawing || detail.eligibleCount === 0}
                       className="flex-1 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
                       style={{ backgroundColor: '#06C755' }}>
-                      {drawing ? '抽獎中…' : detail.status === 'drawn' ? '重新抽獎' : '執行抽獎'}
+                      {detail.status === 'drawn' ? '重新抽獎' : '執行抽獎'}
                     </button>
                     {detail.status === 'drawn' && unnotifiedCount > 0 && (
-                      <button onClick={handleNotify} disabled={notifying}
+                      <button onClick={() => setConfirmNotify(true)} disabled={notifying}
                         className="flex-1 py-2 rounded-lg border border-zinc-300 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 disabled:opacity-50">
-                        {notifying ? '通知中…' : `推播通知（${unnotifiedCount} 人）`}
+                        {`推播通知（${unnotifiedCount} 人）`}
                       </button>
                     )}
                   </div>
@@ -452,6 +458,41 @@ export default function LotteriesPage() {
           )}
         </div>
       </div>
+
+      {confirmCancelId && (
+        <ConfirmDialog
+          title="確定要取消此抽獎活動？"
+          message="取消後活動將無法恢復，已參與的紀錄仍會保留。"
+          confirmLabel="取消活動"
+          danger
+          onConfirm={() => void confirmCancelAction()}
+          onCancel={() => setConfirmCancelId(null)}
+        />
+      )}
+
+      {confirmDraw && detail && (
+        <ConfirmDialog
+          title={`確定要對「${detail.name}」執行抽獎？`}
+          message={detail.status === 'drawn' ? '注意：這將重新抽獎並覆蓋上次結果！' : `將從 ${detail.eligibleCount} 位符合資格的會員中抽出 ${detail.winner_count} 位得獎者。`}
+          confirmLabel={detail.status === 'drawn' ? '重新抽獎' : '執行抽獎'}
+          danger={detail.status === 'drawn'}
+          loading={drawing}
+          error={drawError}
+          onConfirm={() => void confirmDrawAction()}
+          onCancel={() => { setConfirmDraw(false); setDrawError(null) }}
+        />
+      )}
+
+      {confirmNotify && detail && (
+        <ConfirmDialog
+          title={`確定要推播通知 ${detail.winners.filter((w) => !w.notified).length} 位得獎者？`}
+          message="將透過 LINE 推播得獎通知給尚未被通知的得獎者。"
+          confirmLabel="確認推播"
+          loading={notifying}
+          onConfirm={() => void confirmNotifyAction()}
+          onCancel={() => setConfirmNotify(false)}
+        />
+      )}
     </div>
   )
 }

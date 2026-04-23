@@ -3,7 +3,7 @@
 // GET  – list all blocked members for this tenant
 // POST – block a member { memberId, reason? }
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
@@ -51,14 +51,14 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'blacklist.add',
     target_type: 'member',
     target_id: memberId,
     payload: { reason: typeof reason === 'string' ? reason : undefined },
-  })
+  }))
 
   return NextResponse.json({ success: true })
 }

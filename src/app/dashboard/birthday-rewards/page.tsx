@@ -5,6 +5,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 interface AwardRecord {
   id: string
@@ -26,6 +27,8 @@ export default function BirthdayRewardsPage() {
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(false)
   const [processResult, setProcessResult] = useState<{ awarded: number; skipped: number } | null>(null)
+  const [confirmProcess, setConfirmProcess] = useState(false)
+  const [processError, setProcessError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -40,18 +43,19 @@ export default function BirthdayRewardsPage() {
 
   useEffect(() => { void load() }, [load])
 
-  async function handleProcess() {
-    if (!confirm('確定要為今天生日的會員發放獎勵點數？')) return
+  async function confirmProcessAction() {
     setProcessing(true)
     setProcessResult(null)
+    setProcessError(null)
     try {
       const res = await fetch('/api/birthday-rewards', { method: 'POST' })
       const json = await res.json() as { awarded?: number; skipped?: number; error?: string }
       if (!res.ok) throw new Error(json.error ?? '處理失敗')
       setProcessResult({ awarded: json.awarded ?? 0, skipped: json.skipped ?? 0 })
+      setConfirmProcess(false)
       await load()
     } catch (e) {
-      alert(e instanceof Error ? e.message : '處理失敗')
+      setProcessError(e instanceof Error ? e.message : '處理失敗')
     } finally {
       setProcessing(false)
     }
@@ -98,7 +102,7 @@ export default function BirthdayRewardsPage() {
           </div>
         )}
         <button
-          onClick={handleProcess}
+          onClick={() => { setProcessError(null); setConfirmProcess(true) }}
           disabled={processing || (data?.bonusPoints ?? 0) <= 0}
           className="px-5 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
           style={{ backgroundColor: '#06C755' }}
@@ -142,6 +146,18 @@ export default function BirthdayRewardsPage() {
           </div>
         )}
       </div>
+
+      {confirmProcess && (
+        <ConfirmDialog
+          title="確定要發放今日生日獎勵？"
+          message={`將為今天生日的 ${data?.todayBirthdayCount ?? 0} 位會員各發放 ${data?.bonusPoints ?? 0} 點。`}
+          confirmLabel="確認發放"
+          loading={processing}
+          error={processError}
+          onConfirm={() => void confirmProcessAction()}
+          onCancel={() => { setConfirmProcess(false); setProcessError(null) }}
+        />
+      )}
     </div>
   )
 }

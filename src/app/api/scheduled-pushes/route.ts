@@ -4,7 +4,7 @@
 // POST   /api/scheduled-pushes          – create a new scheduled push
 // DELETE /api/scheduled-pushes?id=...   – cancel a pending scheduled push
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
@@ -98,14 +98,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'scheduled_push.create',
     target_type: 'scheduled_push',
     target_id: data?.id as string | undefined,
     payload: { target: validTarget, scheduled_at: scheduledDate.toISOString() },
-  })
+  }))
 
   return NextResponse.json(data, { status: 201 })
 }
@@ -149,13 +149,13 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'scheduled_push.cancel',
     target_type: 'scheduled_push',
     target_id: id,
-  })
+  }))
 
   return NextResponse.json({ success: true })
 }

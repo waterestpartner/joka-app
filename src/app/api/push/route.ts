@@ -14,7 +14,7 @@
 //     maxPoints?:  number                    點數上限
 //   }
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { getTenantById } from '@/repositories/tenantRepository'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -193,7 +193,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'push.send',
@@ -206,7 +206,7 @@ export async function POST(req: NextRequest) {
       successCount,
       failCount,
     },
-  })
+  }))
 
   return NextResponse.json({ ok: true, sentToCount: lineUserIds.length, successCount, failCount, log })
 }

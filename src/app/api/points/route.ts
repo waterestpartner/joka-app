@@ -305,7 +305,7 @@ export async function POST(req: NextRequest) {
       after(() => pushTextMessage(pushUid, pushText, channelToken))
     }
 
-    void logAudit({
+    after(() => logAudit({
       tenant_id: auth.tenantId,
       operator_email: auth.email,
       action: isScanEarn ? 'points.scan_earn' : `points.manual.${numAmount > 0 ? 'add' : 'deduct'}`,
@@ -319,7 +319,7 @@ export async function POST(req: NextRequest) {
         tierChanged: tierChanged || undefined,
         note: txNote ?? undefined,
       },
-    })
+    }))
 
     // Fire webhook for points events (after response, to survive serverless lifecycle)
     if (numAmount > 0) {

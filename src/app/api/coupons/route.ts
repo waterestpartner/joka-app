@@ -58,14 +58,14 @@ export async function PATCH(req: NextRequest) {
       )
     }
 
-    void logAudit({
+    after(() => logAudit({
       tenant_id: auth.tenantId,
       operator_email: auth.email,
       action: 'coupon.update',
       target_type: 'coupon',
       target_id: id,
       payload: { fields: Object.keys(safeUpdates) },
-    })
+    }))
 
     return NextResponse.json(data)
   } catch (err) {
@@ -235,14 +235,14 @@ export async function POST(req: NextRequest) {
           max_redemptions: maxRedemptions != null ? Number(maxRedemptions) : null,
         })
 
-        void logAudit({
+        after(() => logAudit({
           tenant_id: auth.tenantId,
           operator_email: auth.email,
           action: 'coupon.create',
           target_type: 'coupon',
           target_id: (coupon as { id?: string })?.id,
           payload: { name, type: type as string, value: Number(value) },
-        })
+        }))
 
         return NextResponse.json(coupon, { status: 201 })
       }
@@ -268,14 +268,14 @@ export async function POST(req: NextRequest) {
 
         const memberCoupon = await issueCoupon(auth.tenantId, memberId, couponId)
 
-        void logAudit({
+        after(() => logAudit({
           tenant_id: auth.tenantId,
           operator_email: auth.email,
           action: 'coupon.issue',
           target_type: 'member',
           target_id: memberId,
           payload: { couponId },
-        })
+        }))
 
         after(() => fireWebhooks(auth.tenantId, 'coupon.issued', {
           member_id: memberId,

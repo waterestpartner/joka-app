@@ -7,7 +7,7 @@
 //   2. 只能操作自己 tenant 底下的會員（ownership 驗證）
 //   3. 實際操作使用 admin client，但前置驗證用 requireDashboardAuth
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
@@ -44,13 +44,13 @@ export async function DELETE(
 
     if (error) throw new Error(error.message)
 
-    void logAudit({
+    after(() => logAudit({
       tenant_id: auth.tenantId,
       operator_email: auth.email,
       action: 'member.delete',
       target_type: 'member',
       target_id: memberId,
-    })
+    }))
 
     return NextResponse.json({ success: true })
   } catch (err) {
@@ -171,14 +171,14 @@ export async function PATCH(
 
     if (error) throw new Error(error.message)
 
-    void logAudit({
+    after(() => logAudit({
       tenant_id: auth.tenantId,
       operator_email: auth.email,
       action: 'member.update',
       target_type: 'member',
       target_id: memberId,
       payload: { fields: Object.keys(updates) },
-    })
+    }))
 
     return NextResponse.json(updated)
   } catch (err) {

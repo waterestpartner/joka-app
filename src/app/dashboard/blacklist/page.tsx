@@ -3,6 +3,7 @@
 // Dashboard: 黑名單管理
 
 import { useEffect, useState, useCallback } from 'react'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 interface BlockedMember {
   id: string
@@ -30,6 +31,10 @@ export default function BlacklistPage() {
   const [selectedMember, setSelectedMember] = useState<{ id: string; name: string | null } | null>(null)
   const [blockReason, setBlockReason] = useState('')
   const [blocking, setBlocking] = useState(false)
+  const [confirmUnblock, setConfirmUnblock] = useState<{ id: string; name: string | null } | null>(null)
+  const [unblockError, setUnblockError] = useState<string | null>(null)
+  const [unblocking, setUnblocking] = useState(false)
+  const [blockError, setBlockError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -88,23 +93,33 @@ export default function BlacklistPage() {
       setBlockReason('')
       setSearchInput('')
       setSearchResults([])
+      setBlockError(null)
       await load()
     } catch (e) {
-      alert(e instanceof Error ? e.message : '操作失敗')
+      setBlockError(e instanceof Error ? e.message : '操作失敗')
     } finally {
       setBlocking(false)
     }
   }
 
-  async function handleUnblock(memberId: string, memberName: string | null) {
-    if (!confirm(`確定要解除「${memberName ?? '此會員'}」的黑名單？`)) return
+  function handleUnblock(memberId: string, memberName: string | null) {
+    setUnblockError(null)
+    setConfirmUnblock({ id: memberId, name: memberName })
+  }
+
+  async function confirmUnblockAction() {
+    if (!confirmUnblock) return
+    setUnblocking(true)
     try {
-      const res = await fetch(`/api/blacklist/${memberId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/blacklist/${confirmUnblock.id}`, { method: 'DELETE' })
       const json = await res.json() as { error?: string }
       if (!res.ok) throw new Error(json.error ?? '操作失敗')
+      setConfirmUnblock(null)
       await load()
     } catch (e) {
-      alert(e instanceof Error ? e.message : '操作失敗')
+      setUnblockError(e instanceof Error ? e.message : '操作失敗')
+    } finally {
+      setUnblocking(false)
     }
   }
 
@@ -176,6 +191,9 @@ export default function BlacklistPage() {
             />
           </div>
 
+          {blockError && (
+            <p className="text-sm text-red-600">{blockError}</p>
+          )}
           <div className="flex gap-2">
             <button
               onClick={handleBlock}
@@ -186,7 +204,7 @@ export default function BlacklistPage() {
               {blocking ? '處理中…' : '確認封鎖'}
             </button>
             <button
-              onClick={() => { setShowBlockForm(false); setSelectedMember(null); setSearchInput(''); setBlockReason(''); setSearchResults([]) }}
+              onClick={() => { setShowBlockForm(false); setSelectedMember(null); setSearchInput(''); setBlockReason(''); setSearchResults([]); setBlockError(null) }}
               className="px-5 py-2 rounded-xl text-sm font-medium text-zinc-600 border border-zinc-200 hover:bg-zinc-50"
             >
               取消
@@ -257,6 +275,18 @@ export default function BlacklistPage() {
           </div>
         )}
       </div>
+
+      {confirmUnblock && (
+        <ConfirmDialog
+          title={`確定要解除「${confirmUnblock.name ?? '此會員'}」的黑名單？`}
+          message="解除後該會員即可恢復正常集點功能。"
+          confirmLabel="解除封鎖"
+          loading={unblocking}
+          error={unblockError}
+          onConfirm={() => void confirmUnblockAction()}
+          onCancel={() => { setConfirmUnblock(null); setUnblockError(null) }}
+        />
+      )}
     </div>
   )
 }

@@ -7,7 +7,7 @@
 // 邏輯與 /api/missions/complete 相同，但由後台觸發（不需要 LINE token）。
 // 僅限 mission_type = 'checkin'（其他類型由會員自行在 LIFF 完成）。
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
@@ -99,14 +99,14 @@ export async function POST(req: NextRequest) {
   // ── Update last_activity_at ───────────────────────────────────────────────
   await supabase.from('members').update({ last_activity_at: new Date().toISOString() }).eq('id', member.id)
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'mission.checkin',
     target_type: 'member',
     target_id: member.id as string,
     payload: { missionId, pointsAwarded: rewardPts },
-  })
+  }))
 
   return NextResponse.json({
     success: true,

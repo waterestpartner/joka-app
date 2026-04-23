@@ -3,6 +3,7 @@
 // Dashboard: 點數即將到期
 
 import { useEffect, useState, useCallback } from 'react'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 import Link from 'next/link'
 
 interface ExpiringMember {
@@ -36,6 +37,9 @@ export default function PointsExpiryPage() {
   const [showPushForm, setShowPushForm] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState<{ sent: number; failed: number; total: number } | null>(null)
+  const [confirmSendTarget, setConfirmSendTarget] = useState<string | null>(null)
+  const [sendError, setSendError] = useState<string | null>(null)
+  const [pushValidationError, setPushValidationError] = useState<string | null>(null)
 
   const load = useCallback(async (p: number, wd: number) => {
     setLoading(true)
@@ -76,15 +80,20 @@ export default function PointsExpiryPage() {
     else setSelected(new Set(ids))
   }
 
-  async function handleSendPush() {
-    if (!pushMessage.trim()) { alert('請輸入推播訊息'); return }
+  function handleSendPush() {
+    if (!pushMessage.trim()) { setPushValidationError('請輸入推播訊息'); return }
+    setPushValidationError(null)
     const useSelected = selected.size > 0
     const target = useSelected ? `已選擇的 ${selected.size} 位` : `所有點數即將到期的 ${data?.total ?? 0} 位會員`
-    if (!confirm(`確定要向${target}發送提醒？`)) return
+    setSendError(null)
+    setConfirmSendTarget(target)
+  }
 
+  async function confirmSendPushAction() {
     setSending(true)
     setSendResult(null)
     try {
+      const useSelected = selected.size > 0
       const bodyObj: Record<string, unknown> = { message: pushMessage, warningDays }
       if (useSelected) bodyObj.memberIds = Array.from(selected)
       const res = await fetch('/api/points-expiry', {
@@ -95,11 +104,12 @@ export default function PointsExpiryPage() {
       const json = await res.json() as { sent?: number; failed?: number; total?: number; error?: string }
       if (!res.ok) throw new Error(json.error ?? '發送失敗')
       setSendResult({ sent: json.sent ?? 0, failed: json.failed ?? 0, total: json.total ?? 0 })
+      setConfirmSendTarget(null)
       setShowPushForm(false)
       setPushMessage('')
       setSelected(new Set())
     } catch (e) {
-      alert(e instanceof Error ? e.message : '發送失敗')
+      setSendError(e instanceof Error ? e.message : '發送失敗')
     } finally {
       setSending(false)
     }
@@ -145,18 +155,21 @@ export default function PointsExpiryPage() {
           )}
           <textarea
             value={pushMessage}
-            onChange={(e) => setPushMessage(e.target.value)}
+            onChange={(e) => { setPushMessage(e.target.value); setPushValidationError(null) }}
             rows={4}
             placeholder={`您的點數將於近期到期，快來消費使用您的點數！`}
             className="w-full border border-zinc-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] resize-none"
           />
+          {pushValidationError && (
+            <p className="text-sm text-red-600">{pushValidationError}</p>
+          )}
           <div className="flex gap-2">
             <button onClick={handleSendPush} disabled={sending || !pushMessage.trim()}
               className="px-5 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
               style={{ backgroundColor: '#06C755' }}>
               {sending ? '發送中…' : '確認發送'}
             </button>
-            <button onClick={() => { setShowPushForm(false); setSendResult(null) }}
+            <button onClick={() => { setShowPushForm(false); setSendResult(null); setPushValidationError(null) }}
               className="px-5 py-2 rounded-xl text-sm font-medium text-zinc-600 border border-zinc-200 hover:bg-zinc-50">
               取消
             </button>
@@ -249,6 +262,18 @@ export default function PointsExpiryPage() {
           </>
         )}
       </div>
+
+      {confirmSendTarget && (
+        <ConfirmDialog
+          title={`確定要向${confirmSendTarget}發送提醒？`}
+          message={`訊息內容：「${pushMessage}」`}
+          confirmLabel="確認發送"
+          loading={sending}
+          error={sendError}
+          onConfirm={() => void confirmSendPushAction()}
+          onCancel={() => { setConfirmSendTarget(null); setSendError(null) }}
+        />
+      )}
     </div>
   )
 }

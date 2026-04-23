@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -80,6 +81,8 @@ export default function StorePage() {
   const [redemptionPage, setRedemptionPage] = useState(1)
   const [redemptionStatus, setRedemptionStatus] = useState<'pending' | 'fulfilled' | 'cancelled' | ''>('')
   const [fulfilling, setFulfilling] = useState<string | null>(null)
+  const [confirmFulfill, setConfirmFulfill] = useState<{ redemption: Redemption; status: 'fulfilled' | 'cancelled' } | null>(null)
+  const [fulfillError, setFulfillError] = useState<string | null>(null)
 
   const loadItems = useCallback(async () => {
     setItemsLoading(true)
@@ -192,10 +195,14 @@ export default function StorePage() {
     }
   }
 
-  async function handleFulfill(redemption: Redemption, status: 'fulfilled' | 'cancelled') {
-    const label = status === 'fulfilled' ? '完成' : '取消'
-    if (!confirm(`確定要${label}此兌換？${status === 'cancelled' ? '\n\n注意：取消後點數將退回給會員。' : ''}`)) return
+  function handleFulfill(redemption: Redemption, status: 'fulfilled' | 'cancelled') {
+    setFulfillError(null)
+    setConfirmFulfill({ redemption, status })
+  }
 
+  async function confirmFulfillAction() {
+    if (!confirmFulfill) return
+    const { redemption, status } = confirmFulfill
     setFulfilling(redemption.id)
     try {
       const res = await fetch(`/api/redemptions?id=${redemption.id}`, {
@@ -205,8 +212,9 @@ export default function StorePage() {
       })
       if (!res.ok) {
         const { error: e } = await res.json().catch(() => ({ error: '操作失敗' })) as { error?: string }
-        alert(e ?? '操作失敗')
+        setFulfillError(e ?? '操作失敗')
       } else {
+        setConfirmFulfill(null)
         await loadRedemptions(redemptionPage, redemptionStatus)
       }
     } finally {
@@ -468,6 +476,19 @@ export default function StorePage() {
             </div>
           )}
         </div>
+      )}
+
+      {confirmFulfill && (
+        <ConfirmDialog
+          title={`確定要${confirmFulfill.status === 'fulfilled' ? '完成' : '取消'}此兌換？`}
+          message={confirmFulfill.status === 'cancelled' ? '取消後點數將退回給會員，此操作無法復原。' : '確認商品已交付給會員。'}
+          confirmLabel={confirmFulfill.status === 'fulfilled' ? '確認完成' : '確認取消'}
+          danger={confirmFulfill.status === 'cancelled'}
+          loading={!!fulfilling}
+          error={fulfillError}
+          onConfirm={() => void confirmFulfillAction()}
+          onCancel={() => { setConfirmFulfill(null); setFulfillError(null) }}
+        />
       )}
     </div>
   )

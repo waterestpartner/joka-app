@@ -34,6 +34,8 @@ export default function CheckinPage() {
     max_per_day: 1,
   })
   const [saving, setSaving] = useState(false)
+  const [saveResult, setSaveResult] = useState<'success' | 'error' | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [recordsData, setRecordsData] = useState<RecordsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
@@ -64,9 +66,11 @@ export default function CheckinPage() {
         body: JSON.stringify(settings),
       })
       if (!res.ok) throw new Error('儲存失敗')
-      alert('設定已儲存')
+      setSaveResult('success')
+      setTimeout(() => setSaveResult(null), 3000)
     } catch (e) {
-      alert(e instanceof Error ? e.message : '儲存失敗')
+      setSaveError(e instanceof Error ? e.message : '儲存失敗')
+      setSaveResult('error')
     } finally {
       setSaving(false)
     }
@@ -139,11 +143,19 @@ export default function CheckinPage() {
           </div>
         </div>
 
-        <button onClick={handleSave} disabled={saving}
-          className="px-5 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
-          style={{ backgroundColor: '#06C755' }}>
-          {saving ? '儲存中…' : '儲存設定'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={handleSave} disabled={saving}
+            className="px-5 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
+            style={{ backgroundColor: '#06C755' }}>
+            {saving ? '儲存中…' : '儲存設定'}
+          </button>
+          {saveResult === 'success' && (
+            <span className="text-sm text-green-600 font-medium">✓ 設定已儲存</span>
+          )}
+          {saveResult === 'error' && (
+            <span className="text-sm text-red-600">{saveError}</span>
+          )}
+        </div>
       </div>
 
       {/* Records */}

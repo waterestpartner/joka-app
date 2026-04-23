@@ -3,7 +3,7 @@
 // GET    /api/lotteries            – list all lotteries (newest first)
 // POST   /api/lotteries            – create lottery
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
@@ -70,14 +70,14 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'lottery.create',
     target_type: 'lottery',
     target_id: data?.id as string | undefined,
     payload: { name: (name as string).trim(), winner_count: cnt },
-  })
+  }))
 
   return NextResponse.json(data, { status: 201 })
 }

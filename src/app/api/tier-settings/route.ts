@@ -5,7 +5,7 @@
 // PATCH /api/tier-settings         → 更新一個等級 { id, ...fields }
 // DELETE /api/tier-settings?id=    → 刪除一個等級（不可刪最後一個）
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { logAudit } from '@/lib/audit'
@@ -87,14 +87,14 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (!error) {
-        void logAudit({
+        after(() => logAudit({
           tenant_id: auth.tenantId,
           operator_email: auth.email,
           action: 'tier_setting.create',
           target_type: 'tier_setting',
           target_id: (data as Record<string, unknown>)?.id as string | undefined,
           payload: { tier_display_name: (tier_display_name as string).trim(), min_points, point_rate },
-        })
+        }))
         return NextResponse.json(data, { status: 201 })
       }
 
@@ -170,14 +170,14 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Tier setting not found or update failed' }, { status: 404 })
     }
 
-    void logAudit({
+    after(() => logAudit({
       tenant_id: auth.tenantId,
       operator_email: auth.email,
       action: 'tier_setting.update',
       target_type: 'tier_setting',
       target_id: id,
       payload: { fields: Object.keys(safeUpdates) },
-    })
+    }))
 
     return NextResponse.json(data)
   } catch (err) {
@@ -249,14 +249,14 @@ export async function DELETE(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'tier_setting.delete',
     target_type: 'tier_setting',
     target_id: id,
     payload: { reassigned_to: fallback.tier },
-  })
+  }))
 
   return NextResponse.json({ ok: true, reassignedTo: fallback.tier })
 }

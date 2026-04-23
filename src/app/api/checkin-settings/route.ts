@@ -3,7 +3,7 @@
 // GET   – return check-in settings for this tenant
 // PATCH – update settings
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
@@ -54,7 +54,7 @@ export async function PATCH(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'checkin_settings.update',
@@ -63,7 +63,7 @@ export async function PATCH(req: NextRequest) {
     payload: {
       is_enabled: is_enabled === true,
     },
-  })
+  }))
 
   return NextResponse.json({ success: true })
 }

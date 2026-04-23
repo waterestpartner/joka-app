@@ -7,7 +7,7 @@
 // LIFF (Bearer token):
 //   GET  /api/surveys?tenantSlug=... – list active surveys with member completion status
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
@@ -140,14 +140,14 @@ export async function POST(req: NextRequest) {
     await supabase.from('survey_questions').insert(questionRows)
   }
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'survey.create',
     target_type: 'survey',
     target_id: surveyId,
     payload: { title: (title as string).trim(), question_count: questionRows.length },
-  })
+  }))
 
   return NextResponse.json(survey, { status: 201 })
 }

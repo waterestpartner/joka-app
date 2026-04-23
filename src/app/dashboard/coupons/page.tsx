@@ -321,6 +321,7 @@ export default function CouponsPage() {
   const [showModal, setShowModal] = useState(false)
   const [editTarget, setEditTarget] = useState<Coupon | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
+  const [toggleError, setToggleError] = useState<string | null>(null)
 
   // ── Fetch coupons + tiers ──────────────────────────────────────────────────
 
@@ -375,7 +376,9 @@ export default function CouponsPage() {
       const updated: Coupon = await res.json()
       setCoupons((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
     } catch {
-      alert('狀態更新失敗，請稍後再試。')
+      setToggleError('狀態更新失敗，請稍後再試。')
+      // rollback optimistic update
+      setCoupons((prev) => prev.map((c) => (c.id === coupon.id ? { ...c, is_active: coupon.is_active } : c)))
     } finally {
       setToggling(null)
     }

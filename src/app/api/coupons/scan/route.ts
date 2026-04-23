@@ -83,13 +83,13 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'coupon.scan_redeem',
     target_type: 'member_coupon',
     target_id: memberCouponId,
-  })
+  }))
 
   after(() => fireWebhooks(auth.tenantId, 'coupon.redeemed', {
     member_coupon_id: memberCouponId,

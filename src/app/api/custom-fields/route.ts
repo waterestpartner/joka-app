@@ -5,7 +5,7 @@
 // PATCH  { id, field_label?, options?, is_required?, sort_order? }
 // DELETE ?id=... – 刪除欄位（同時刪除所有值）
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
@@ -68,14 +68,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'custom_field.create',
     target_type: 'custom_field',
     target_id: data?.id as string | undefined,
     payload: { field_key: field_key.toLowerCase().trim(), field_type: (field_type as string) ?? 'text' },
-  })
+  }))
 
   return NextResponse.json(data, { status: 201 })
 }
@@ -126,14 +126,14 @@ export async function PATCH(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'custom_field.update',
     target_type: 'custom_field',
     target_id: id,
     payload: { fields: Object.keys(updates) },
-  })
+  }))
 
   return NextResponse.json(data)
 }
@@ -162,13 +162,13 @@ export async function DELETE(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'custom_field.delete',
     target_type: 'custom_field',
     target_id: id,
-  })
+  }))
 
   return NextResponse.json({ success: true })
 }

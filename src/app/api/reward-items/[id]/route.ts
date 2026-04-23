@@ -3,7 +3,7 @@
 // PATCH  – update item (name, description, points_cost, stock, is_active, sort_order)
 // DELETE – delete item (only if no pending/fulfilled redemptions)
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
@@ -54,14 +54,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'reward_item.update',
     target_type: 'reward_item',
     target_id: id,
     payload: { fields: Object.keys(updates) },
-  })
+  }))
 
   return NextResponse.json({ success: true })
 }
@@ -92,13 +92,13 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'reward_item.delete',
     target_type: 'reward_item',
     target_id: id,
-  })
+  }))
 
   return NextResponse.json({ success: true })
 }

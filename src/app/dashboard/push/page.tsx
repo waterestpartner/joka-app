@@ -213,6 +213,8 @@ export default function PushPage() {
   const [scheduledPushes, setScheduledPushes] = useState<ScheduledPush[]>([])
   const [scheduledLoading, setScheduledLoading] = useState(true)
   const [cancelling, setCancelling] = useState<string | null>(null)
+  const [confirmCancelPush, setConfirmCancelPush] = useState<ScheduledPush | null>(null)
+  const [cancelError, setCancelError] = useState<string | null>(null)
 
   const advancedDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -353,16 +355,23 @@ export default function PushPage() {
     }
   }
 
-  async function handleCancel(push: ScheduledPush) {
-    if (!confirm('確定要取消此排程推播嗎？')) return
+  function handleCancel(push: ScheduledPush) {
+    setCancelError(null)
+    setConfirmCancelPush(push)
+  }
+
+  async function confirmCancelPushAction() {
+    if (!confirmCancelPush) return
+    const push = confirmCancelPush
     setCancelling(push.id)
     try {
       const res = await fetch(`/api/scheduled-pushes?id=${encodeURIComponent(push.id)}`, { method: 'DELETE' })
       if (res.ok) {
         setScheduledPushes((prev) => prev.map((p) => (p.id === push.id ? { ...p, status: 'cancelled' } : p)))
+        setConfirmCancelPush(null)
       } else {
         const j = await res.json().catch(() => ({}))
-        alert((j as { error?: string }).error ?? '取消失敗')
+        setCancelError((j as { error?: string }).error ?? '取消失敗')
       }
     } finally {
       setCancelling(null)
@@ -774,6 +783,19 @@ export default function PushPage() {
             setPendingTplOverwrite(null)
           }}
           onCancel={() => setPendingTplOverwrite(null)}
+        />
+      )}
+
+      {confirmCancelPush && (
+        <ConfirmDialog
+          title="確定要取消此排程推播嗎？"
+          message={`排程時間：${new Date(confirmCancelPush.scheduled_at).toLocaleString('zh-TW')}，取消後無法復原。`}
+          confirmLabel="取消推播"
+          danger
+          loading={!!cancelling}
+          error={cancelError}
+          onConfirm={() => void confirmCancelPushAction()}
+          onCancel={() => { setConfirmCancelPush(null); setCancelError(null) }}
         />
       )}
     </div>

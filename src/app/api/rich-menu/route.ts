@@ -7,7 +7,7 @@
 // PATCH  ?action=setDefault&id=...  – set as default for all users
 // PATCH  ?action=unlink             – unlink default rich menu
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
@@ -94,13 +94,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'rich_menu.create',
     target_type: 'rich_menu',
     target_id: richMenuId,
-  })
+  }))
 
   return NextResponse.json({ richMenuId, success: true })
 }
@@ -119,13 +119,13 @@ export async function PATCH(req: NextRequest) {
     if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
     const ok = await setDefaultRichMenu(id, token)
     if (ok) {
-      void logAudit({
+      after(() => logAudit({
         tenant_id: auth.tenantId,
         operator_email: auth.email,
         action: 'rich_menu.set_default',
         target_type: 'rich_menu',
         target_id: id,
-      })
+      }))
       return NextResponse.json({ success: true })
     }
     return NextResponse.json({ error: '設定失敗' }, { status: 500 })
@@ -134,13 +134,13 @@ export async function PATCH(req: NextRequest) {
   if (action === 'unlink') {
     const ok = await unlinkDefaultRichMenu(token)
     if (ok) {
-      void logAudit({
+      after(() => logAudit({
         tenant_id: auth.tenantId,
         operator_email: auth.email,
         action: 'rich_menu.unlink_default',
         target_type: 'tenant',
         target_id: auth.tenantId,
-      })
+      }))
       return NextResponse.json({ success: true })
     }
     return NextResponse.json({ error: '取消失敗' }, { status: 500 })
@@ -161,13 +161,13 @@ export async function DELETE(req: NextRequest) {
 
   const ok = await deleteRichMenu(id, token)
   if (ok) {
-    void logAudit({
+    after(() => logAudit({
       tenant_id: auth.tenantId,
       operator_email: auth.email,
       action: 'rich_menu.delete',
       target_type: 'rich_menu',
       target_id: id,
-    })
+    }))
     return NextResponse.json({ success: true })
   }
   return NextResponse.json({ error: '刪除失敗' }, { status: 500 })

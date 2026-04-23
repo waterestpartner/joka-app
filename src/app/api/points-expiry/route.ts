@@ -6,7 +6,7 @@
 // POST (Dashboard)          – send expiry warning push to at-risk members
 //       body: { warningDays?, memberIds?, message }
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
@@ -157,14 +157,14 @@ export async function POST(req: NextRequest) {
     })
   )
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'points_expiry.warning_push',
     target_type: 'tenant',
     target_id: auth.tenantId,
     payload: { sent, failed, total: targetMembers.length },
-  })
+  }))
 
   return NextResponse.json({ sent, failed, total: targetMembers.length })
 }

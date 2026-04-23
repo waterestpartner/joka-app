@@ -5,7 +5,7 @@
 // PATCH  /api/tags           – 更新標籤 { id, name?, color? }
 // DELETE /api/tags?id=...    – 刪除標籤（連帶刪除 member_tags 關聯）
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
@@ -68,14 +68,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'tag.create',
     target_type: 'tag',
     target_id: (data as Record<string, unknown>)?.id as string | undefined,
     payload: { name: name.trim() },
-  })
+  }))
 
   return NextResponse.json(data, { status: 201 })
 }
@@ -128,14 +128,14 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'tag.update',
     target_type: 'tag',
     target_id: id,
     payload: { fields: Object.keys(updates) },
-  })
+  }))
 
   return NextResponse.json(data)
 }
@@ -158,13 +158,13 @@ export async function DELETE(req: NextRequest) {
     .from('tags').delete().eq('id', id).eq('tenant_id', auth.tenantId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'tag.delete',
     target_type: 'tag',
     target_id: id,
-  })
+  }))
 
   return NextResponse.json({ success: true })
 }

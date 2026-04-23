@@ -1,6 +1,6 @@
 // 租戶 API 路由
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import {
   getTenantBySlug,
   getTenantById,
@@ -164,14 +164,14 @@ export async function PATCH(req: NextRequest) {
       )
     }
 
-    void logAudit({
+    after(() => logAudit({
       tenant_id: auth.tenantId,
       operator_email: auth.email,
       action: 'tenant.update',
       target_type: 'tenant',
       target_id: auth.tenantId,
       payload: { fields: Object.keys(updateFields) },
-    })
+    }))
 
     // 回傳 sanitize 過的 tenant + 本次同步到的 LINE@ 資訊（給前端顯示）
     return NextResponse.json({
@@ -229,14 +229,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Update failed' }, { status: 500 })
     }
 
-    void logAudit({
+    after(() => logAudit({
       tenant_id: auth.tenantId,
       operator_email: auth.email,
       action: 'tenant.sync_line_bot',
       target_type: 'tenant',
       target_id: auth.tenantId,
       payload: { displayName: botInfo.displayName },
-    })
+    }))
 
     return NextResponse.json({
       ...sanitizeTenant(updated),

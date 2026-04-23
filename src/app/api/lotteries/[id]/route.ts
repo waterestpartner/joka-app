@@ -5,7 +5,7 @@
 // POST   /api/lotteries/[id]/draw    – execute draw (picks random winners)
 // POST   /api/lotteries/[id]/notify  – push LINE notification to winners
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { pushTextMessage } from '@/lib/line-messaging'
@@ -79,13 +79,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       .eq('tenant_id', auth.tenantId)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    void logAudit({
+    after(() => logAudit({
       tenant_id: auth.tenantId,
       operator_email: auth.email,
       action: 'lottery.cancel',
       target_type: 'lottery',
       target_id: id,
-    })
+    }))
 
     return NextResponse.json({ success: true })
   }
@@ -111,14 +111,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'lottery.update',
     target_type: 'lottery',
     target_id: id,
     payload: { fields: Object.keys(updates) },
-  })
+  }))
 
   return NextResponse.json({ success: true })
 }
@@ -251,14 +251,14 @@ async function executeDraw(
     .update({ status: 'drawn', drawn_at: new Date().toISOString() })
     .eq('id', lotteryId)
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'lottery.draw',
     target_type: 'lottery',
     target_id: lotteryId,
     payload: { poolSize: pool.length, winnersDrawn: winners.length },
-  })
+  }))
 
   return NextResponse.json({
     success: true,
@@ -325,14 +325,14 @@ async function notifyWinners(
     }
   }
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'lottery.notify',
     target_type: 'lottery',
     target_id: lotteryId,
     payload: { successCount, failCount },
-  })
+  }))
 
   return NextResponse.json({ success: true, successCount, failCount })
 }

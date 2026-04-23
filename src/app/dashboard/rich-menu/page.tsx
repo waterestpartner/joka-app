@@ -3,6 +3,7 @@
 // Dashboard: LINE Rich Menu 管理
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 interface RichMenuInfo {
   richMenuId: string
@@ -101,6 +102,10 @@ export default function RichMenuPage() {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [creating, setCreating] = useState(false)
   const [createResult, setCreateResult] = useState<string | null>(null)
+  const [confirmUnlink, setConfirmUnlink] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [actionLoading, setActionLoading] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
@@ -177,27 +182,40 @@ export default function RichMenuPage() {
       const j = await res.json() as { error?: string }
       if (!res.ok) throw new Error(j.error ?? '設定失敗')
       await load()
-    } catch (e) { alert(e instanceof Error ? e.message : '設定失敗') }
+    } catch (e) { setError(e instanceof Error ? e.message : '設定失敗') }
   }
 
-  async function handleUnlink() {
-    if (!confirm('確定要取消預設 Rich Menu？')) return
+  async function confirmUnlinkAction() {
+    setActionLoading(true)
+    setActionError(null)
     try {
       const res = await fetch('/api/rich-menu?action=unlink', { method: 'PATCH' })
       const j = await res.json() as { error?: string }
       if (!res.ok) throw new Error(j.error ?? '取消失敗')
+      setConfirmUnlink(false)
       await load()
-    } catch (e) { alert(e instanceof Error ? e.message : '取消失敗') }
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : '取消失敗')
+    } finally {
+      setActionLoading(false)
+    }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('確定要刪除此 Rich Menu？')) return
+  async function confirmDeleteAction() {
+    if (!confirmDeleteId) return
+    setActionLoading(true)
+    setActionError(null)
     try {
-      const res = await fetch(`/api/rich-menu?id=${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/rich-menu?id=${confirmDeleteId}`, { method: 'DELETE' })
       const j = await res.json() as { error?: string }
       if (!res.ok) throw new Error(j.error ?? '刪除失敗')
+      setConfirmDeleteId(null)
       await load()
-    } catch (e) { alert(e instanceof Error ? e.message : '刪除失敗') }
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : '刪除失敗')
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   const buttonCount = layout === '6-grid' ? 6 : layout === '4-grid' ? 4 : 3
@@ -218,7 +236,7 @@ export default function RichMenuPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold text-zinc-900">已建立的 Rich Menu</h2>
           {pageData?.defaultId && (
-            <button onClick={handleUnlink}
+            <button onClick={() => { setActionError(null); setConfirmUnlink(true) }}
               className="text-xs text-zinc-500 border border-zinc-200 rounded-lg px-2.5 py-1 hover:bg-zinc-50">
               取消預設選單
             </button>
@@ -251,7 +269,7 @@ export default function RichMenuPage() {
                       設為預設
                     </button>
                   )}
-                  <button onClick={() => void handleDelete(m.richMenuId)}
+                  <button onClick={() => { setActionError(null); setConfirmDeleteId(m.richMenuId) }}
                     className="text-xs text-red-500 border border-red-200 rounded-lg px-2.5 py-1 hover:bg-red-50">
                     刪除
                   </button>
@@ -381,6 +399,32 @@ export default function RichMenuPage() {
           {creating ? '建立中…' : '建立 Rich Menu'}
         </button>
       </div>
+
+      {confirmUnlink && (
+        <ConfirmDialog
+          title="確定要取消預設 Rich Menu？"
+          message="取消後 LINE 聊天室底部將不顯示選單，直到重新設定為止。"
+          confirmLabel="取消預設"
+          danger
+          loading={actionLoading}
+          error={actionError}
+          onConfirm={() => void confirmUnlinkAction()}
+          onCancel={() => { setConfirmUnlink(false); setActionError(null) }}
+        />
+      )}
+
+      {confirmDeleteId && (
+        <ConfirmDialog
+          title="確定要刪除此 Rich Menu？"
+          message="刪除後無法復原，若此 Rich Menu 正在使用中，LINE 上的選單也會消失。"
+          confirmLabel="刪除"
+          danger
+          loading={actionLoading}
+          error={actionError}
+          onConfirm={() => void confirmDeleteAction()}
+          onCancel={() => { setConfirmDeleteId(null); setActionError(null) }}
+        />
+      )}
     </div>
   )
 }

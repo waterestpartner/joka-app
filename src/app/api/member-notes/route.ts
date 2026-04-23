@@ -4,7 +4,7 @@
 // POST   { memberId, content }  – 新增備註
 // DELETE ?id=...         – 刪除備註
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
@@ -80,14 +80,14 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'member_note.create',
     target_type: 'member',
     target_id: memberId,
     payload: { noteId: data?.id as string | undefined },
-  })
+  }))
 
   return NextResponse.json(data, { status: 201 })
 }
@@ -116,13 +116,13 @@ export async function DELETE(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'member_note.delete',
     target_type: 'member_note',
     target_id: id,
-  })
+  }))
 
   return NextResponse.json({ success: true })
 }

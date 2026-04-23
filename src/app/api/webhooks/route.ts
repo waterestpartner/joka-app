@@ -5,7 +5,7 @@
 // PATCH  { id, name?, url?, events?, secret?, is_active? } – 更新
 // DELETE ?id=... – 刪除
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { WEBHOOK_EVENTS, type WebhookEvent } from '@/lib/webhooks'
@@ -64,14 +64,14 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'webhook.create',
     target_type: 'webhook',
     target_id: (data as Record<string, unknown>)?.id as string | undefined,
     payload: { name: name.trim(), events },
-  })
+  }))
 
   return NextResponse.json(data, { status: 201 })
 }
@@ -126,14 +126,14 @@ export async function PATCH(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'webhook.update',
     target_type: 'webhook',
     target_id: id,
     payload: { fields: Object.keys(updates) },
-  })
+  }))
 
   return NextResponse.json(data)
 }
@@ -162,13 +162,13 @@ export async function DELETE(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'webhook.delete',
     target_type: 'webhook',
     target_id: id,
-  })
+  }))
 
   return NextResponse.json({ success: true })
 }

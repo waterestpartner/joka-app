@@ -3,7 +3,7 @@
 // GET  – list segments for this tenant (with member count preview)
 // POST – create a new segment with filter criteria
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
@@ -105,14 +105,14 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'segment.create',
     target_type: 'segment',
     target_id: data?.id as string | undefined,
     payload: { name: (name as string).trim() },
-  })
+  }))
 
   return NextResponse.json(data, { status: 201 })
 }

@@ -3,7 +3,7 @@
 // GET  – return birthday_bonus_points (from tenant), today's birthday count, recent awards
 // POST – manually trigger birthday reward processing for today
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { addPointTransaction } from '@/repositories/pointRepository'
@@ -118,14 +118,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'birthday_rewards.run',
     target_type: 'tenant',
     target_id: auth.tenantId,
     payload: { awarded, skipped, bonusPoints: pts },
-  })
+  }))
 
   return NextResponse.json({ awarded, skipped })
 }

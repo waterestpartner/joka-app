@@ -174,7 +174,7 @@ export default function MissionsPage() {
         prev.map((x) => x.id === m.id ? { ...x, is_active: m.is_active } : x)
       )
       const { error } = await res.json().catch(() => ({ error: '狀態更新失敗' })) as { error?: string }
-      alert(error ?? '狀態更新失敗')
+      setSaveError(error ?? '狀態更新失敗')
     }
   }
 

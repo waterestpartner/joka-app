@@ -6,7 +6,7 @@
 // PATCH  /api/missions               (Dashboard) 更新任務
 // DELETE /api/missions?id=...        (Dashboard) 刪除任務
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
@@ -152,14 +152,14 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'mission.create',
     target_type: 'mission',
     target_id: data?.id as string | undefined,
     payload: { title: (title as string).trim(), mission_type: mtype, reward_points: pts },
-  })
+  }))
 
   return NextResponse.json(data, { status: 201 })
 }
@@ -198,14 +198,14 @@ export async function PATCH(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'mission.update',
     target_type: 'mission',
     target_id: id,
     payload: { fields: Object.keys(updates) },
-  })
+  }))
 
   return NextResponse.json(data)
 }
@@ -228,13 +228,13 @@ export async function DELETE(req: NextRequest) {
     .eq('id', id).eq('tenant_id', auth.tenantId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  void logAudit({
+  after(() => logAudit({
     tenant_id: auth.tenantId,
     operator_email: auth.email,
     action: 'mission.delete',
     target_type: 'mission',
     target_id: id,
-  })
+  }))
 
   return NextResponse.json({ success: true })
 }

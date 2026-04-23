@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -80,6 +81,8 @@ export default function SurveysPage() {
   const [activeTab, setActiveTab] = useState<'questions' | 'responses'>('questions')
   const [toggling, setToggling] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [confirmDeleteSurvey, setConfirmDeleteSurvey] = useState<Survey | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -195,18 +198,29 @@ export default function SurveysPage() {
 
   // ── Delete ────────────────────────────────────────────────────────────────
 
-  async function handleDelete(s: Survey) {
-    if (!confirm(`確定要刪除問卷「${s.title}」？`)) return
+  function handleDelete(s: Survey) {
+    setDeleteError(null)
+    setConfirmDeleteSurvey(s)
+  }
+
+  async function confirmDeleteSurveyAction() {
+    if (!confirmDeleteSurvey) return
+    const s = confirmDeleteSurvey
     setDeleting(s.id)
-    const res = await fetch(`/api/surveys/${s.id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      const { error: e } = await res.json().catch(() => ({ error: '刪除失敗' })) as { error?: string }
-      alert(e ?? '刪除失敗')
-    } else {
+    try {
+      const res = await fetch(`/api/surveys/${s.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const { error: e } = await res.json().catch(() => ({ error: '刪除失敗' })) as { error?: string }
+        throw new Error(e ?? '刪除失敗')
+      }
       setSurveys((prev) => prev.filter((x) => x.id !== s.id))
       if (detail?.survey.id === s.id) setDetail(null)
+      setConfirmDeleteSurvey(null)
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : '刪除失敗')
+    } finally {
+      setDeleting(null)
     }
-    setDeleting(null)
   }
 
   // ── Compute aggregate stats for responses ─────────────────────────────────
@@ -512,6 +526,19 @@ export default function SurveysPage() {
           )}
         </div>
       </div>
+
+      {confirmDeleteSurvey && (
+        <ConfirmDialog
+          title={`確定要刪除問卷「${confirmDeleteSurvey.title}」？`}
+          message="刪除後問卷及所有回覆將永久移除，此操作無法復原。"
+          confirmLabel="刪除"
+          danger
+          loading={!!deleting}
+          error={deleteError}
+          onConfirm={() => void confirmDeleteSurveyAction()}
+          onCancel={() => { setConfirmDeleteSurvey(null); setDeleteError(null) }}
+        />
+      )}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 interface CustomField {
   id: string
@@ -42,6 +43,8 @@ export default function CustomFieldsPage() {
 
   // Delete
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   // Member search & values
   const [memberSearch, setMemberSearch] = useState('')
@@ -99,14 +102,28 @@ export default function CustomFieldsPage() {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('刪除此欄位將同時刪除所有會員的對應值，確定？')) return
+  function handleDelete(id: string) {
+    setDeleteError(null)
+    setConfirmDeleteId(id)
+  }
+
+  async function confirmDeleteField() {
+    if (!confirmDeleteId) return
+    const id = confirmDeleteId
     setDeletingId(id)
     try {
-      await fetch(`/api/custom-fields?id=${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/custom-fields?id=${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const j = await res.json() as { error?: string }
+        throw new Error(j.error ?? '刪除失敗')
+      }
       setFields((prev) => prev.filter((f) => f.id !== id))
-    } catch (e) { alert(e instanceof Error ? e.message : '刪除失敗') }
-    finally { setDeletingId(null) }
+      setConfirmDeleteId(null)
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : '刪除失敗')
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   // Member search
@@ -134,7 +151,7 @@ export default function CustomFieldsPage() {
       const initValues: Record<string, string> = {}
       for (const f of json.fields) initValues[f.id] = f.value ?? ''
       setEditValues(initValues)
-    } catch (e) { alert(e instanceof Error ? e.message : '錯誤') }
+    } catch (e) { setError(e instanceof Error ? e.message : '錯誤') }
     finally { setValuesLoading(false) }
   }
 
@@ -158,7 +175,7 @@ export default function CustomFieldsPage() {
       setFieldValues((prev) =>
         prev.map((f) => f.id === fieldId ? { ...f, value: editValues[fieldId] ?? null } : f)
       )
-    } catch (e) { alert(e instanceof Error ? e.message : '儲存失敗') }
+    } catch (e) { setError(e instanceof Error ? e.message : '儲存失敗') }
     finally { setSavingFieldId(null) }
   }
 
@@ -395,6 +412,19 @@ export default function CustomFieldsPage() {
           </div>
         )}
       </div>
+
+      {confirmDeleteId && (
+        <ConfirmDialog
+          title="確定要刪除此欄位？"
+          message="刪除後所有會員的對應值也會一併移除，此操作無法復原。"
+          confirmLabel="刪除"
+          danger
+          loading={!!deletingId}
+          error={deleteError}
+          onConfirm={() => void confirmDeleteField()}
+          onCancel={() => { setConfirmDeleteId(null); setDeleteError(null) }}
+        />
+      )}
     </div>
   )
 }

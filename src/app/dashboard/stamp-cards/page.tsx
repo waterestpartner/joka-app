@@ -193,7 +193,7 @@ export default function StampCardsPage() {
       // Rollback on failure
       setCards((prev) => prev.map((x) => x.id === c.id ? { ...x, is_active: c.is_active } : x))
       const { error } = await res.json().catch(() => ({ error: '狀態更新失敗' })) as { error?: string }
-      alert(error ?? '狀態更新失敗')
+      setSaveError(error ?? '狀態更新失敗')
     }
   }
 

@@ -3,6 +3,7 @@
 // Dashboard: 會員分群管理
 
 import { useEffect, useState, useCallback } from 'react'
+import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 interface Tag { id: string; name: string; color: string }
 
@@ -54,6 +55,11 @@ export default function SegmentsPage() {
   const [pushMessage, setPushMessage] = useState('')
   const [pushing, setPushing] = useState(false)
   const [pushResult, setPushResult] = useState<{ sent: number; failed: number; total: number } | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [pushError, setPushError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -83,7 +89,8 @@ export default function SegmentsPage() {
   }, [])
 
   async function handleCreate() {
-    if (!formName.trim()) { alert('請填寫分群名稱'); return }
+    if (!formName.trim()) { setCreateError('請填寫分群名稱'); return }
+    setCreateError(null)
     setSaving(true)
     try {
       const res = await fetch('/api/segments', {
@@ -99,20 +106,31 @@ export default function SegmentsPage() {
       setFormFilter(EMPTY_FILTER)
       await load()
     } catch (e) {
-      alert(e instanceof Error ? e.message : '建立失敗')
+      setCreateError(e instanceof Error ? e.message : '建立失敗')
     } finally {
       setSaving(false)
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('確定刪除此分群？')) return
+  function handleDelete(id: string) {
+    setDeleteError(null)
+    setConfirmDeleteId(id)
+  }
+
+  async function confirmDeleteAction() {
+    if (!confirmDeleteId) return
+    setDeleting(true)
     try {
-      const res = await fetch(`/api/segments/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/segments/${confirmDeleteId}`, { method: 'DELETE' })
       const j = await res.json() as { error?: string }
       if (!res.ok) throw new Error(j.error ?? '刪除失敗')
+      setConfirmDeleteId(null)
       await load()
-    } catch (e) { alert(e instanceof Error ? e.message : '刪除失敗') }
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : '刪除失敗')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   async function handlePreview(id: string) {
@@ -140,7 +158,7 @@ export default function SegmentsPage() {
       if (!res.ok) throw new Error(j.error ?? '推播失敗')
       setPushResult({ sent: j.sent ?? 0, failed: j.failed ?? 0, total: j.total ?? 0 })
     } catch (e) {
-      alert(e instanceof Error ? e.message : '推播失敗')
+      setPushError(e instanceof Error ? e.message : '推播失敗')
     } finally {
       setPushing(false)
     }
@@ -256,13 +274,14 @@ export default function SegmentsPage() {
             </div>
           </div>
 
+          {createError && <p className="text-sm text-red-600">{createError}</p>}
           <div className="flex gap-2">
-            <button onClick={handleCreate} disabled={saving}
+            <button onClick={() => void handleCreate()} disabled={saving}
               className="px-5 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
               style={{ backgroundColor: '#06C755' }}>
               {saving ? '建立中…' : '建立分群'}
             </button>
-            <button onClick={() => { setShowForm(false); setFormName(''); setFormDesc(''); setFormFilter(EMPTY_FILTER) }}
+            <button onClick={() => { setShowForm(false); setFormName(''); setFormDesc(''); setFormFilter(EMPTY_FILTER); setCreateError(null) }}
               className="px-5 py-2 rounded-xl text-sm font-medium text-zinc-600 border border-zinc-200 hover:bg-zinc-50">
               取消
             </button>
@@ -283,13 +302,14 @@ export default function SegmentsPage() {
           <textarea value={pushMessage} onChange={(e) => setPushMessage(e.target.value)} rows={4}
             placeholder="輸入推播訊息…"
             className="w-full border border-zinc-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] resize-none" />
+          {pushError && <p className="text-sm text-red-600">{pushError}</p>}
           <div className="flex gap-2">
-            <button onClick={handlePush} disabled={pushing || !pushMessage.trim()}
+            <button onClick={() => void handlePush()} disabled={pushing || !pushMessage.trim()}
               className="px-5 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
               style={{ backgroundColor: '#06C755' }}>
               {pushing ? '發送中…' : '確認發送'}
             </button>
-            <button onClick={() => { setPushTarget(null); setPushMessage(''); setPushResult(null) }}
+            <button onClick={() => { setPushTarget(null); setPushMessage(''); setPushResult(null); setPushError(null) }}
               className="px-5 py-2 rounded-xl text-sm font-medium text-zinc-600 border border-zinc-200 hover:bg-zinc-50">
               取消
             </button>
@@ -367,6 +387,19 @@ export default function SegmentsPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {confirmDeleteId && (
+        <ConfirmDialog
+          title="確定刪除此分群？"
+          message="刪除後分群設定將永久移除，但不影響會員資料。"
+          confirmLabel="刪除"
+          danger
+          loading={deleting}
+          error={deleteError}
+          onConfirm={() => void confirmDeleteAction()}
+          onCancel={() => { setConfirmDeleteId(null); setDeleteError(null) }}
+        />
       )}
     </div>
   )
