@@ -10,6 +10,13 @@ export interface Member {
   tier: string
   points: number
   total_spent: number
+  referral_code?: string | null
+  platform_member_id?: string | null
+  is_blocked?: boolean
+  blocked_reason?: string | null
+  blocked_at?: string | null
+  last_activity_at?: string | null
+  notes?: string | null
   created_at: string
 }
 
