@@ -40,7 +40,8 @@ export async function GET(req: NextRequest) {
     .not('line_uid', 'is', null)
 
   if (search.trim()) {
-    query = query.or(`name.ilike.%${search.trim()}%,phone.ilike.%${search.trim()}%`)
+    const safeSearch = search.trim().replace(/[%_,()]/g, (c) => `\\${c}`)
+    query = query.or(`name.ilike.%${safeSearch}%,phone.ilike.%${safeSearch}%`)
   }
 
   // Members inactive for N+ days (use last_activity_at or fallback to created_at)

@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
       .from('members')
       .select('id')
       .eq('tenant_id', auth.tenantId)
-      .or(`name.ilike.%${search}%,phone.ilike.%${search}%`)
+      .or(`name.ilike.%${search.replace(/[%_,()]/g, (c) => `\\${c}`)}%,phone.ilike.%${search.replace(/[%_,()]/g, (c) => `\\${c}`)}%`)
       .limit(200)
     memberIdFilter = (matchedMembers ?? []).map((m) => m.id as string)
     if (memberIdFilter.length === 0) {
