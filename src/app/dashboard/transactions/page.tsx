@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import type { Branch } from '@/types/branch'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,8 @@ interface Transaction {
   member_id: string
   member_name: string
   member_phone: string | null
+  branch_id: string | null
+  branch_name: string | null
 }
 
 interface ApiResponse {
@@ -59,17 +62,28 @@ export default function TransactionsPage() {
   const [error, setError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [typeFilter, setTypeFilter] = useState<TxType | ''>('')
+  const [branchFilter, setBranchFilter] = useState('')
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
+  const [branches, setBranches] = useState<Branch[]>([])
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const load = useCallback(async (p: number, type: string, q: string) => {
+  // Load branches for filter dropdown
+  useEffect(() => {
+    fetch('/api/branches')
+      .then(r => r.ok ? r.json() : [])
+      .then((d: Branch[]) => setBranches(d))
+      .catch(() => {})
+  }, [])
+
+  const load = useCallback(async (p: number, type: string, q: string, branch: string) => {
     setLoading(true)
     setError(null)
     try {
       const params = new URLSearchParams({ page: String(p), pageSize: String(PAGE_SIZE) })
       if (type) params.set('type', type)
       if (q) params.set('search', q)
+      if (branch) params.set('branch', branch)
       const res = await fetch(`/api/transactions?${params}`)
       if (!res.ok) {
         const { error: e } = await res.json().catch(() => ({ error: '載入失敗' })) as { error?: string }
@@ -83,7 +97,7 @@ export default function TransactionsPage() {
     }
   }, [])
 
-  useEffect(() => { void load(page, typeFilter, search) }, [load, page, typeFilter, search])
+  useEffect(() => { void load(page, typeFilter, search, branchFilter) }, [load, page, typeFilter, search, branchFilter])
 
   function handleSearchChange(val: string) {
     setSearchInput(val)
@@ -96,6 +110,11 @@ export default function TransactionsPage() {
 
   function handleTypeChange(t: TxType | '') {
     setTypeFilter(t)
+    setPage(1)
+  }
+
+  function handleBranchChange(b: string) {
+    setBranchFilter(b)
     setPage(1)
   }
 
@@ -150,6 +169,20 @@ export default function TransactionsPage() {
             ))}
           </div>
 
+          {/* Branch filter（有門市時才顯示）*/}
+          {branches.length > 0 && (
+            <select
+              value={branchFilter}
+              onChange={(e) => handleBranchChange(e.target.value)}
+              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#06C755] transition"
+            >
+              <option value="">全部門市</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          )}
+
           {/* Search */}
           <div className="ml-auto">
             <input
@@ -187,6 +220,9 @@ export default function TransactionsPage() {
                   <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">會員</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">類型</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">點數</th>
+                  {branches.length > 0 && (
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">門市</th>
+                  )}
                   <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">備註</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">時間</th>
                 </tr>
@@ -212,6 +248,17 @@ export default function TransactionsPage() {
                       }`}>
                         {isPositive ? '+' : isNegative ? '-' : ''}{Math.abs(tx.amount).toLocaleString()}
                       </td>
+                      {branches.length > 0 && (
+                        <td className="px-4 py-3.5">
+                          {tx.branch_name ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-zinc-600 bg-zinc-100 rounded-full px-2 py-0.5">
+                              📍 {tx.branch_name}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-zinc-300">—</span>
+                          )}
+                        </td>
+                      )}
                       <td className="px-4 py-3.5 text-zinc-500 max-w-[180px]">
                         <p className="truncate">{tx.note ?? '—'}</p>
                       </td>

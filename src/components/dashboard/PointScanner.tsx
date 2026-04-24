@@ -6,7 +6,10 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { PointTransaction } from '@/types/member'
+import type { Branch } from '@/types/branch'
 import { formatDate, formatNumber } from '@/lib/utils'
+
+const BRANCH_STORAGE_KEY = 'joka_selected_branch_id'
 
 interface MemberSearchResult {
   id: string
@@ -50,6 +53,10 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
   const [error, setError] = useState<string | null>(null)
   const [recentTransactions, setRecentTransactions] = useState<ScanResult[]>([])
 
+  // Branch selection
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('')
+
   // Checkin missions
   const [checkinMissions, setCheckinMissions] = useState<CheckinMission[]>([])
   const [checkinLoading, setCheckinLoading] = useState<Record<string, boolean>>({})
@@ -85,7 +92,7 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
     memberIdRef.current?.focus()
   }, [])
 
-  // Load tier display names
+  // Load tier display names + branches
   useEffect(() => {
     fetch('/api/tier-settings')
       .then(r => r.json())
@@ -93,6 +100,24 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
         const map: Record<string, string> = {}
         for (const ts of data) map[ts.tier] = ts.tier_display_name ?? ts.tier
         setTierDisplayMap(map)
+      })
+      .catch(() => {})
+
+    fetch('/api/branches')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: Branch[]) => {
+        const active = data.filter((b) => b.is_active)
+        setBranches(active)
+        // Restore last selection from localStorage
+        if (typeof localStorage !== 'undefined') {
+          const saved = localStorage.getItem(BRANCH_STORAGE_KEY)
+          if (saved && active.find((b) => b.id === saved)) {
+            setSelectedBranchId(saved)
+          } else if (active.length === 1) {
+            // Auto-select if only one branch
+            setSelectedBranchId(active[0].id)
+          }
+        }
       })
       .catch(() => {})
   }, [])
@@ -223,6 +248,7 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
           memberId: memberId.trim(),
           spentAmount: spent,
           note: note.trim() || null,
+          ...(selectedBranchId ? { branchId: selectedBranchId } : {}),
         }),
       })
 
@@ -313,6 +339,37 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
 
   return (
     <div className="flex flex-col gap-6">
+
+      {/* ── Branch selector（有門市時才顯示）── */}
+      {branches.length > 0 && (
+        <div className="rounded-xl border border-zinc-200 bg-white p-4">
+          <label className="block text-xs font-semibold text-zinc-500 mb-2 uppercase tracking-wide">
+            📍 目前門市
+          </label>
+          <select
+            value={selectedBranchId}
+            onChange={(e) => {
+              setSelectedBranchId(e.target.value)
+              if (typeof localStorage !== 'undefined') {
+                if (e.target.value) localStorage.setItem(BRANCH_STORAGE_KEY, e.target.value)
+                else localStorage.removeItem(BRANCH_STORAGE_KEY)
+              }
+            }}
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition"
+          >
+            <option value="">不指定門市</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+          {selectedBranchId && (
+            <p className="mt-1 text-xs text-zinc-400">
+              集點紀錄將標記為「{branches.find((b) => b.id === selectedBranchId)?.name}」
+            </p>
+          )}
+        </div>
+      )}
+
       {/* ── Camera viewer ── */}
       {cameraOpen && (
         <div className="rounded-2xl overflow-hidden bg-black relative">

@@ -40,6 +40,7 @@ const ownerOnlyLinks = [
   { href: '/dashboard/lotteries', label: '抽獎活動' },
   { href: '/dashboard/store', label: '積分商城' },
   { href: '/dashboard/coupons', label: '優惠券管理' },
+  { href: '/dashboard/branches', label: '門市管理' },
   { href: '/dashboard/tiers', label: '等級設定' },
   { href: '/dashboard/points-expiry', label: '點數到期提醒' },
   { href: '/dashboard/missions', label: '任務管理' },

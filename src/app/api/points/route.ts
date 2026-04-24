@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { memberId, type, amount, spentAmount, note, tenantId } = body
+    const { memberId, type, amount, spentAmount, note, tenantId, branchId } = body
 
     if (!memberId) {
       return NextResponse.json({ error: 'memberId is required' }, { status: 400 })
@@ -242,6 +242,7 @@ export async function POST(req: NextRequest) {
       type: txType,
       amount: numAmount,
       note: txNote,
+      ...(branchId && typeof branchId === 'string' ? { branch_id: branchId } : {}),
     })
 
     // ── 計算新點數 & 判斷升降等 ──────────────────────────────────────

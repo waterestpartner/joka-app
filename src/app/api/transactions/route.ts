@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
   const offset = (page - 1) * pageSize
   const typeFilter = params.get('type') ?? ''
   const search = (params.get('search') ?? '').trim()
+  const branchFilter = params.get('branch') ?? ''
 
   // ── Month stats ───────────────────────────────────────────────────────────────
   const now = new Date()
@@ -65,7 +66,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('point_transactions')
-    .select('id, type, amount, note, created_at, member_id', { count: 'exact' })
+    .select('id, type, amount, note, created_at, member_id, branch_id', { count: 'exact' })
     .eq('tenant_id', auth.tenantId)
     .order('created_at', { ascending: false })
     .range(offset, offset + pageSize - 1)
@@ -76,22 +77,38 @@ export async function GET(req: NextRequest) {
   if (memberIdFilter) {
     query = query.in('member_id', memberIdFilter)
   }
+  if (branchFilter) {
+    query = query.eq('branch_id', branchFilter)
+  }
 
   const { data: txRows, count, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // ── Enrich with member names ──────────────────────────────────────────────────
+  // ── Enrich with member names & branch names ───────────────────────────────────
   const memberIds = [...new Set((txRows ?? []).map((r) => r.member_id as string))]
-  let memberMap: Record<string, { name: string; phone: string | null }> = {}
+  const branchIds = [...new Set(
+    (txRows ?? [])
+      .map((r) => r.branch_id as string | null)
+      .filter((b): b is string => !!b)
+  )]
 
-  if (memberIds.length > 0) {
-    const { data: memberRows } = await supabase
-      .from('members')
-      .select('id, name, phone')
-      .in('id', memberIds)
-    for (const m of memberRows ?? []) {
-      memberMap[m.id as string] = { name: m.name as string, phone: m.phone as string | null }
-    }
+  let memberMap: Record<string, { name: string; phone: string | null }> = {}
+  let branchMap: Record<string, string> = {}
+
+  const [memberFetch, branchFetch] = await Promise.all([
+    memberIds.length > 0
+      ? supabase.from('members').select('id, name, phone').in('id', memberIds)
+      : Promise.resolve({ data: [] }),
+    branchIds.length > 0
+      ? supabase.from('branches').select('id, name').in('id', branchIds).eq('tenant_id', auth.tenantId)
+      : Promise.resolve({ data: [] }),
+  ])
+
+  for (const m of memberFetch.data ?? []) {
+    memberMap[m.id as string] = { name: m.name as string, phone: m.phone as string | null }
+  }
+  for (const b of branchFetch.data ?? []) {
+    branchMap[b.id as string] = b.name as string
   }
 
   const transactions = (txRows ?? []).map((tx) => ({
@@ -103,6 +120,8 @@ export async function GET(req: NextRequest) {
     member_id: tx.member_id as string,
     member_name: memberMap[tx.member_id as string]?.name ?? '未知會員',
     member_phone: memberMap[tx.member_id as string]?.phone ?? null,
+    branch_id: (tx.branch_id as string | null) ?? null,
+    branch_name: tx.branch_id ? (branchMap[tx.branch_id as string] ?? '已刪除門市') : null,
   }))
 
   return NextResponse.json({

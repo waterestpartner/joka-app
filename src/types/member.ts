@@ -27,5 +27,6 @@ export interface PointTransaction {
   type: PointTransactionType
   amount: number
   note: string | null
+  branch_id?: string | null
   created_at: string
 }
