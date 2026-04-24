@@ -3,6 +3,66 @@
 import { useEffect, useState } from 'react'
 import { formatNumber } from '@/lib/utils'
 
+// ── Export button ─────────────────────────────────────────────────────────────
+
+function ExportButton() {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleExport() {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/export/analytics')
+      if (!res.ok) throw new Error('匯出失敗，請稍後再試')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      // filename from Content-Disposition, fallback to default
+      const cd = res.headers.get('content-disposition') ?? ''
+      const match = cd.match(/filename\*?=(?:UTF-8'')?([^;]+)/i)
+      a.download = match ? decodeURIComponent(match[1].replace(/"/g, '')) : 'JOKA_報表.xlsx'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '匯出失敗')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <button
+        onClick={handleExport}
+        disabled={loading}
+        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#06C755] text-white text-sm font-semibold hover:bg-[#05b34b] disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+      >
+        {loading ? (
+          <>
+            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+            </svg>
+            產生中…
+          </>
+        ) : (
+          <>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            匯出 Excel
+          </>
+        )}
+      </button>
+      {error && <p className="text-xs text-red-500">{error}</p>}
+    </div>
+  )
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface MonthData {
@@ -256,9 +316,12 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-8 max-w-6xl">
       {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-bold text-zinc-900">數據報表</h1>
-        <p className="text-sm text-zinc-600 mt-1">整體會員、點數、優惠券與推播概況</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-900">數據報表</h1>
+          <p className="text-sm text-zinc-600 mt-1">整體會員、點數、優惠券與推播概況</p>
+        </div>
+        <ExportButton />
       </div>
 
       {/* ── Section 1: Member summary ── */}
