@@ -417,7 +417,7 @@ export default function SetupPage() {
               <div className="text-6xl">🎉</div>
               <h2 className="text-xl font-bold text-zinc-900">設定完成！</h2>
               <p className="text-sm text-zinc-500 max-w-md mx-auto">
-                您的 JOKA 會員系統已準備好。現在可以前往掃碼集點開始使用，或繼續在品牌設定中調整進階選項。
+                您的 JOKA 會員系統已準備好。以下是建議的下一步。
               </p>
             </div>
 
@@ -430,15 +430,54 @@ export default function SetupPage() {
               <SummaryRow label="LIFF ID" value={state.liff_id} ok={!!state.liff_id} />
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => router.push('/dashboard/scan')}
-                className="flex-1 rounded-xl py-3 text-sm font-semibold text-white transition hover:opacity-90"
-                style={{ backgroundColor: '#06C755' }}
-              >
-                前往掃碼集點
-              </button>
+            {/* 下一步行動清單 */}
+            <div className="space-y-2.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">建議下一步</p>
+              {[
+                {
+                  icon: '🎟',
+                  title: '建立第一張優惠券',
+                  desc: '設定新會員禮或限時折扣，提升加入誘因',
+                  href: '/dashboard/coupons',
+                },
+                {
+                  icon: '🏆',
+                  title: '設定會員等級',
+                  desc: '定義一般 / 銀卡 / 金卡的升等條件與點數倍率',
+                  href: '/dashboard/tiers',
+                },
+                {
+                  icon: '📲',
+                  title: '試掃一張集點 QR Code',
+                  desc: '用平板或手機開啟掃碼介面，確認集點流程正常',
+                  href: '/dashboard/scan',
+                },
+                {
+                  icon: '📣',
+                  title: '傳送第一則推播',
+                  desc: '向所有會員介紹新會員計畫，吸引回流',
+                  href: '/dashboard/push',
+                },
+              ].map((item) => (
+                <button
+                  key={item.href}
+                  type="button"
+                  onClick={() => router.push(item.href)}
+                  className="w-full flex items-center gap-4 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 px-4 py-3.5 text-left transition group"
+                >
+                  <span className="text-2xl shrink-0">{item.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-zinc-800 group-hover:text-[#06C755] transition-colors">
+                      {item.title}
+                    </p>
+                    <p className="text-xs text-zinc-400 mt-0.5">{item.desc}</p>
+                  </div>
+                  <span className="text-zinc-300 group-hover:text-[#06C755] transition-colors">→</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-3 pt-1">
               <button
                 type="button"
                 onClick={() => router.push('/dashboard/overview')}

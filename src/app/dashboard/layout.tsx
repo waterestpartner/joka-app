@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
+import SetupBanner from '@/components/dashboard/SetupBanner'
 
 async function signOutAction() {
   'use server'
@@ -142,6 +143,8 @@ export default async function DashboardLayout({
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Setup banner — owner only, hides once LINE is fully configured */}
+        {isOwner && <SetupBanner />}
         <main className="flex-1 p-8 overflow-auto">{children}</main>
       </div>
     </div>

@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { getTenantById } from '@/repositories/tenantRepository'
@@ -180,6 +181,23 @@ export default async function OverviewPage() {
         </div>
       </div>
     )
+  }
+
+  // ── 第一次登入的 Owner：品牌名稱尚未填寫 → 直接帶到設定精靈 ──────────────
+  {
+    const admin0 = createSupabaseAdminClient()
+    const [tenantQuick, roleData] = await Promise.all([
+      getTenantById(tenantId),
+      admin0
+        .from('tenant_users')
+        .select('role')
+        .eq('email', email)
+        .maybeSingle(),
+    ])
+    const isOwnerCheck = (roleData.data?.role as string) === 'owner'
+    if (isOwnerCheck && tenantQuick && !tenantQuick.name?.trim()) {
+      redirect('/dashboard/setup')
+    }
   }
 
   const admin = createSupabaseAdminClient()
