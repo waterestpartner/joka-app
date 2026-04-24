@@ -98,6 +98,37 @@ function matchesRule(
   }
 }
 
+/** 儲存 LINE 訊息到 DB（fire-and-forget，不阻斷主流程） */
+async function storeLineMessage(
+  tenantId: string,
+  lineUid: string,
+  direction: 'inbound' | 'outbound',
+  messageText: string,
+  messageType = 'text'
+) {
+  try {
+    const supabase = createSupabaseAdminClient()
+    // 找對應的 member_id（可能沒有）
+    const { data: member } = await supabase
+      .from('members')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('line_uid', lineUid)
+      .maybeSingle()
+
+    await supabase.from('line_messages').insert({
+      tenant_id: tenantId,
+      member_id: member?.id ?? null,
+      line_uid: lineUid,
+      direction,
+      message_text: messageText,
+      message_type: messageType,
+    })
+  } catch (err) {
+    console.error('[storeLineMessage] error:', err)
+  }
+}
+
 /** 處理 message 事件：先檢查自動回覆規則，再回覆點數查詢 */
 async function handleMessage(
   userId: string,
@@ -111,6 +142,9 @@ async function handleMessage(
 
   // 只處理文字訊息（圖片/貼圖等忽略）
   if (!messageText) return
+
+  // ── 0. 儲存進站訊息（best-effort，不阻斷主流程）──────────────────────────
+  await storeLineMessage(tenantId, userId, 'inbound', messageText)
 
   // ── 1. 查詢自動回覆規則（is_active=true, 依 sort_order 排序）────────────
   const { data: rules } = await supabase
@@ -130,6 +164,7 @@ async function handleMessage(
       if (matchesRule(messageText, keyword, matchType)) {
         // Found a matching rule — push its reply and return early
         await pushTextMessage(userId, replyText, channelAccessToken)
+        await storeLineMessage(tenantId, userId, 'outbound', replyText)
         return
       }
     }
@@ -172,6 +207,7 @@ async function handleMessage(
   }
 
   await pushTextMessage(userId, reply, channelAccessToken)
+  await storeLineMessage(tenantId, userId, 'outbound', reply)
 }
 
 // ── main handler ──────────────────────────────────────────────────────────────

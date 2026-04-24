@@ -64,23 +64,55 @@ export async function GET(req: NextRequest) {
   if (!isDashboardAuth(auth)) return auth
 
   const supabase = createSupabaseAdminClient()
-  const warningDays = parseInt(req.nextUrl.searchParams.get('warningDays') ?? '30')
-  const page = parseInt(req.nextUrl.searchParams.get('page') ?? '1')
-  const PAGE_SIZE = 30
-  const offset = (page - 1) * PAGE_SIZE
 
   const { data: tenant } = await supabase
     .from('tenants').select('points_expire_days').eq('id', auth.tenantId).maybeSingle()
   const expireDays = (tenant?.points_expire_days as number | null) ?? null
+
+  // ── Calendar mode (?calendar=true) ──────────────────────────────────────────
+  if (req.nextUrl.searchParams.get('calendar') === 'true') {
+    if (!expireDays || expireDays <= 0) {
+      return NextResponse.json({ byDay: {}, expireDays: null })
+    }
+
+    const horizonDays = Math.min(Number(req.nextUrl.searchParams.get('horizonDays') ?? '90'), 180)
+    const expiryCutoff = new Date(Date.now() - expireDays * 86_400_000 + horizonDays * 86_400_000).toISOString()
+
+    const { data: members } = await supabase
+      .from('members')
+      .select('id, name, points, last_activity_at, created_at')
+      .eq('tenant_id', auth.tenantId)
+      .eq('is_blocked', false)
+      .gt('points', 0)
+      .not('line_uid', 'is', null)
+      .or(`last_activity_at.lt.${expiryCutoff},last_activity_at.is.null`)
+      .limit(2000)
+
+    const byDay: Record<string, { count: number; totalPoints: number }> = {}
+    for (const m of members ?? []) {
+      const lastActive = new Date((m.last_activity_at ?? m.created_at) as string)
+      const expiryDate = new Date(lastActive.getTime() + expireDays * 86_400_000)
+      const dateKey = expiryDate.toISOString().slice(0, 10)
+      if (!byDay[dateKey]) byDay[dateKey] = { count: 0, totalPoints: 0 }
+      byDay[dateKey].count += 1
+      byDay[dateKey].totalPoints += m.points as number
+    }
+
+    return NextResponse.json({ byDay, expireDays, horizonDays })
+  }
+
+  // ── List mode (paginated) ────────────────────────────────────────────────────
+  const warningDays = parseInt(req.nextUrl.searchParams.get('warningDays') ?? '30')
+  const page = parseInt(req.nextUrl.searchParams.get('page') ?? '1')
+  const PAGE_SIZE = 30
+  const offset = (page - 1) * PAGE_SIZE
 
   if (!expireDays || expireDays <= 0) {
     return NextResponse.json({ members: [], total: 0, expireDays: null, warningDays, page, pageSize: PAGE_SIZE })
   }
 
   // Members whose last_activity + expireDays is within warningDays from now
-  const now = new Date()
-  const warningCutoff = new Date(now.getTime() + warningDays * 86_400_000).toISOString()
-  const expiryCutoff = new Date(now.getTime() - expireDays * 86_400_000 + warningDays * 86_400_000).toISOString()
+  const expiryCutoff = new Date(Date.now() - expireDays * 86_400_000 + warningDays * 86_400_000).toISOString()
 
   const { data: members, count } = await supabase
     .from('members')

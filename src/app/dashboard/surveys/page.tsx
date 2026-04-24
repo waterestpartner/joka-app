@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import Link from 'next/link'
 import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -407,6 +408,13 @@ export default function SurveysPage() {
                         className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50 ${s.is_active ? 'bg-[#06C755]' : 'bg-zinc-300'}`}>
                         <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${s.is_active ? 'translate-x-4' : 'translate-x-0.5'}`} />
                       </button>
+                      <Link
+                        href={`/dashboard/surveys/${s.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-xs text-blue-500 hover:text-blue-700 hover:underline"
+                      >
+                        結果
+                      </Link>
                       <button onClick={(e) => { e.stopPropagation(); handleDelete(s) }}
                         disabled={deleting === s.id}
                         className="text-xs text-red-400 hover:text-red-600 disabled:opacity-50">刪除</button>

@@ -7,12 +7,13 @@
 // POST /api/store
 //   auth: Bearer LINE token
 //   body: { tenantSlug, rewardItemId }
-//   Redeems one item: deducts points, creates redemption record
+//   Redeems one item: deducts points, creates redemption record, sends LINE push
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { addPointTransaction } from '@/repositories/pointRepository'
+import { pushTextMessage } from '@/lib/line-messaging'
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
 
@@ -22,7 +23,10 @@ async function authenticate(req: NextRequest, tenantSlug: string) {
 
   const supabase = createSupabaseAdminClient()
   const { data: tenant } = await supabase
-    .from('tenants').select('id, liff_id').eq('slug', tenantSlug).maybeSingle()
+    .from('tenants')
+    .select('id, liff_id, channel_access_token, push_enabled')
+    .eq('slug', tenantSlug)
+    .maybeSingle()
   if (!tenant) return null
 
   let lineUid: string
@@ -33,13 +37,13 @@ async function authenticate(req: NextRequest, tenantSlug: string) {
 
   const { data: member } = await supabase
     .from('members')
-    .select('id, points, name')
+    .select('id, points, name, line_uid')
     .eq('tenant_id', tenant.id)
     .eq('line_uid', lineUid)
     .maybeSingle()
   if (!member) return null
 
-  return { supabase, tenant, member }
+  return { supabase, tenant, member, lineUid }
 }
 
 // ── GET ───────────────────────────────────────────────────────────────────────
@@ -164,11 +168,28 @@ export async function POST(req: NextRequest) {
     note: `兌換「${item.name as string}」`,
   })
 
+  const remainingPoints = memberPoints - cost
+
+  // ── Send LINE push notification (fire-and-forget) ─────────────────────────
+  const channelToken = ctx.tenant.channel_access_token as string | null
+  const pushEnabled = ctx.tenant.push_enabled as boolean | null
+  const memberLineUid = ctx.lineUid
+
+  if (channelToken && pushEnabled && memberLineUid) {
+    const pushMsg =
+      `✅ 兌換成功！\n\n` +
+      `商品：${item.name as string}\n` +
+      `扣除點數：${cost} pt\n` +
+      `剩餘點數：${remainingPoints} pt\n\n` +
+      `感謝您的使用，如有問題請聯繫我們。`
+    after(() => pushTextMessage(memberLineUid, pushMsg, channelToken))
+  }
+
   return NextResponse.json({
     success: true,
     redemptionId: (redemption as Record<string, unknown>).id as string,
     itemName: item.name as string,
     pointsSpent: cost,
-    remainingPoints: memberPoints - cost,
+    remainingPoints,
   }, { status: 201 })
 }

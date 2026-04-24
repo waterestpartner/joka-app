@@ -163,7 +163,7 @@ export default async function MembersPage({ searchParams }: Props) {
       )}
 
       {/* Member table (client component for search / actions) */}
-      <MemberTable members={members} tierSettings={tierSettings ?? []} />
+      <MemberTable members={members} tierSettings={tierSettings ?? []} tags={allTags} />
 
       {/* Pagination */}
       <Pagination

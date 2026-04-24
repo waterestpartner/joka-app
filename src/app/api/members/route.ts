@@ -41,8 +41,13 @@ export async function GET(req: NextRequest) {
 
   // ── CSV Export ────────────────────────────────────────────────────────────
   if (exportCsv) {
-    // Fetch all members (no pagination) and tier settings in parallel
-    const [{ data: allMembers, error: membersExportErr }, { data: tierSettings }] = await Promise.all([
+    // Fetch all members, tier settings, and custom fields in parallel
+    const [
+      { data: allMembers, error: membersExportErr },
+      { data: tierSettings },
+      { data: customFieldDefs },
+      { data: customFieldValues },
+    ] = await Promise.all([
       supabase
         .from('members')
         .select('*')
@@ -52,7 +57,17 @@ export async function GET(req: NextRequest) {
         .from('tier_settings')
         .select('tier, tier_display_name')
         .eq('tenant_id', resolvedTenantId),
+      supabase
+        .from('custom_member_fields')
+        .select('id, field_name, field_type')
+        .eq('tenant_id', resolvedTenantId)
+        .order('sort_order', { ascending: true }),
+      supabase
+        .from('custom_field_values')
+        .select('member_id, field_id, value')
+        .eq('tenant_id', resolvedTenantId),
     ])
+
     if (membersExportErr) return NextResponse.json({ error: membersExportErr.message }, { status: 500 })
 
     const tierMap: Record<string, string> = {}
@@ -60,7 +75,16 @@ export async function GET(req: NextRequest) {
       tierMap[ts.tier as string] = ts.tier_display_name as string
     }
 
-    const headers = ['姓名', '手機', '等級', '點數', '累計消費', '加入日期', '生日']
+    // Build custom field value lookup: member_id → { field_id → value }
+    const cfvMap = new Map<string, Map<string, string>>()
+    for (const cfv of customFieldValues ?? []) {
+      const mid = cfv.member_id as string
+      if (!cfvMap.has(mid)) cfvMap.set(mid, new Map())
+      cfvMap.get(mid)!.set(cfv.field_id as string, cfv.value as string)
+    }
+
+    const customHeaders = (customFieldDefs ?? []).map((f) => f.field_name as string)
+    const headers = ['姓名', '手機', '等級', '點數', '累計消費', '加入日期', '生日', 'LINE UID', ...customHeaders]
 
     function escapeCsvField(val: string | number | null | undefined): string {
       const str = val == null ? '' : String(val)
@@ -70,15 +94,24 @@ export async function GET(req: NextRequest) {
       return str
     }
 
-    const rows = (allMembers ?? []).map((m: Record<string, unknown>) => [
-      escapeCsvField(m.name as string | null),
-      escapeCsvField(m.phone as string | null),
-      escapeCsvField(tierMap[m.tier as string] ?? (m.tier as string)),
-      escapeCsvField(m.points as number),
-      escapeCsvField(m.total_spent as number),
-      escapeCsvField(m.created_at ? (m.created_at as string).slice(0, 10) : ''),
-      escapeCsvField(m.birthday as string | null),
-    ])
+    const rows = (allMembers ?? []).map((m: Record<string, unknown>) => {
+      const memberId = m.id as string
+      const memberFieldMap = cfvMap.get(memberId) ?? new Map()
+      const customValues = (customFieldDefs ?? []).map((f) =>
+        escapeCsvField(memberFieldMap.get(f.id as string) ?? null)
+      )
+      return [
+        escapeCsvField(m.name as string | null),
+        escapeCsvField(m.phone as string | null),
+        escapeCsvField(tierMap[m.tier as string] ?? (m.tier as string)),
+        escapeCsvField(m.points as number),
+        escapeCsvField(m.total_spent as number),
+        escapeCsvField(m.created_at ? (m.created_at as string).slice(0, 10) : ''),
+        escapeCsvField(m.birthday as string | null),
+        escapeCsvField(m.line_uid as string | null),
+        ...customValues,
+      ]
+    })
 
     const csvContent = [
       headers.map(escapeCsvField).join(','),

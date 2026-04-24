@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import SetupBanner from '@/components/dashboard/SetupBanner'
+import DashboardSidebar from '@/components/dashboard/DashboardSidebar'
 
 async function signOutAction() {
   'use server'
@@ -19,6 +19,7 @@ const staffLinks = [
   { href: '/dashboard/coupons/scan', label: '優惠券核銷' },
   { href: '/dashboard/transactions', label: '點數紀錄' },
   { href: '/dashboard/push', label: '推播訊息' },
+  { href: '/dashboard/line-messages', label: 'LINE 訊息收件匣' },
   { href: '/dashboard/referrals', label: '推薦計畫' },
   { href: '/dashboard/checkin', label: '打卡集點' },
   { href: '/dashboard/surveys', label: '問卷調查' },
@@ -30,6 +31,13 @@ const ownerOnlyLinks = [
   { href: '/dashboard/analytics', label: '數據報表' },
   { href: '/dashboard/analytics/rfm', label: 'RFM 分析' },
   { href: '/dashboard/analytics/push', label: '推播成效分析' },
+  { href: '/dashboard/analytics/branches', label: '門市業績分析' },
+  { href: '/dashboard/analytics/staff', label: '員工操作分析' },
+  { href: '/dashboard/analytics/coupons', label: '優惠券分析' },
+  { href: '/dashboard/analytics/missions', label: '任務完成分析' },
+  { href: '/dashboard/analytics/stamps', label: '蓋章卡分析' },
+  { href: '/dashboard/leaderboard', label: '會員排行榜' },
+  { href: '/dashboard/members/merge', label: '合併重複會員' },
   { href: '/dashboard/member-notes', label: '會員備註' },
   { href: '/dashboard/custom-fields', label: '自訂會員欄位' },
   { href: '/dashboard/tags', label: '標籤管理' },
@@ -43,16 +51,21 @@ const ownerOnlyLinks = [
   { href: '/dashboard/branches', label: '門市管理' },
   { href: '/dashboard/tiers', label: '等級設定' },
   { href: '/dashboard/points-expiry', label: '點數到期提醒' },
+  { href: '/dashboard/point-qrcodes', label: 'QR Code 集點' },
   { href: '/dashboard/missions', label: '任務管理' },
   { href: '/dashboard/stamp-cards', label: '蓋章卡管理' },
   { href: '/dashboard/auto-reply', label: '自動回覆' },
+  { href: '/dashboard/push-templates', label: '推播訊息範本' },
   { href: '/dashboard/push-triggers', label: '推播觸發規則' },
   { href: '/dashboard/birthday-rewards', label: '生日獎勵' },
+  { href: '/dashboard/members/birthdays', label: '即將生日會員' },
   { href: '/dashboard/dormant-members', label: '沉睡會員' },
+  { href: '/dashboard/auto-tag-rules', label: '自動標籤規則' },
   { href: '/dashboard/blacklist', label: '黑名單管理' },
   { href: '/dashboard/rich-menu', label: 'Rich Menu' },
   { href: '/dashboard/settings', label: '品牌設定' },
   { href: '/dashboard/team', label: '團隊成員' },
+  { href: '/dashboard/api-keys', label: 'API 金鑰' },
   { href: '/dashboard/webhooks', label: 'Webhook 設定' },
   { href: '/dashboard/audit-logs', label: '操作記錄' },
 ]
@@ -93,60 +106,20 @@ export default async function DashboardLayout({
   // Authenticated — render full sidebar layout
   return (
     <div className="min-h-screen flex bg-zinc-50">
-      {/* Sidebar */}
-      <aside className="w-64 flex-shrink-0 bg-white border-r border-zinc-200 flex flex-col">
-        {/* Logo area */}
-        <div className="h-16 flex items-center px-6 border-b border-zinc-200">
-          <span
-            className="text-xl font-bold tracking-tight"
-            style={{ color: '#06C755' }}
-          >
-            JOKA
-          </span>
-          <span className="ml-2 text-sm text-zinc-500">管理後台</span>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-
-        {/* User area + logout */}
-        <div className="border-t border-zinc-200 p-4 space-y-2">
-          <div className="flex items-center gap-2 px-1">
-            <p className="text-xs text-zinc-500 truncate flex-1">{user.email}</p>
-            <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
-              isOwner
-                ? 'bg-green-100 text-green-700'
-                : 'bg-zinc-100 text-zinc-600'
-            }`}>
-              {isOwner ? 'Owner' : 'Staff'}
-            </span>
-          </div>
-          <form action={signOutAction}>
-            <button
-              type="submit"
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
-            >
-              登出
-            </button>
-          </form>
-        </div>
-      </aside>
+      {/* Sidebar — desktop fixed, mobile hamburger drawer */}
+      <DashboardSidebar
+        navLinks={navLinks}
+        email={user.email!}
+        isOwner={isOwner}
+        signOutAction={signOutAction}
+      />
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* pt-14 on mobile to clear the fixed top bar; none on desktop */}
+      <div className="flex-1 flex flex-col min-w-0 pt-14 md:pt-0">
         {/* Setup banner — owner only, hides once LINE is fully configured */}
         {isOwner && <SetupBanner />}
-        <main className="flex-1 p-8 overflow-auto">{children}</main>
+        <main className="flex-1 p-4 md:p-8 overflow-auto">{children}</main>
       </div>
     </div>
   )

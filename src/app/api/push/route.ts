@@ -134,6 +134,8 @@ export async function POST(req: NextRequest) {
     tagId,
     minPoints,
     maxPoints,
+    directMemberId,   // Direct push to a single member (from member detail page)
+    memberIds,        // Bulk push to selected member IDs (from bulk action toolbar)
   } = body ?? {}
 
   const isFlexMode = !!flexContent
@@ -160,12 +162,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '此租戶已停用推播功能。' }, { status: 400 })
 
   // 2. 取得目標 LINE UID
-  const lineUserIds = await getTargetLineUids(auth.tenantId, {
-    target,
-    tagId: typeof tagId === 'string' ? tagId : undefined,
-    minPoints: typeof minPoints === 'number' ? minPoints : undefined,
-    maxPoints: typeof maxPoints === 'number' ? maxPoints : undefined,
-  })
+  const supabase = createSupabaseAdminClient()
+  let lineUserIds: string[]
+  if (typeof directMemberId === 'string' && directMemberId) {
+    // Direct push to specific member — verify ownership
+    const { data: dm } = await supabase
+      .from('members')
+      .select('line_uid')
+      .eq('id', directMemberId)
+      .eq('tenant_id', auth.tenantId)
+      .eq('is_blocked', false)
+      .maybeSingle()
+    lineUserIds = dm?.line_uid ? [dm.line_uid as string] : []
+  } else if (Array.isArray(memberIds) && memberIds.length > 0) {
+    // Bulk push to selected member IDs — verify ownership in batch
+    const safeIds = memberIds.filter((id): id is string => typeof id === 'string')
+    const { data: bm } = await supabase
+      .from('members')
+      .select('line_uid')
+      .in('id', safeIds)
+      .eq('tenant_id', auth.tenantId)
+      .eq('is_blocked', false)
+      .not('line_uid', 'is', null)
+    lineUserIds = (bm ?? []).map((m) => m.line_uid as string).filter(Boolean)
+  } else {
+    lineUserIds = await getTargetLineUids(auth.tenantId, {
+      target,
+      tagId: typeof tagId === 'string' ? tagId : undefined,
+      minPoints: typeof minPoints === 'number' ? minPoints : undefined,
+      maxPoints: typeof maxPoints === 'number' ? maxPoints : undefined,
+    })
+  }
 
   if (lineUserIds.length === 0) {
     return NextResponse.json({ error: '符合條件的會員中，目前沒有可推播的對象（需有 LINE UID）。' }, { status: 400 })
@@ -177,7 +204,6 @@ export async function POST(req: NextRequest) {
     : await pushTextMessageBatch(lineUserIds, message.trim(), tenant.channel_access_token)
 
   // 4. 記錄推播
-  const supabase = createSupabaseAdminClient()
   const logMessage = isFlexMode ? `[Flex] ${altText.trim()}` : message.trim()
   const { data: log } = await supabase
     .from('push_logs')

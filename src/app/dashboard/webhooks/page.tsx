@@ -63,6 +63,8 @@ export default function WebhooksPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [confirmDeleteWebhookId, setConfirmDeleteWebhookId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [testingId, setTestingId] = useState<string | null>(null)
+  const [testResult, setTestResult] = useState<{ id: string; success: boolean; status: number; durationMs: number } | null>(null)
 
   async function load() {
     setLoading(true)
@@ -98,6 +100,24 @@ export default function WebhooksPage() {
       await load()
     } catch (e) { setCreateError(e instanceof Error ? e.message : '錯誤') }
     finally { setCreating(false) }
+  }
+
+  async function testWebhook(id: string) {
+    setTestingId(id)
+    setTestResult(null)
+    try {
+      const res = await fetch('/api/webhooks/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      const data = await res.json() as { success: boolean; status: number; durationMs: number }
+      setTestResult({ id, ...data })
+    } catch {
+      setTestResult({ id, success: false, status: 0, durationMs: 0 })
+    } finally {
+      setTestingId(null)
+    }
   }
 
   async function toggleActive(wh: Webhook) {
@@ -265,6 +285,19 @@ export default function WebhooksPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-3 flex-shrink-0 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => void testWebhook(wh.id)}
+                        disabled={testingId === wh.id}
+                        className="text-green-600 hover:text-green-800 transition disabled:opacity-50"
+                      >
+                        {testingId === wh.id ? '測試中…' : '測試'}
+                      </button>
+                      {testResult?.id === wh.id && (
+                        <span className={`text-xs font-medium ${testResult.success ? 'text-green-600' : 'text-red-500'}`}>
+                          {testResult.success ? `✓ ${testResult.status} (${testResult.durationMs}ms)` : `✗ ${testResult.status || '連線失敗'}`}
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={() => void loadDeliveries(wh.id)}

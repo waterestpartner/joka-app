@@ -76,9 +76,19 @@ export default function AuditLogsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-zinc-900">操作記錄</h1>
-        <p className="text-sm text-zinc-600 mt-1">記錄所有後台操作，共 {total} 筆</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-900">操作記錄</h1>
+          <p className="text-sm text-zinc-600 mt-1">記錄所有後台操作，共 {total} 筆</p>
+        </div>
+        <a
+          href={`/api/audit-logs?export=csv&days=90${operatorFilter ? `&operator=${encodeURIComponent(operatorFilter)}` : ''}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition"
+        >
+          ↓ 匯出 CSV（近 90 天）
+        </a>
       </div>
 
       {/* Filter */}

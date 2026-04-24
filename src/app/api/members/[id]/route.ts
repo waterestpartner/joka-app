@@ -12,6 +12,112 @@ import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
 
+// ── GET ───────────────────────────────────────────────────────────────────────
+// Returns full member profile with tier display name, tags, and custom fields
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireDashboardAuth()
+  if (!isDashboardAuth(auth)) return auth
+
+  const { id: memberId } = await params
+  const supabase = createSupabaseAdminClient()
+
+  const [
+    { data: member, error: memberErr },
+    { data: tierRows },
+    { data: tagRows },
+    { data: fieldValues },
+    { data: notes },
+    { count: couponCount },
+    { count: redemptionCount },
+  ] = await Promise.all([
+    supabase
+      .from('members')
+      .select('id, name, phone, birthday, tier, points, total_spent, is_blocked, referral_code, line_uid, created_at')
+      .eq('id', memberId)
+      .eq('tenant_id', auth.tenantId)
+      .maybeSingle(),
+
+    supabase
+      .from('tier_settings')
+      .select('tier, tier_display_name, point_rate')
+      .eq('tenant_id', auth.tenantId),
+
+    supabase
+      .from('member_tags')
+      .select('tag_id, tags(id, name, color)')
+      .eq('member_id', memberId)
+      .eq('tenant_id', auth.tenantId),
+
+    supabase
+      .from('custom_field_values')
+      .select('field_id, value, custom_member_fields(field_name, field_type)')
+      .eq('member_id', memberId)
+      .eq('tenant_id', auth.tenantId),
+
+    supabase
+      .from('member_notes')
+      .select('id, note, author_email, created_at')
+      .eq('member_id', memberId)
+      .eq('tenant_id', auth.tenantId)
+      .order('created_at', { ascending: false })
+      .limit(20),
+
+    supabase
+      .from('member_coupons')
+      .select('id', { count: 'exact', head: true })
+      .eq('member_id', memberId)
+      .eq('tenant_id', auth.tenantId)
+      .eq('status', 'active'),
+
+    supabase
+      .from('member_redemptions')
+      .select('id', { count: 'exact', head: true })
+      .eq('member_id', memberId)
+      .eq('tenant_id', auth.tenantId),
+  ])
+
+  if (memberErr || !member) {
+    return NextResponse.json({ error: '找不到會員' }, { status: 404 })
+  }
+
+  // Build tier display map
+  const tierMap: Record<string, string> = {}
+  for (const t of tierRows ?? []) {
+    tierMap[t.tier as string] = (t.tier_display_name as string) ?? (t.tier as string)
+  }
+
+  // Flatten tags
+  const tags = (tagRows ?? []).map((row) => {
+    const tag = row.tags as unknown as { id: string; name: string; color: string } | null
+    return tag ? { id: tag.id, name: tag.name, color: tag.color } : null
+  }).filter(Boolean)
+
+  // Flatten custom fields
+  const customFields = (fieldValues ?? []).map((row) => {
+    const def = row.custom_member_fields as unknown as { field_name: string; field_type: string } | null
+    return def ? {
+      field_id: row.field_id as string,
+      field_name: def.field_name,
+      field_type: def.field_type,
+      value: row.value as string,
+    } : null
+  }).filter(Boolean)
+
+  return NextResponse.json({
+    ...member,
+    tier_display_name: tierMap[member.tier as string] ?? member.tier,
+    tags,
+    customFields,
+    notes: notes ?? [],
+    activeCoupons: couponCount ?? 0,
+    totalRedemptions: redemptionCount ?? 0,
+  })
+}
+
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

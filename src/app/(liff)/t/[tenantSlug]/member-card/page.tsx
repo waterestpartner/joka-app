@@ -290,7 +290,15 @@ export default function MemberCardPage() {
       {/* ── 公告 ────────────────────────────────────────── */}
       {announcements.length > 0 && (
         <section className="px-4 mt-3 space-y-2">
-          {announcements.map((a) => (
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">最新公告</span>
+            {announcements.length > 2 && (
+              <Link href={`/t/${tenantSlug}/announcements`} className="text-xs font-medium" style={{ color: '#06C755' }}>
+                查看全部 →
+              </Link>
+            )}
+          </div>
+          {announcements.slice(0, 2).map((a) => (
             <div key={a.id} className="rounded-2xl bg-white border border-zinc-100 shadow-sm overflow-hidden">
               {a.image_url && (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -301,10 +309,19 @@ export default function MemberCardPage() {
                   <span className="text-xs font-bold rounded-full px-2 py-0.5 text-white" style={{ backgroundColor: '#06C755' }}>公告</span>
                   <p className="text-sm font-semibold text-gray-800">{a.title}</p>
                 </div>
-                <p className="text-xs text-gray-500 leading-relaxed whitespace-pre-line">{a.content}</p>
+                <p className="text-xs text-gray-500 leading-relaxed whitespace-pre-line line-clamp-3">{a.content}</p>
               </div>
             </div>
           ))}
+          {announcements.length > 2 && (
+            <Link
+              href={`/t/${tenantSlug}/announcements`}
+              className="block text-center text-xs font-medium py-2 rounded-xl bg-white border border-zinc-100 shadow-sm"
+              style={{ color: '#06C755' }}
+            >
+              查看全部 {announcements.length} 則公告
+            </Link>
+          )}
         </section>
       )}
 
@@ -319,6 +336,7 @@ export default function MemberCardPage() {
             { href: `/t/${tenantSlug}/surveys`, emoji: '📋', label: '問卷調查' },
             { href: `/t/${tenantSlug}/coupons`, emoji: '🎟️', label: '我的優惠券' },
             { href: `/t/${tenantSlug}/referral`, emoji: '🤝', label: '推薦好友' },
+            { href: `/t/${tenantSlug}/announcements`, emoji: '📢', label: '最新公告' },
             { href: `/t/${tenantSlug}/profile`, emoji: '👤', label: '個人資料' },
           ].map(({ href, emoji, label }) => (
             <Link key={href} href={href}

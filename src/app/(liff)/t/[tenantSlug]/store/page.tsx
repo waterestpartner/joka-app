@@ -4,6 +4,7 @@
 // 顯示可兌換的商品列表，會員點擊「立即兌換」→ POST /api/store → 扣除點數並建立申請
 
 import { useEffect, useState, useCallback } from 'react'
+import Link from 'next/link'
 import { useLiff } from '@/hooks/useLiff'
 
 interface StoreItem {
@@ -205,7 +206,7 @@ export default function StorePage() {
       </div>
 
       {/* Header with points */}
-      <div className="sticky top-0 z-10 bg-white border-b border-zinc-200 px-4 py-4">
+      <div className="sticky top-0 z-10 bg-white border-b border-zinc-200 px-4 py-3">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-lg font-bold text-zinc-900">積分商城</p>
@@ -216,6 +217,13 @@ export default function StorePage() {
             <p className="text-xl font-bold" style={{ color: '#06C755' }}>
               {member.points.toLocaleString()} <span className="text-sm">pt</span>
             </p>
+            <Link
+              href={`/t/${tenantSlug}/store/history`}
+              className="text-xs mt-0.5 inline-block"
+              style={{ color: '#06C755' }}
+            >
+              兌換紀錄 →
+            </Link>
           </div>
         </div>
       </div>
