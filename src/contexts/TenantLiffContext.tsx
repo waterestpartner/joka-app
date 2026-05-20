@@ -15,6 +15,13 @@ import {
   liffLogin,
 } from '@/lib/liff'
 
+// ── Dev Mock 設定（本地測試用，production 不會有這些 env） ──────────────────────
+const LIFF_DEV = process.env.NEXT_PUBLIC_LIFF_DEV === 'true'
+const DEV_LINE_UID  = process.env.NEXT_PUBLIC_LIFF_DEV_LINE_UID  ?? 'dev-user-uid'
+const DEV_NAME      = process.env.NEXT_PUBLIC_LIFF_DEV_NAME      ?? 'Dev 測試會員'
+const DEV_PICTURE   = process.env.NEXT_PUBLIC_LIFF_DEV_PICTURE   ?? ''
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ── 型別 ──────────────────────────────────────────────────────────────────────
 
 interface LiffProfile {
@@ -66,6 +73,20 @@ export function TenantLiffProvider({
 
   useEffect(() => {
     let cancelled = false
+
+    // ── Dev mock：跳過真實 LIFF 初始化 ──────────────────────────────────────
+    if (LIFF_DEV) {
+      setIsLoggedIn(true)
+      setIdToken(`liff_dev_${DEV_LINE_UID}`)
+      setProfile({
+        userId: DEV_LINE_UID,
+        displayName: DEV_NAME,
+        pictureUrl: DEV_PICTURE || undefined,
+      })
+      setIsReady(true)
+      return
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     async function init() {
       try {

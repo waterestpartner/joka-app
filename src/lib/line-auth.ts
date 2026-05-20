@@ -124,6 +124,15 @@ export async function verifyLineToken(
   token: string,
   liffId?: string
 ): Promise<Pick<LineTokenPayload, 'sub'>> {
+  // ── Dev mock bypass（僅在 LIFF_DEV=true 的本地環境有效）────────────────────
+  // token 格式：liff_dev_<lineUid>
+  // 用 server-only 環境變數保護，production 絕對不會有 LIFF_DEV=true
+  if (process.env.LIFF_DEV === 'true' && token.startsWith('liff_dev_')) {
+    const sub = token.slice('liff_dev_'.length)
+    return { sub }
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   const cached = getCached(token)
   if (cached) return cached
 
