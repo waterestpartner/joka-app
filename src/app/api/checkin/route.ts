@@ -41,9 +41,25 @@ function computeCheckinStreak(records: { checked_in_at: string }[]): number {
   return streak
 }
 
-// ── GET (Dashboard) ──────────────────────────────────────────────────────────
+// ── GET ──────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
+  const sp = req.nextUrl.searchParams
+
+  // ── LIFF 狀態查詢（?liff=1&tenantSlug=...）────────────────────────────────
+  if (sp.get('liff') === '1') {
+    const tenantSlug = sp.get('tenantSlug')
+    if (!tenantSlug) return NextResponse.json({ error: 'tenantSlug required' }, { status: 400 })
+    const supabase = createSupabaseAdminClient()
+    const { data: tenant } = await supabase
+      .from('tenants').select('id').eq('slug', tenantSlug).maybeSingle()
+    if (!tenant) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+    const { data: settings } = await supabase
+      .from('checkin_settings').select('is_enabled').eq('tenant_id', tenant.id).maybeSingle()
+    return NextResponse.json({ enabled: settings?.is_enabled === true })
+  }
+
+  // ── Dashboard path ─────────────────────────────────────────────────────────
   const auth = await requireDashboardAuth()
   if (!isDashboardAuth(auth)) return auth
 

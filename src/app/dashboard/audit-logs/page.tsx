@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import ForbiddenPage from '@/components/dashboard/ForbiddenPage'
 
 interface AuditLog {
   id: string
@@ -26,6 +27,7 @@ export default function AuditLogsPage() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [forbidden, setForbidden] = useState(false)
   const [page, setPage] = useState(1)
   const [operatorFilter, setOperatorFilter] = useState('')
   const [operatorInput, setOperatorInput] = useState('')
@@ -41,6 +43,7 @@ export default function AuditLogsPage() {
       })
       if (operator) params.set('operator', operator)
       const res = await fetch(`/api/audit-logs?${params}`)
+      if (res.status === 403) { setForbidden(true); return }
       if (!res.ok) throw new Error('載入失敗')
       const json = await res.json() as { logs: AuditLog[]; total: number }
       setLogs(json.logs)
@@ -73,6 +76,8 @@ export default function AuditLogsPage() {
     const prefix = action.split('.')[0] ?? ''
     return ACTION_COLORS[prefix] ?? 'bg-zinc-100 text-zinc-600'
   }
+
+  if (forbidden) return <ForbiddenPage />
 
   return (
     <div className="space-y-6">

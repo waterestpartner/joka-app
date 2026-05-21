@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { pushTextMessage } from '@/lib/line-messaging'
+import { recalcMemberTier } from '@/lib/tier-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -92,8 +93,9 @@ export async function GET(req: NextRequest) {
           note: `點數到期（${expireDays} 天未活動）`,
         })
 
-        // 2. Zero out points
+        // 2. Zero out points + recalc tier（點數歸零 → 重算等級）
         await supabase.from('members').update({ points: 0 }).eq('id', member.id as string).eq('tenant_id', tenantId)
+        await recalcMemberTier(tenantId, member.id as string, 0)
 
         // 3. Push notification if possible
         if (pushEnabled && token && member.line_uid) {

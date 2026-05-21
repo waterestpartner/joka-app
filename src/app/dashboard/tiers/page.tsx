@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
+import ForbiddenPage from '@/components/dashboard/ForbiddenPage'
 
 interface TierSetting {
   id: string
@@ -207,6 +208,7 @@ export default function TiersPage() {
   const [tiers, setTiers] = useState<TierSetting[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [forbidden, setForbidden] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editTarget, setEditTarget] = useState<TierSetting | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -218,6 +220,7 @@ export default function TiersPage() {
     setFetchError(null)
     try {
       const res = await fetch('/api/tier-settings')
+      if (res.status === 403) { setForbidden(true); return }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data: TierSetting[] = await res.json()
       setTiers(data)
@@ -267,6 +270,8 @@ export default function TiersPage() {
       setDeleting(null)
     }
   }
+
+  if (forbidden) return <ForbiddenPage />
 
   return (
     <div className="space-y-6">

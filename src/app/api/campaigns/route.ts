@@ -30,6 +30,7 @@ import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireDashboardAuth, isDashboardAuth, requireOwnerAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
+import { recalcMemberTier } from '@/lib/tier-utils'
 
 // ── Targeting helper ──────────────────────────────────────────────────────────
 
@@ -318,6 +319,11 @@ export async function POST(req: NextRequest) {
 
     succeeded = results.filter(Boolean).length
     skipped = results.length - succeeded
+
+    // 批量發點後非同步重算每位會員等級
+    after(() => Promise.all(
+      members.map(m => recalcMemberTier(auth.tenantId, m.id, Math.max(0, m.points + numAmount)))
+    ))
 
     // Log campaign
     await supabase.from('campaigns').insert({

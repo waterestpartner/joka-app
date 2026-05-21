@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { WEBHOOK_EVENTS, type WebhookEvent } from '@/lib/webhooks'
 import ConfirmDialog from '@/components/dashboard/ConfirmDialog'
+import ForbiddenPage from '@/components/dashboard/ForbiddenPage'
 
 interface Webhook {
   id: string
@@ -46,6 +47,7 @@ export default function WebhooksPage() {
   const [webhooks, setWebhooks] = useState<Webhook[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [forbidden, setForbidden] = useState(false)
 
   // Create form
   const [name, setName] = useState('')
@@ -70,6 +72,7 @@ export default function WebhooksPage() {
     setLoading(true)
     try {
       const res = await fetch('/api/webhooks')
+      if (res.status === 403) { setForbidden(true); return }
       if (!res.ok) throw new Error('載入失敗')
       setWebhooks(await res.json() as Webhook[])
     } catch (e) { setError(e instanceof Error ? e.message : '錯誤') }
@@ -166,6 +169,8 @@ export default function WebhooksPage() {
       return next
     })
   }
+
+  if (forbidden) return <ForbiddenPage />
 
   return (
     <div className="space-y-8">

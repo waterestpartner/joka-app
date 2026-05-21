@@ -14,6 +14,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { addPointTransaction } from '@/repositories/pointRepository'
 import { pushTextMessage } from '@/lib/line-messaging'
+import { recalcMemberTier } from '@/lib/tier-utils'
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
 
@@ -169,6 +170,9 @@ export async function POST(req: NextRequest) {
   })
 
   const remainingPoints = memberPoints - cost
+
+  // ── 重算等級（兌換扣點後同步更新 tier）────────────────────────────────────
+  after(() => recalcMemberTier(tenantIdOfItem, member.id as string, remainingPoints))
 
   // ── Send LINE push notification (fire-and-forget) ─────────────────────────
   const channelToken = ctx.tenant.channel_access_token as string | null

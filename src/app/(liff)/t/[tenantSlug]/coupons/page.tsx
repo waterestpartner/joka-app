@@ -451,6 +451,8 @@ function MyCouponCard({
   redeeming: string | null
   onShowQR: () => void
 }) {
+  const [confirming, setConfirming] = useState(false)
+
   return (
     <li className="rounded-2xl bg-white px-5 py-4 shadow-sm flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
@@ -472,23 +474,47 @@ function MyCouponCard({
         <p className="text-xs text-gray-400">使用時間：{formatDate(mc.used_at)}</p>
       )}
       {mc.status === 'active' && (
-        <div className="mt-1 flex gap-2">
-          {/* QR code button — primary action */}
-          <button
-            onClick={onShowQR}
-            className="flex-1 rounded-xl bg-green-500 py-2 text-sm font-semibold text-white active:bg-green-600 flex items-center justify-center gap-1.5"
-          >
-            <span>📱</span> 出示 QR Code
-          </button>
-          {/* Self-redeem fallback */}
-          <button
-            onClick={() => onRedeem(mc.id)}
-            disabled={redeeming === mc.id}
-            className="rounded-xl border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 disabled:opacity-60 active:bg-gray-50"
-          >
-            {redeeming === mc.id ? '…' : '自助核銷'}
-          </button>
-        </div>
+        <>
+          <div className="mt-1 flex gap-2">
+            {/* QR code button — primary action */}
+            <button
+              onClick={onShowQR}
+              className="flex-1 rounded-xl bg-green-500 py-2 text-sm font-semibold text-white active:bg-green-600 flex items-center justify-center gap-1.5"
+            >
+              <span>📱</span> 出示 QR Code
+            </button>
+            {/* Self-redeem fallback */}
+            <button
+              onClick={() => setConfirming(true)}
+              disabled={redeeming === mc.id}
+              className="rounded-xl border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 disabled:opacity-60 active:bg-gray-50"
+            >
+              {redeeming === mc.id ? '…' : '自助核銷'}
+            </button>
+          </div>
+
+          {/* 自助核銷二次確認 */}
+          {confirming && (
+            <div className="mt-1 rounded-xl bg-amber-50 border border-amber-200 p-3 space-y-2">
+              <p className="text-xs font-semibold text-amber-800">⚠️ 確認自助核銷？</p>
+              <p className="text-xs text-amber-700">核銷後優惠券將標記為「已使用」，此操作無法復原。</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setConfirming(false)}
+                  className="flex-1 rounded-lg border border-amber-200 py-1.5 text-xs font-medium text-amber-700 bg-white active:bg-amber-50"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={() => { setConfirming(false); onRedeem(mc.id) }}
+                  className="flex-1 rounded-lg bg-amber-500 py-1.5 text-xs font-semibold text-white active:bg-amber-600"
+                >
+                  確認核銷
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </li>
   )

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import ForbiddenPage from '@/components/dashboard/ForbiddenPage'
 
 interface ApiKey {
   id: string
@@ -23,6 +24,7 @@ export default function ApiKeysPage() {
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [forbidden, setForbidden] = useState(false)
 
   // Create form
   const [creating, setCreating] = useState(false)
@@ -46,6 +48,7 @@ export default function ApiKeysPage() {
     setError(null)
     try {
       const res = await fetch('/api/keys')
+      if (res.status === 403) { setForbidden(true); return }
       if (!res.ok) throw new Error('載入失敗')
       setKeys(await res.json())
     } catch (e) {
@@ -101,6 +104,8 @@ export default function ApiKeysPage() {
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
+
+  if (forbidden) return <ForbiddenPage />
 
   return (
     <div className="space-y-8 max-w-3xl">

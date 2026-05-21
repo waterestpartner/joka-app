@@ -15,6 +15,7 @@ import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { requireOwnerAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
+import { recalcMemberTier } from '@/lib/tier-utils'
 
 export async function POST(req: NextRequest) {
   const auth = await requireOwnerAuth()
@@ -110,11 +111,15 @@ export async function POST(req: NextRequest) {
     .eq('tenant_id', auth.tenantId)
   const newPoints = (txRows ?? []).reduce((sum, tx) => sum + (tx.amount as number), 0)
 
+  const finalPoints = Math.max(0, newPoints)
   await supabase
     .from('members')
-    .update({ total_spent: newTotalSpent, points: Math.max(0, newPoints) })
+    .update({ total_spent: newTotalSpent, points: finalPoints })
     .eq('id', primaryId)
     .eq('tenant_id', auth.tenantId)
+
+  // 合併後重算等級（點數可能大幅增加）
+  await recalcMemberTier(auth.tenantId, primaryId, finalPoints)
 
   // ── Delete secondary member ───────────────────────────────────────────────
 

@@ -2,16 +2,30 @@
 
 // LIFF: 打卡集點
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useLiff } from '@/hooks/useLiff'
 
-type CheckinState = 'idle' | 'loading' | 'success' | 'already' | 'disabled' | 'error'
+type CheckinState = 'init' | 'idle' | 'loading' | 'success' | 'already' | 'disabled' | 'error'
 
 export default function CheckinPage() {
   const { isReady, idToken, tenantSlug } = useLiff()
-  const [state, setState] = useState<CheckinState>('idle')
+  const [state, setState] = useState<CheckinState>('init')
   const [pointsEarned, setPointsEarned] = useState(0)
   const [errorMsg, setErrorMsg] = useState('')
+
+  // 頁面載入時預先查詢打卡功能是否啟用，避免先顯示按鈕再顯示「未開放」
+  useEffect(() => {
+    if (!isReady || !tenantSlug) return
+    void (async () => {
+      try {
+        const res = await fetch(`/api/checkin?liff=1&tenantSlug=${tenantSlug}`)
+        const json = await res.json() as { enabled?: boolean }
+        setState(json.enabled ? 'idle' : 'disabled')
+      } catch {
+        setState('idle') // 查詢失敗時仍允許使用者嘗試
+      }
+    })()
+  }, [isReady, tenantSlug])
 
   async function handleCheckin() {
     if (!idToken || !tenantSlug || state === 'loading') return
@@ -45,7 +59,7 @@ export default function CheckinPage() {
     }
   }
 
-  if (!isReady) {
+  if (!isReady || state === 'init') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-50">
         <div className="w-10 h-10 border-4 border-[#06C755] border-t-transparent rounded-full animate-spin" />
