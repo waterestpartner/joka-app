@@ -17,6 +17,7 @@ export default function ReferralPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [copyFailed, setCopyFailed] = useState(false)
 
   const load = useCallback(async () => {
     if (!idToken || !tenantSlug) return
@@ -56,12 +57,36 @@ export default function ReferralPage() {
 
   async function handleCopy() {
     if (!data) return
+    const url = data.referralUrl
+    let success = false
+
+    // Primary: Clipboard API (HTTPS, modern browsers)
     try {
-      await navigator.clipboard.writeText(data.referralUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      await navigator.clipboard.writeText(url)
+      success = true
     } catch {
-      // Clipboard not available
+      // Fallback: execCommand for WebView / older browsers
+      try {
+        const el = document.createElement('textarea')
+        el.value = url
+        el.style.cssText = 'position:fixed;opacity:0;top:0;left:0'
+        document.body.appendChild(el)
+        el.focus()
+        el.select()
+        success = document.execCommand('copy')
+        document.body.removeChild(el)
+      } catch {
+        success = false
+      }
+    }
+
+    if (success) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2500)
+    } else {
+      // Even on failure, show feedback so the user isn't left hanging
+      setCopyFailed(true)
+      setTimeout(() => setCopyFailed(false), 2500)
     }
   }
 
@@ -122,9 +147,12 @@ export default function ReferralPage() {
           <button
             onClick={handleCopy}
             className="w-full py-2.5 rounded-xl text-sm font-semibold border-2 transition-colors"
-            style={{ borderColor: copied ? '#06C755' : '#e4e4e7', color: copied ? '#06C755' : '#52525b' }}
+            style={{
+              borderColor: copied ? '#06C755' : copyFailed ? '#f59e0b' : '#e4e4e7',
+              color:       copied ? '#06C755' : copyFailed ? '#d97706' : '#52525b',
+            }}
           >
-            {copied ? '✓ 已複製連結' : '複製連結'}
+            {copied ? '✓ 已複製連結' : copyFailed ? '⚠ 請長按連結手動複製' : '複製連結'}
           </button>
         </div>
 

@@ -97,7 +97,11 @@ export default function ProfilePage() {
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value)
+                // Clear "name required" error as soon as user types something valid
+                if (error === '姓名不可為空' && e.target.value.trim()) setError(null)
+              }}
               placeholder="請輸入姓名"
               className="w-full border border-zinc-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755]"
             />

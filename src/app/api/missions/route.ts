@@ -66,14 +66,42 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Check if checkin feature is enabled — filter out checkin missions when disabled
+    const { data: checkinSettings } = await supabase
+      .from('checkin_settings')
+      .select('is_enabled')
+      .eq('tenant_id', tenant.id)
+      .maybeSingle()
+    const checkinEnabled = checkinSettings?.is_enabled === true
+
+    const filteredMissions = (missions ?? []).filter(
+      (m) => (m.mission_type as string) !== 'checkin' || checkinEnabled
+    )
+    const filteredIds = filteredMissions.map((m) => m.id as string)
+
+    // Recompute completionCounts using filteredIds
+    completionCounts = {}
+    if (filteredIds.length > 0) {
+      const { data: completions2 } = await supabase
+        .from('mission_completions')
+        .select('mission_id')
+        .eq('member_id', member.id)
+        .in('mission_id', filteredIds)
+
+      for (const c of completions2 ?? []) {
+        const mid = c.mission_id as string
+        completionCounts[mid] = (completionCounts[mid] ?? 0) + 1
+      }
+    }
+
     const today = now.slice(0, 10) // YYYY-MM-DD
     const todayCompletions: Record<string, number> = {}
-    if (missionIds.length > 0) {
+    if (filteredIds.length > 0) {
       const { data: todayC } = await supabase
         .from('mission_completions')
         .select('mission_id')
         .eq('member_id', member.id)
-        .in('mission_id', missionIds)
+        .in('mission_id', filteredIds)
         .gte('created_at', `${today}T00:00:00.000Z`)
         .lt('created_at', `${today}T23:59:59.999Z`)
 
@@ -84,7 +112,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
-      missions: missions ?? [],
+      missions: filteredMissions,
       completionCounts,
       todayCompletions,
       memberId: member.id,

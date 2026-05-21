@@ -119,7 +119,7 @@ export default function StoreHistoryPage() {
         <div className="flex-1">
           <p className="text-base font-bold text-zinc-900">兌換紀錄</p>
           <p className="text-xs text-zinc-400">
-            {data?.member.name ? `${data.member.name} · ` : ''}剩餘 {data?.member.points ?? 0} pt
+            {data?.member.name ? `${data.member.name} · ` : ''}剩餘 {(data?.member.points ?? 0).toLocaleString()} pt
           </p>
         </div>
       </div>
