@@ -123,9 +123,13 @@ export default function MemberTable({ members, tierSettings, tags = [] }: Props)
     }
   }
 
-  function handlePointsSuccess(memberId: string, newTotalPoints: number) {
+  function handlePointsSuccess(memberId: string, newTotalPoints: number, newTier?: string) {
     setLocalMembers((prev) =>
-      prev.map((m) => (m.id === memberId ? { ...m, points: newTotalPoints } : m))
+      prev.map((m) =>
+        m.id === memberId
+          ? { ...m, points: newTotalPoints, ...(newTier ? { tier: newTier } : {}) }
+          : m
+      )
     )
     setAddPointsTarget(null)
   }
@@ -441,7 +445,7 @@ export default function MemberTable({ members, tierSettings, tags = [] }: Props)
         <AddPointsModal
           member={addPointsTarget}
           onClose={() => setAddPointsTarget(null)}
-          onSuccess={(newPts) => handlePointsSuccess(addPointsTarget.id, newPts)}
+          onSuccess={(newPts, newTier) => handlePointsSuccess(addPointsTarget.id, newPts, newTier)}
         />
       )}
 

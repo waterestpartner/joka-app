@@ -13,6 +13,8 @@ import { logAudit } from '@/lib/audit'
 const ALLOWED_PATCH = ['tier_display_name', 'min_points', 'point_rate'] as const
 
 export async function GET() {
+  // GET 用 requireDashboardAuth：staff 也需要讀取 tier 顯示名稱來渲染會員列表/優惠券/推播等 14 個頁面
+  // 寫入 (POST/PATCH/DELETE) 才用 requireOwnerAuth，前端 /dashboard/tiers 編輯器另用 /api/dashboard/me 擋
   const auth = await requireDashboardAuth()
   if (!isDashboardAuth(auth)) return auth
 

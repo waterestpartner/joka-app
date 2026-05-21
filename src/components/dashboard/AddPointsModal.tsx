@@ -7,8 +7,8 @@ import { formatPoints } from '@/lib/utils'
 interface Props {
   member: Member
   onClose: () => void
-  /** Called with the new total-points value after a successful transaction. */
-  onSuccess: (newTotalPoints: number) => void
+  /** Called with the new total-points value and (if changed) the new tier after a successful transaction. */
+  onSuccess: (newTotalPoints: number, newTier?: string) => void
 }
 
 export default function AddPointsModal({ member, onClose, onSuccess }: Props) {
@@ -55,8 +55,12 @@ export default function AddPointsModal({ member, onClose, onSuccess }: Props) {
       }
 
       // Use server-returned newTotalPoints (clamped at 0) — not local calculation
-      const data = await res.json().catch(() => null) as { newTotalPoints?: number } | null
-      onSuccess(data?.newTotalPoints ?? Math.max(0, member.points + signedAmount))
+      // Also forward newTier so the parent can update the tier badge without a full refetch
+      const data = await res.json().catch(() => null) as { newTotalPoints?: number; newTier?: string } | null
+      onSuccess(
+        data?.newTotalPoints ?? Math.max(0, member.points + signedAmount),
+        data?.newTier
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : '發生錯誤')
       setSubmitting(false)

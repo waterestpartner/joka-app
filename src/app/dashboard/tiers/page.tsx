@@ -231,7 +231,27 @@ export default function TiersPage() {
     }
   }, [])
 
-  useEffect(() => { loadTiers() }, [loadTiers])
+  // Owner-only 前端 route guard
+  // 因為 GET /api/tier-settings 共用於 14 個頁面（Staff 也要讀 tier 顯示名稱），
+  // 所以 tier-settings GET 本身不擋 Staff；改用 /api/dashboard/me 在頁面層擋。
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch('/api/dashboard/me')
+        if (!res.ok) return
+        const { role } = await res.json() as { role: 'owner' | 'staff' }
+        if (role !== 'owner') {
+          setForbidden(true)
+          setLoading(false)
+        } else {
+          loadTiers()
+        }
+      } catch {
+        // 失敗就讓 loadTiers 自己處理錯誤
+        loadTiers()
+      }
+    })()
+  }, [loadTiers])
 
   function handleSaved(tier: TierSetting) {
     setTiers((prev) => {
