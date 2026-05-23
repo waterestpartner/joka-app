@@ -86,7 +86,7 @@ export async function getTierSettings(tenantId: string): Promise<TierSetting[]> 
 // ── Admin-only functions (bypass RLS) ────────────────────────────────────────
 
 export async function getAllTenants(): Promise<
-  (Tenant & { member_count: number })[]
+  (Tenant & { member_count: number; owner_email: string | null })[]
 > {
   try {
     const supabase = createSupabaseAdminClient()
@@ -107,9 +107,21 @@ export async function getAllTenants(): Promise<
       countMap[id] = (countMap[id] ?? 0) + 1
     }
 
+    // 抓各租戶的 owner email
+    const { data: ownerRows } = await supabase
+      .from('tenant_users')
+      .select('tenant_id, email')
+      .eq('role', 'owner')
+
+    const ownerMap: Record<string, string> = {}
+    for (const row of ownerRows ?? []) {
+      ownerMap[row.tenant_id as string] = row.email as string
+    }
+
     return (tenants as Tenant[]).map((t) => ({
       ...t,
       member_count: countMap[t.id] ?? 0,
+      owner_email: ownerMap[t.id] ?? null,
     }))
   } catch {
     return []
