@@ -30,8 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — 排除所有 .env 檔，但 .env.example 是範本可以 commit
 .env*
+!.env.example
 
 # vercel
 .vercel
