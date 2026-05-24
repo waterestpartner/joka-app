@@ -1,4 +1,7 @@
 // /api/admin/tenants/[id]/send-reset-link — 超管專用：產生密碼設定連結
+//
+// 若租戶 Owner 尚無 Auth 帳號（孤兒租戶），自動以隨機臨時密碼建立帳號，
+// 再產生 recovery 連結。商家點擊連結後可自行設定正式密碼，臨時密碼永不對外揭露。
 
 import { NextRequest, NextResponse, after } from 'next/server'
 import { requireAdminAuth, isAdminAuth } from '@/lib/auth-helpers'
@@ -34,7 +37,27 @@ export async function POST(
 
   const ownerEmail = ownerRow.email as string
 
-  // 2. 產生密碼重設連結（type: recovery）
+  // 2. 若 Auth 帳號不存在，先以隨機臨時密碼建立帳號
+  //    商家將透過 recovery link 重設密碼，臨時密碼不對外揭露
+  let authAccountCreated = false
+  const existingUserId = await findAuthUserIdByEmail(supabase, ownerEmail)
+
+  if (!existingUserId) {
+    const { error: createErr } = await supabase.auth.admin.createUser({
+      email: ownerEmail,
+      password: generateTempPassword(),
+      email_confirm: true,
+    })
+    if (createErr) {
+      return NextResponse.json(
+        { error: `無法建立 Auth 帳號：${createErr.message}` },
+        { status: 500 }
+      )
+    }
+    authAccountCreated = true
+  }
+
+  // 3. 產生密碼重設連結（type: recovery）
   //    連結有效期預設 1 小時（可在 Supabase 後台設定）
   const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
     type: 'recovery',
@@ -46,9 +69,8 @@ export async function POST(
   })
 
   if (linkErr || !linkData?.properties?.action_link) {
-    // 若 auth 帳號不存在，generateLink 會報錯
     return NextResponse.json(
-      { error: `無法產生連結：${linkErr?.message ?? '未知錯誤'}。請確認此 Email 已有 Auth 帳號，或先設定初始密碼。` },
+      { error: `無法產生連結：${linkErr?.message ?? '未知錯誤'}` },
       { status: 400 }
     )
   }
@@ -60,9 +82,50 @@ export async function POST(
       action: 'admin.tenant.send_reset_link',
       target_type: 'tenant_user',
       target_id: tenantId,
-      payload: { owner_email: ownerEmail },
+      payload: {
+        owner_email: ownerEmail,
+        auth_account_created: authAccountCreated,
+      },
     })
   )
 
-  return NextResponse.json({ actionLink: linkData.properties.action_link, ownerEmail })
+  return NextResponse.json({
+    actionLink: linkData.properties.action_link,
+    ownerEmail,
+    authAccountCreated,
+  })
+}
+
+/**
+ * 從 Supabase Auth 中以 email 查找使用者 ID。
+ * 使用分頁搜尋，支援大量使用者場景。
+ */
+async function findAuthUserIdByEmail(
+  supabase: ReturnType<typeof createSupabaseAdminClient>,
+  email: string
+): Promise<string | null> {
+  let page = 1
+  while (true) {
+    const {
+      data: { users },
+      error,
+    } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
+    if (error || !users?.length) return null
+    const found = users.find((u) => u.email === email)
+    if (found) return found.id
+    if (users.length < 1000) return null
+    page++
+  }
+}
+
+/**
+ * 產生隨機強密碼，僅用於初始化 Auth 帳號。
+ * 商家透過 recovery link 重設後此密碼即失效，無需對外揭露。
+ */
+function generateTempPassword(): string {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%'
+  return Array.from(
+    { length: 24 },
+    () => chars[Math.floor(Math.random() * chars.length)]
+  ).join('')
 }

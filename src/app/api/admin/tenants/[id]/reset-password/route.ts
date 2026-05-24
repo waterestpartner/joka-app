@@ -1,4 +1,9 @@
-// /api/admin/tenants/[id]/reset-password — 超管專用：重設租戶 Owner 密碼
+// /api/admin/tenants/[id]/reset-password — 超管專用：設定／重設租戶 Owner 密碼（upsert）
+//
+// 行為：
+//   - Auth 帳號存在 → 更新密碼
+//   - Auth 帳號不存在（孤兒租戶）→ 自動建立 Auth 帳號 + 設定密碼
+// 這樣無論租戶是否已有 Auth 帳號，超管都可以一鍵搞定。
 
 import { NextRequest, NextResponse, after } from 'next/server'
 import { requireAdminAuth, isAdminAuth } from '@/lib/auth-helpers'
@@ -46,40 +51,52 @@ export async function POST(
 
   // 2. 從 Supabase Auth 找到對應的使用者 ID（分頁搜尋）
   const authUserId = await findAuthUserIdByEmail(supabase, ownerEmail)
-  if (!authUserId) {
-    return NextResponse.json(
-      { error: `找不到 Email 為 ${ownerEmail} 的 Auth 帳號，請先到 /admin 建立初始密碼或在 Supabase 後台建立帳號。` },
-      { status: 404 }
-    )
-  }
+  const authAccountCreated = !authUserId
 
-  // 3. 更新密碼（不記錄密碼內容）
-  const { error: updateErr } = await supabase.auth.admin.updateUserById(authUserId, {
-    password,
-  })
-
-  if (updateErr) {
-    return NextResponse.json(
-      { error: `密碼更新失敗：${updateErr.message}` },
-      { status: 500 }
-    )
+  if (authUserId) {
+    // Auth 帳號已存在 → 更新密碼
+    const { error: updateErr } = await supabase.auth.admin.updateUserById(authUserId, {
+      password,
+    })
+    if (updateErr) {
+      return NextResponse.json(
+        { error: `密碼更新失敗：${updateErr.message}` },
+        { status: 500 }
+      )
+    }
+  } else {
+    // Auth 帳號不存在（孤兒租戶）→ 自動建立 Auth 帳號並設定密碼
+    const { error: createErr } = await supabase.auth.admin.createUser({
+      email: ownerEmail,
+      password,
+      email_confirm: true,
+    })
+    if (createErr) {
+      return NextResponse.json(
+        { error: `建立 Auth 帳號失敗：${createErr.message}` },
+        { status: 500 }
+      )
+    }
   }
 
   after(() =>
     logAudit({
       tenant_id: tenantId,
       operator_email: auth.email,
-      action: 'admin.tenant.reset_password',
+      action: authAccountCreated
+        ? 'admin.tenant.create_owner'
+        : 'admin.tenant.reset_password',
       target_type: 'tenant_user',
       target_id: tenantId,
       payload: {
         owner_email: ownerEmail,
+        auth_account_created: authAccountCreated,
         // 絕不記錄密碼內容
       },
     })
   )
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, authAccountCreated })
 }
 
 /**
@@ -92,10 +109,10 @@ async function findAuthUserIdByEmail(
 ): Promise<string | null> {
   let page = 1
   while (true) {
-    const { data: { users }, error } = await supabase.auth.admin.listUsers({
-      page,
-      perPage: 1000,
-    })
+    const {
+      data: { users },
+      error,
+    } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
     if (error || !users?.length) return null
     const found = users.find((u) => u.email === email)
     if (found) return found.id

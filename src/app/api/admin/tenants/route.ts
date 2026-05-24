@@ -49,31 +49,35 @@ export async function POST(req: NextRequest) {
   const supabase = createSupabaseAdminClient()
   let createdAuthUserId: string | null = null
 
-  // 如有提供密碼，先建立 Supabase Auth 使用者
-  if (initialPassword && typeof initialPassword === 'string' && initialPassword.length >= 8) {
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: adminEmail as string,
-      password: initialPassword,
-      email_confirm: true,
-    })
+  // 無論是否提供初始密碼，都建立 Supabase Auth 帳號，避免產生孤兒租戶。
+  // 未提供密碼時自動產生臨時強密碼（不對外揭露），超管之後可用「設定/重設密碼」或「設定連結」替換。
+  const passwordForAuth =
+    initialPassword && typeof initialPassword === 'string' && initialPassword.length >= 8
+      ? (initialPassword as string)
+      : generateTempPassword()
 
-    if (authError) {
-      // email already exists → 23505 / AuthApiError
-      const msg = authError.message?.toLowerCase() ?? ''
-      if (msg.includes('already') || msg.includes('exists') || msg.includes('registered')) {
-        return NextResponse.json(
-          { error: `此 Email 已有 Supabase Auth 帳號（${adminEmail}），可直接設定密碼或改用其他 Email。` },
-          { status: 409 }
-        )
-      }
+  const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+    email: adminEmail as string,
+    password: passwordForAuth,
+    email_confirm: true,
+  })
+
+  if (authError) {
+    // email already exists → 23505 / AuthApiError
+    const msg = authError.message?.toLowerCase() ?? ''
+    if (msg.includes('already') || msg.includes('exists') || msg.includes('registered')) {
       return NextResponse.json(
-        { error: `建立帳號失敗：${authError.message}` },
-        { status: 500 }
+        { error: `此 Email 已有 Supabase Auth 帳號（${adminEmail}），可直接設定密碼或改用其他 Email。` },
+        { status: 409 }
       )
     }
-
-    createdAuthUserId = authData.user?.id ?? null
+    return NextResponse.json(
+      { error: `建立帳號失敗：${authError.message}` },
+      { status: 500 }
+    )
   }
+
+  createdAuthUserId = authData.user?.id ?? null
 
   // 建立 tenant + tenant_users
   const tenant = await createTenant({
@@ -112,4 +116,16 @@ export async function POST(req: NextRequest) {
   )
 
   return NextResponse.json(tenant, { status: 201 })
+}
+
+/**
+ * 產生隨機強密碼，在 initialPassword 未提供時使用，確保每個租戶都有 Auth 帳號。
+ * 此密碼不對外揭露；超管後續可透過「設定/重設密碼」或「設定連結」替換。
+ */
+function generateTempPassword(): string {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%'
+  return Array.from(
+    { length: 24 },
+    () => chars[Math.floor(Math.random() * chars.length)]
+  ).join('')
 }

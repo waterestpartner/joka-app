@@ -413,18 +413,21 @@ export default function AdminTenantsPage() {
         </div>
       )}
 
-      {/* ── 重設密碼 Modal ──────────────────────────────────── */}
+      {/* ── 設定／重設密碼 Modal ────────────────────────────── */}
       {resetTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setResetTarget(null)}>
           <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-8 space-y-5" onClick={(e) => e.stopPropagation()}>
             <div>
-              <h2 className="text-lg font-bold text-zinc-900">重設密碼</h2>
+              <h2 className="text-lg font-bold text-zinc-900">設定／重設密碼</h2>
               <p className="mt-1 text-sm text-zinc-500">
                 租戶：<strong>{resetTarget.name}</strong>
               </p>
               {resetTarget.owner_email && (
                 <p className="text-xs text-zinc-400 mt-0.5">Owner：{resetTarget.owner_email}</p>
               )}
+              <p className="text-xs text-zinc-400 mt-1">
+                若此帳號尚無登入密碼，將自動建立 Auth 帳號並套用您設定的密碼。
+              </p>
             </div>
 
             <form onSubmit={handleResetSubmit} className="space-y-4">
@@ -471,7 +474,7 @@ export default function AdminTenantsPage() {
                 </button>
                 <button type="submit" disabled={resetSubmitting}
                   className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60 bg-amber-500">
-                  {resetSubmitting ? '更新中…' : '確認重設'}
+                  {resetSubmitting ? '設定中…' : '確認設定密碼'}
                 </button>
               </div>
             </form>
@@ -591,7 +594,7 @@ export default function AdminTenantsPage() {
                           onClick={() => openResetModal(t)}
                           className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition"
                         >
-                          重設密碼
+                          設定/重設密碼
                         </button>
                         <button
                           type="button"
