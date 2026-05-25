@@ -1,3 +1,4 @@
+import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { Member } from '@/types/member'
 
@@ -41,7 +42,7 @@ export async function getMemberById(
 
 export async function getMembersByTenant(
   tenantId: string,
-  options?: { search?: string; tier?: string; limit?: number; offset?: number }
+  options?: { search?: string; tier?: string; needsReview?: boolean; limit?: number; offset?: number }
 ): Promise<{ members: Member[]; total: number }> {
   try {
     const supabase = await createSupabaseServerClient()
@@ -63,6 +64,10 @@ export async function getMembersByTenant(
 
     if (options?.tier) {
       query = query.eq('tier', options.tier)
+    }
+
+    if (options?.needsReview === true) {
+      query = query.eq('needs_review', true)
     }
 
     const { data, error, count } = await query
@@ -107,5 +112,28 @@ export async function updateMember(
     return updated as Member
   } catch {
     return null
+  }
+}
+
+/**
+ * Find all members in a tenant whose phone_normalized matches the given value.
+ * Used for deduplication during LIFF registration and dispatch queries.
+ * Uses admin client to bypass RLS (caller must already own the tenantId).
+ */
+export async function findMembersByNormalizedPhone(
+  tenantId: string,
+  phoneNormalized: string
+): Promise<Member[]> {
+  try {
+    const supabase = createSupabaseAdminClient()
+    const { data, error } = await supabase
+      .from('members')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .eq('phone_normalized', phoneNormalized)
+    if (error) return []
+    return (data ?? []) as Member[]
+  } catch {
+    return []
   }
 }

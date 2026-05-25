@@ -17,6 +17,9 @@ export interface Member {
   blocked_at?: string | null
   last_activity_at?: string | null
   notes?: string | null
+  phone_normalized?: string | null
+  needs_review?: boolean | null
+  review_reason?: string | null
   created_at: string
 }
 

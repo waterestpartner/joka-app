@@ -2,11 +2,13 @@
 
 import { NextRequest, NextResponse, after } from 'next/server'
 import { getMembersByTenant } from '@/repositories/memberRepository'
+import { findMembersByNormalizedPhone } from '@/repositories/memberRepository'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { verifyLineToken, extractBearerToken } from '@/lib/line-auth'
 import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { findOrCreatePlatformMember, upsertConsent } from '@/lib/platform-members'
 import { fireWebhooks } from '@/lib/webhooks'
+import { normalizePhone } from '@/lib/phone'
 import type { Member } from '@/types/member'
 
 // ── GET /api/members ──────────────────────────────────────────────────────────
@@ -129,11 +131,19 @@ export async function GET(req: NextRequest) {
 
   const search = searchParams.get('search') ?? undefined
   const tier = searchParams.get('tier') ?? undefined
+  const needsReview = searchParams.get('needs_review') === 'true' ? true : undefined
   const limit = searchParams.get('limit') ? Number(searchParams.get('limit')) : undefined
   const offset = searchParams.get('offset') ? Number(searchParams.get('offset')) : undefined
 
-  const result = await getMembersByTenant(resolvedTenantId, { search, tier, limit, offset })
-  return NextResponse.json(result)
+  // Cheap badge count — return alongside list when no other filter active
+  const { count: reviewCount } = await supabase
+    .from('members')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', resolvedTenantId)
+    .eq('needs_review', true)
+
+  const result = await getMembersByTenant(resolvedTenantId, { search, tier, needsReview, limit, offset })
+  return NextResponse.json({ ...result, needs_review_count: reviewCount ?? 0 })
 }
 
 // ── POST /api/members ─────────────────────────────────────────────────────────
@@ -191,83 +201,112 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: message }, { status: 401 })
     }
 
-    // 3. 防止重複註冊
-    const { data: existing } = await supabase
+    // Normalize phone once — used for both dedup lookup and storage
+    const phoneNormalized = normalizePhone(phone)
+
+    // ── Step 1: LINE UID 去重 ──────────────────────────────────────────────────
+    // 若同一 tenant 已有相同 LINE UID → 視為回訪，更新資料後回傳（不 409）
+    const { data: existingByUid } = await supabase
       .from('members')
-      .select('id')
+      .select('id, tier, points')
       .eq('tenant_id', tenant.id)
       .eq('line_uid', lineUid)
       .maybeSingle()
 
-    if (existing) {
-      return NextResponse.json({ error: 'Member already registered' }, { status: 409 })
-    }
-
-    // ── 3b. CSV import → LINE 綁定 ──────────────────────────────────────────
-    // 若 CSV 匯入的離線會員（line_uid 以 import_ 開頭）手機號碼與本次 LIFF
-    // 註冊相符，直接更新 line_uid 完成綁定，不建立重複紀錄。
-    const { data: importedMember } = await supabase
-      .from('members')
-      .select('id, points, tier')
-      .eq('tenant_id', tenant.id)
-      .eq('phone', phone.trim())
-      .like('line_uid', 'import_%')
-      .maybeSingle()
-
-    if (importedMember) {
-      let bindPlatformMemberId: string | null = null
-      if (tenant.platform_participation !== 'disabled') {
-        try {
-          bindPlatformMemberId = await findOrCreatePlatformMember(supabase, {
-            line_uid:     lineUid,
-            display_name: name.trim(),
-            birthday:     birthday ?? null,
-          })
-          if (bindPlatformMemberId && consentPlatform === true) {
-            await upsertConsent(supabase, {
-              platform_member_id:               bindPlatformMemberId,
-              tenant_id:                        tenant.id,
-              share_basic_profile:              true,
-              share_transaction_history:        true,
-              allow_cross_brand_recommendation: true,
-              consent_version:                  'v1.0',
-            })
-          }
-        } catch (pmErr) {
-          console.error('[members/POST] binding platform member error:', pmErr)
-        }
-      }
-
-      const { data: bound, error: bindErr } = await supabase
+    if (existingByUid) {
+      const { data: updated, error: updateErr } = await supabase
         .from('members')
         .update({
-          line_uid:           lineUid,
-          name:               name.trim(),
-          birthday:           birthday ?? null,
-          last_activity_at:   new Date().toISOString(),
-          platform_member_id: bindPlatformMemberId,
+          name:             name.trim(),
+          phone:            phone.trim(),
+          phone_normalized: phoneNormalized,
+          birthday:         birthday ?? null,
+          last_activity_at: new Date().toISOString(),
         })
-        .eq('id', importedMember.id as string)
+        .eq('id', existingByUid.id as string)
         .eq('tenant_id', tenant.id)
         .select()
         .single()
 
-      if (bindErr) throw new Error(bindErr.message)
-
-      const boundData = bound as Record<string, unknown>
-      after(() => fireWebhooks(tenant.id, 'member.created', {
-        member_id: boundData.id as string,
-        name:      boundData.name as string ?? null,
-        phone:     boundData.phone as string ?? null,
-        tier:      boundData.tier as string ?? 'basic',
-      }))
-
-      return NextResponse.json(bound, { status: 200 })
+      if (updateErr) throw new Error(updateErr.message)
+      return NextResponse.json(updated, { status: 200 })
     }
 
-    // ── 4. 取得或建立平台級會員 ID（Model C Hybrid Federated）────────────────
-    //    只有在 platform_participation 不是 'disabled' 時才觸發
-    //    若失敗不中斷主流程（品牌會員資料更重要）
+    // ── Step 2: phone_normalized 去重 ─────────────────────────────────────────
+    // 僅在有電話時執行。涵蓋 CSV import_ 佔位符綁定（Step 2a）。
+    if (phoneNormalized) {
+      const phoneMatches = await findMembersByNormalizedPhone(tenant.id, phoneNormalized)
+
+      if (phoneMatches.length === 1) {
+        const match = phoneMatches[0]
+        const matchUid = match.line_uid as string | null
+        const isImportPlaceholder = matchUid?.startsWith('import_') ?? false
+        const hasNoUid = !matchUid
+
+        if (hasNoUid || isImportPlaceholder) {
+          // ── Step 2a: 無 UID 或 import_ 佔位符 → 綁定 LINE UID ──────────────
+          let bindPlatformMemberId: string | null = null
+          if (tenant.platform_participation !== 'disabled') {
+            try {
+              bindPlatformMemberId = await findOrCreatePlatformMember(supabase, {
+                line_uid:     lineUid,
+                display_name: name.trim(),
+                birthday:     birthday ?? null,
+              })
+              if (bindPlatformMemberId && consentPlatform === true) {
+                await upsertConsent(supabase, {
+                  platform_member_id:               bindPlatformMemberId,
+                  tenant_id:                        tenant.id,
+                  share_basic_profile:              true,
+                  share_transaction_history:        true,
+                  allow_cross_brand_recommendation: true,
+                  consent_version:                  'v1.0',
+                })
+              }
+            } catch (pmErr) {
+              console.error('[members/POST] binding platform member error:', pmErr)
+            }
+          }
+
+          const { data: bound, error: bindErr } = await supabase
+            .from('members')
+            .update({
+              line_uid:           lineUid,
+              name:               name.trim(),
+              birthday:           birthday ?? null,
+              phone_normalized:   phoneNormalized,
+              last_activity_at:   new Date().toISOString(),
+              platform_member_id: bindPlatformMemberId,
+            })
+            .eq('id', match.id)
+            .eq('tenant_id', tenant.id)
+            .select()
+            .single()
+
+          if (bindErr) throw new Error(bindErr.message)
+
+          const boundData = bound as Record<string, unknown>
+          after(() => fireWebhooks(tenant.id, 'member.created', {
+            member_id: boundData.id as string,
+            name:      (boundData.name as string) ?? null,
+            phone:     (boundData.phone as string) ?? null,
+            tier:      (boundData.tier as string) ?? 'basic',
+          }))
+
+          return NextResponse.json(bound, { status: 200 })
+
+        } else {
+          // ── Step 2b: 同電話 1 筆但已綁不同 UID → 新建 + 標記衝突 ──────────
+          // 不覆蓋現有綁定（可能是別人的帳號），新建一筆並人工確認
+        }
+      } else if (phoneMatches.length > 1) {
+        // ── Step 2c: 同電話多筆 → 新建 + 標記衝突 ─────────────────────────────
+        // 不自動併單，新建並人工確認
+      }
+      // phoneMatches.length === 0 → fall through to create
+    }
+
+    // ── Step 3/4: 取得或建立平台級會員 ID（Model C）───────────────────────────
     let platformMemberId: string | null = null
     if (tenant.platform_participation !== 'disabled') {
       try {
@@ -275,10 +314,7 @@ export async function POST(req: NextRequest) {
           line_uid:     lineUid,
           display_name: name.trim(),
           birthday:     birthday ?? null,
-          // 注意：不寫 phone — 品牌收集的手機和平台手機分開管理，避免意外覆蓋
         })
-
-        // Phase 2：如果使用者勾選同意書，寫入 platform_member_consents
         if (platformMemberId && consentPlatform === true) {
           await upsertConsent(supabase, {
             platform_member_id:               platformMemberId,
@@ -290,27 +326,43 @@ export async function POST(req: NextRequest) {
           })
         }
       } catch (pmErr) {
-        // fire-and-forget 失敗不影響主流程，但記 log 以便追蹤
         console.error('[members/POST] platform member / consent error:', pmErr)
       }
     }
 
-    const memberData: Omit<Member, 'id' | 'created_at'> = {
-      tenant_id: tenant.id,
-      line_uid: lineUid,
-      name: name.trim(),
-      phone: phone.trim(),
-      birthday: birthday ?? null,
-      tier: 'basic',
-      points: 0,
-      total_spent: 0,
+    // Determine if this new record needs human review due to a phone conflict
+    let needsReview = false
+    let reviewReason: string | null = null
+    if (phoneNormalized) {
+      const conflicts = await findMembersByNormalizedPhone(tenant.id, phoneNormalized)
+      if (conflicts.length === 1) {
+        const c = conflicts[0]
+        const uid = c.line_uid as string | null
+        if (uid && !uid.startsWith('import_') && uid !== lineUid) {
+          needsReview = true
+          reviewReason = 'phone_conflict' // same phone already bound to a different UID
+        }
+      } else if (conflicts.length > 1) {
+        needsReview = true
+        reviewReason = 'phone_multiple' // multiple records share this phone
+      }
     }
 
     const { data: created, error } = await supabase
       .from('members')
       .insert({
-        ...memberData,
-        platform_member_id: platformMemberId,  // Model C: 可為 null
+        tenant_id:          tenant.id,
+        line_uid:           lineUid,
+        name:               name.trim(),
+        phone:              phone.trim(),
+        phone_normalized:   phoneNormalized,
+        birthday:           birthday ?? null,
+        tier:               'basic',
+        points:             0,
+        total_spent:        0,
+        platform_member_id: platformMemberId,
+        needs_review:       needsReview,
+        review_reason:      reviewReason,
       })
       .select()
       .single()
