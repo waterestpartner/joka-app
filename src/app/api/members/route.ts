@@ -158,8 +158,11 @@ export async function POST(req: NextRequest) {
     if (!name || typeof name !== 'string' || name.trim().length < 1 || name.length > 100) {
       return NextResponse.json({ error: '姓名不可為空且長度不超過 100 字' }, { status: 400 })
     }
-    if (!phone || typeof phone !== 'string' || !/^[0-9+\-\s]{7,20}$/.test(phone.trim())) {
-      return NextResponse.json({ error: '手機號碼格式不正確' }, { status: 400 })
+    if (!phone || typeof phone !== 'string' || !/^09\d{8}$/.test(phone.trim())) {
+      return NextResponse.json(
+        { error: '請輸入正確的台灣手機號碼（09 開頭，共 10 碼）' },
+        { status: 400 }
+      )
     }
     if (birthday && !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) {
       return NextResponse.json({ error: '生日格式應為 YYYY-MM-DD' }, { status: 400 })

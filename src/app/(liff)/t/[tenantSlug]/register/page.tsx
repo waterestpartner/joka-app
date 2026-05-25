@@ -4,6 +4,16 @@ import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useLiff } from '@/hooks/useLiff'
 
+/** 台灣手機號碼：09 開頭，共 10 碼 */
+const TAIWAN_PHONE_RE = /^09\d{8}$/
+
+function validatePhone(value: string): string | null {
+  const v = value.trim()
+  if (!v) return '請輸入手機號碼'
+  if (!TAIWAN_PHONE_RE.test(v)) return '請輸入正確的台灣手機號碼（09 開頭，共 10 碼）'
+  return null
+}
+
 export default function RegisterPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -11,6 +21,7 @@ export default function RegisterPage() {
 
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
+  const [phoneError, setPhoneError] = useState<string | null>(null)
   const [birthday, setBirthday] = useState('')
   const [consentPlatform, setConsentPlatform] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -27,6 +38,14 @@ export default function RegisterPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!idToken) return
+
+    // 前端最終驗證：確保格式正確才送出
+    const phoneErr = validatePhone(phone)
+    if (phoneErr) {
+      setPhoneError(phoneErr)
+      return
+    }
+
     setSubmitting(true)
     setSubmitError(null)
 
@@ -89,9 +108,29 @@ export default function RegisterPage() {
           <label className="text-sm font-medium text-gray-700" htmlFor="phone">
             手機號碼 <span className="text-red-500">*</span>
           </label>
-          <input id="phone" type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)}
+          <input
+            id="phone"
+            type="tel"
+            required
+            inputMode="numeric"
+            maxLength={10}
+            value={phone}
+            onChange={(e) => {
+              setPhone(e.target.value)
+              // 已顯示錯誤時即時重新驗證，給使用者即時回饋
+              if (phoneError) setPhoneError(validatePhone(e.target.value))
+            }}
+            onBlur={() => setPhoneError(validatePhone(phone))}
             placeholder="09XXXXXXXX"
-            className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-800 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100" />
+            className={`rounded-xl border bg-white px-4 py-3 text-sm text-gray-800 outline-none focus:ring-2 transition ${
+              phoneError
+                ? 'border-red-400 focus:border-red-400 focus:ring-red-100'
+                : 'border-gray-200 focus:border-green-500 focus:ring-green-100'
+            }`}
+          />
+          {phoneError && (
+            <p className="text-xs text-red-500 mt-0.5">{phoneError}</p>
+          )}
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-sm font-medium text-gray-700" htmlFor="birthday">生日</label>
