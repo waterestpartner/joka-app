@@ -114,8 +114,6 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // 禁止修改以下欄位（只能透過專門流程變更）
-    delete updateFields.line_channel_secret
     // 允許更新的欄位白名單（防止 mass-assignment）
     const ALLOWED_UPDATE_FIELDS = [
       'name', 'logo_url', 'primary_color', 'liff_id',

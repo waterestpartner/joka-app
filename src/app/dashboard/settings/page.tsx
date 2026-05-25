@@ -227,18 +227,22 @@ export default function SettingsPage() {
 
       const data = await res.json().catch(() => ({}))
 
-      // 儲存成功後若有填 token，標記為已設定；若後端有回傳 line_bot_synced，
-      // 以 LINE@ 回來的名稱 / 大頭貼覆蓋表單（使用者看到的就是真實 LINE@ 資訊）
+      // 儲存成功後以後端回傳的 _set flag 為準（真實反映 DB 狀態）；
+      // 若後端有回傳 line_bot_synced，以 LINE@ 回來的名稱 / 大頭貼覆蓋表單。
       setSettings((prev) => ({
         ...prev,
         name: typeof data?.name === 'string' ? data.name : prev.name,
         logo_url: typeof data?.logo_url === 'string' ? data.logo_url : prev.logo_url,
         line_channel_secret: '',
         line_channel_secret_set:
-          settings.line_channel_secret.trim().length > 0 || prev.line_channel_secret_set,
+          typeof data?.line_channel_secret_set === 'boolean'
+            ? data.line_channel_secret_set
+            : settings.line_channel_secret.trim().length > 0 || prev.line_channel_secret_set,
         channel_access_token: '',
         channel_access_token_set:
-          settings.channel_access_token.trim().length > 0 || prev.channel_access_token_set,
+          typeof data?.channel_access_token_set === 'boolean'
+            ? data.channel_access_token_set
+            : settings.channel_access_token.trim().length > 0 || prev.channel_access_token_set,
       }))
 
       if (data?.line_bot_synced) {
