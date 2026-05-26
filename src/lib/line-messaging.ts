@@ -192,11 +192,20 @@ export interface RichMenuDefinition {
   areas: RichMenuArea[]
 }
 
-/** Create a rich menu and return its ID */
+export type CreateRichMenuResult =
+  | { ok: true; id: string }
+  | { ok: false; error: string; status?: number }
+
+/**
+ * Create a rich menu via LINE API.
+ * 成功：{ ok: true, id }
+ * 失敗：{ ok: false, error, status } — error 為 LINE API 回傳的詳細訊息
+ *        失敗原因可能是：URL 空白 / token 失效 / 圖片格式錯 等
+ */
 export async function createRichMenu(
   definition: RichMenuDefinition,
   token: string
-): Promise<string | null> {
+): Promise<CreateRichMenuResult> {
   try {
     const res = await fetch('https://api.line.me/v2/bot/richmenu', {
       method: 'POST',
@@ -205,10 +214,17 @@ export async function createRichMenu(
       cache: 'no-store',
       signal: AbortSignal.timeout(8000),
     })
-    if (!res.ok) { console.error('[rich-menu] create error:', await res.text()); return null }
+    if (!res.ok) {
+      const text = await res.text()
+      console.error('[rich-menu] create error:', res.status, text)
+      return { ok: false, error: text, status: res.status }
+    }
     const { richMenuId } = await res.json() as { richMenuId: string }
-    return richMenuId
-  } catch (e) { console.error('[rich-menu] create error:', e); return null }
+    return { ok: true, id: richMenuId }
+  } catch (e) {
+    console.error('[rich-menu] create error:', e)
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 /** Upload image to a rich menu */

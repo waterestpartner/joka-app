@@ -110,9 +110,10 @@ const LAYOUTS = {
 
 function buildAction(action?: AreaAction): object {
   if (!action) return { type: 'message', text: 'Hello' }
-  if (action.type === 'uri') return { type: 'uri', uri: action.uri ?? 'https://example.com' }
-  if (action.type === 'liff') return { type: 'uri', uri: action.liffUrl ?? 'https://liff.line.me' }
-  return { type: 'message', text: action.text ?? action.label ?? 'Hello' }
+  // 用 || 而非 ??，讓空字串也能 fallback（防止 LINE API 400）
+  if (action.type === 'uri') return { type: 'uri', uri: action.uri?.trim() || 'https://example.com' }
+  if (action.type === 'liff') return { type: 'uri', uri: action.liffUrl?.trim() || 'https://liff.line.me' }
+  return { type: 'message', text: action.text?.trim() || action.label || 'Hello' }
 }
 
 type LayoutKey = keyof typeof LAYOUTS
@@ -340,6 +341,21 @@ export default function RichMenuPage() {
       const audienceIds = getCurrentAudienceIds()
       if (audienceIds.length === 0) {
         throw new Error('請先選擇套用對象（指定會員 / 標籤 / 等級 至少一項）')
+      }
+
+      // 按鈕內容驗證：避免送空 URL/文字給 LINE 而被 400 拒絕
+      for (let i = 0; i < buttonCount; i++) {
+        const b = buttons[i]
+        if (!b) continue
+        if (b.action.type === 'liff' && !b.action.liffUrl?.trim()) {
+          throw new Error(`按鈕 ${i + 1}「${b.label || '未命名'}」：請填寫 LIFF URL`)
+        }
+        if (b.action.type === 'uri' && !b.action.uri?.trim()) {
+          throw new Error(`按鈕 ${i + 1}「${b.label || '未命名'}」：請填寫網址`)
+        }
+        if (b.action.type === 'message' && !b.action.text?.trim()) {
+          throw new Error(`按鈕 ${i + 1}「${b.label || '未命名'}」：請填寫傳送的文字`)
+        }
       }
 
       const formData = new FormData()

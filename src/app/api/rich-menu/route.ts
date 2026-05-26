@@ -164,8 +164,35 @@ export async function POST(req: NextRequest) {
   }
 
   // 1. LINE: createRichMenu
-  const richMenuId = await createRichMenu(definition, token)
-  if (!richMenuId) return NextResponse.json({ error: '建立 Rich Menu 失敗，請確認 Channel Access Token 是否有效' }, { status: 500 })
+  const createResult = await createRichMenu(definition, token)
+  if (!createResult.ok) {
+    // 嘗試解析 LINE 回傳的結構化錯誤，整理出友善訊息
+    let friendly = createResult.error
+    try {
+      const parsed = JSON.parse(createResult.error) as { message?: string; details?: { message: string; property: string }[] }
+      if (parsed.details && parsed.details.length > 0) {
+        // 例：「按鈕 1 的 URL 未填寫」
+        friendly = parsed.details
+          .map((d) => {
+            const m = /areas\[(\d+)\]\.action\.(uri|text)/.exec(d.property)
+            if (m) {
+              const which = m[2] === 'uri' ? 'URL' : '訊息文字'
+              return `按鈕 ${Number(m[1]) + 1} 的 ${which} 未填寫`
+            }
+            return `${d.property}: ${d.message}`
+          })
+          .join('；')
+      } else if (parsed.message) {
+        friendly = parsed.message
+      }
+    } catch { /* error 不是 JSON，原樣顯示 */ }
+
+    // 401/403 才提示 token 問題
+    const isAuth = createResult.status === 401 || createResult.status === 403
+    const prefix = isAuth ? 'Channel Access Token 失效或權限不足：' : 'LINE 拒絕請求：'
+    return NextResponse.json({ error: prefix + friendly, line_status: createResult.status }, { status: 400 })
+  }
+  const richMenuId = createResult.id
 
   let imageWarning: string | null = null
   if (imageBuffer) {
