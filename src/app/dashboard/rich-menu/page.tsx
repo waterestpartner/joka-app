@@ -362,6 +362,10 @@ export default function RichMenuPage() {
       if (!imageFile) {
         throw new Error('請上傳選單圖片（LINE 規定：未上傳圖片的 Rich Menu 無法套用給用戶）')
       }
+      // 圖片大小上限（伺服器端 nginx 最大接受 ~4.5 MB，LINE 要求 ≤ 1 MB）
+      if (imageFile.size > 1024 * 1024) {
+        throw new Error(`圖片檔案過大（${(imageFile.size / 1024 / 1024).toFixed(1)} MB）。LINE 規定圖片 ≤ 1 MB，請先壓縮後再上傳。`)
+      }
 
       const formData = new FormData()
       formData.append('template', JSON.stringify(definition))
@@ -845,7 +849,16 @@ export default function RichMenuPage() {
           </div>
           <input ref={imageInputRef} type="file" accept="image/jpeg,image/png"
             className="hidden"
-            onChange={(e) => setImageFile(e.target.files?.[0] ?? null)} />
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null
+              if (file && file.size > 1024 * 1024) {
+                setError(`圖片檔案過大（${(file.size / 1024 / 1024).toFixed(1)} MB）。LINE 規定圖片 ≤ 1 MB，請先壓縮後再上傳。`)
+                e.target.value = ''
+                return
+              }
+              setImageFile(file)
+              setError(null)
+            }} />
           {!imageFile && (
             <p className="text-xs text-zinc-400 mt-1.5">
               未上傳圖片時，可在 LINE Developers Console 手動上傳
