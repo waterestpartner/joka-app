@@ -14,6 +14,14 @@
 -- 執行後務必：
 --   至 Dashboard → 等級設定，為每個等級填入正確的 min_spend 門檻，
 --   例如：體驗會員 = 0，一般會員 = 1000，VIP = 5000。
+--
+-- ⚠️  回填邏輯以 created_at 排序，若等級建立順序與業務邏輯不符，
+--   需手動修正 sort_order。執行完本腳本後請確認：
+--   最低階（入會/試用）等級的 sort_order = 0，依階層遞增。
+--   例如若「體驗會員」建立比「一般會員」晚，需手動：
+--     UPDATE tier_settings SET sort_order = 0 WHERE tier = 'trial'   AND tenant_id = '...';
+--     UPDATE tier_settings SET sort_order = 1 WHERE tier = 'basic'   AND tenant_id = '...';
+--     UPDATE tier_settings SET sort_order = 2 WHERE tier = 'regular' AND tenant_id = '...';
 
 -- ── 1. 新增欄位 ──────────────────────────────────────────────────────────────
 
