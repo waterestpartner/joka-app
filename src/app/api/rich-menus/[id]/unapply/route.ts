@@ -2,18 +2,40 @@
 //
 // 取消套用：bulk unlink 此 menu 上次推給的所有人（回 OA Manager default）
 // 然後 is_published=false, last_applied_user_ids=[]
+// 失敗時：把 LINE 真實錯誤帶回前端
 
 import { NextRequest, NextResponse, after } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { isDashboardAuth, requireOwnerAuth } from '@/lib/auth-helpers'
 import { logAudit } from '@/lib/audit'
-import { unlinkRichMenuBulk } from '@/lib/line-messaging'
+import { unlinkRichMenuBulk, type BulkRichMenuResult } from '@/lib/line-messaging'
 
 async function getToken(tenantId: string): Promise<string | null> {
   const supabase = createSupabaseAdminClient()
   const { data } = await supabase
     .from('tenants').select('channel_access_token').eq('id', tenantId).maybeSingle()
   return (data?.channel_access_token as string) ?? null
+}
+
+function summarizeUnlinkFailure(result: BulkRichMenuResult): { friendly: string; raw: unknown } | null {
+  if (result.failed.length === 0) return null
+  const first = result.failed[0]
+  let lineMsg = ''
+  try {
+    const parsed = first.error as { message?: string } | string
+    if (typeof parsed === 'string') {
+      try { lineMsg = (JSON.parse(parsed) as { message?: string }).message ?? parsed }
+      catch { lineMsg = parsed }
+    } else if (parsed && typeof parsed === 'object' && 'message' in parsed) {
+      lineMsg = (parsed.message as string) ?? ''
+    }
+  } catch { /* leave empty */ }
+
+  const isAuth = first.status === 401 || first.status === 403
+  let friendly = `取消套用失敗（${result.failed.length} 批）：${lineMsg || '未知錯誤'}`
+  if (isAuth) friendly = `Channel Access Token 失效或權限不足：${lineMsg}`
+
+  return { friendly, raw: first.error }
 }
 
 export async function POST(
@@ -42,21 +64,27 @@ export async function POST(
   if (!menu) return NextResponse.json({ error: '找不到此 Rich Menu' }, { status: 404 })
 
   const lastUids = ((menu.last_applied_user_ids as unknown[]) ?? []) as string[]
-  const result = lastUids.length > 0
+  const result: BulkRichMenuResult = lastUids.length > 0
     ? await unlinkRichMenuBulk(lastUids, token)
     : { ok: 0, failed: [] }
+
+  // 只把實際 unlink 成功的 UID 從 last_applied 移除
+  const failedUids = new Set(result.failed.flatMap((f) => f.user_ids))
+  const remainingLast = lastUids.filter((u) => failedUids.has(u))
 
   const { error: upErr } = await supabase
     .from('rich_menus')
     .update({
-      is_published: false,
-      last_applied_user_ids: [],
+      is_published: remainingLast.length > 0,
+      last_applied_user_ids: remainingLast,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
     .eq('tenant_id', auth.tenantId)
 
   if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 })
+
+  const errInfo = summarizeUnlinkFailure(result)
 
   after(() => logAudit({
     tenant_id: auth.tenantId,
@@ -68,12 +96,22 @@ export async function POST(
       line_rich_menu_id: menu.line_rich_menu_id,
       unlinked_count: result.ok,
       failed_batches: result.failed.length,
+      remaining_last_applied: remainingLast.length,
+      error: errInfo?.raw ?? null,
     },
   }))
+
+  if (errInfo) {
+    return NextResponse.json({
+      success: false,
+      error: errInfo.friendly,
+      unlinked: result.ok,
+      failed_count: failedUids.size,
+    }, { status: 400 })
+  }
 
   return NextResponse.json({
     success: true,
     unlinked: result.ok,
-    failed_batches: result.failed.length,
   })
 }

@@ -358,6 +358,11 @@ export default function RichMenuPage() {
         }
       }
 
+      // 圖片必填：LINE 不允許沒上傳圖片的 menu 套用給用戶
+      if (!imageFile) {
+        throw new Error('請上傳選單圖片（LINE 規定：未上傳圖片的 Rich Menu 無法套用給用戶）')
+      }
+
       const formData = new FormData()
       formData.append('template', JSON.stringify(definition))
       if (imageFile) formData.append('image', imageFile)
@@ -449,12 +454,30 @@ export default function RichMenuPage() {
     setActionError(null)
     try {
       const res = await fetch(`/api/rich-menus/${menuRowId}/apply`, { method: 'POST' })
-      const j = await res.json() as { error?: string; linked?: number; unlinked?: number; target_count?: number }
-      if (!res.ok) throw new Error(j.error ?? '套用失敗')
+      const j = await res.json() as {
+        error?: string
+        success?: boolean
+        linked?: number
+        unlinked?: number
+        target_count?: number
+        link_failed_count?: number
+        unlink_failed_count?: number
+      }
+      if (!res.ok || j.success === false) {
+        // 即便失敗也載入最新狀態（last_applied 已正確記錄）
+        await load()
+        throw new Error(j.error ?? '套用失敗')
+      }
       setPendingApplyRowId(null)
       setPreviewData(null)
       setPreviewMenuRowId(null)
+      // 成功訊息（暫時用 error 欄展示，但是綠字）
+      setError(null)
       await load()
+      // alert-style：簡短提示
+      window.setTimeout(() => {
+        alert(`✓ 套用成功：${j.linked ?? 0} 人 link / ${j.unlinked ?? 0} 人 unlink`)
+      }, 100)
     } catch (e) {
       setActionError(e instanceof Error ? e.message : '套用失敗')
     } finally {
@@ -467,10 +490,21 @@ export default function RichMenuPage() {
     setActionError(null)
     try {
       const res = await fetch(`/api/rich-menus/${menuRowId}/unapply`, { method: 'POST' })
-      const j = await res.json() as { error?: string; unlinked?: number }
-      if (!res.ok) throw new Error(j.error ?? '取消套用失敗')
+      const j = await res.json() as {
+        error?: string
+        success?: boolean
+        unlinked?: number
+        failed_count?: number
+      }
+      if (!res.ok || j.success === false) {
+        await load()
+        throw new Error(j.error ?? '取消套用失敗')
+      }
       setPendingUnapplyRowId(null)
       await load()
+      window.setTimeout(() => {
+        alert(`✓ 取消套用成功：${j.unlinked ?? 0} 人已 unlink`)
+      }, 100)
     } catch (e) {
       setActionError(e instanceof Error ? e.message : '取消套用失敗')
     } finally {
@@ -794,9 +828,10 @@ export default function RichMenuPage() {
         {/* Image upload */}
         <div>
           <label className="block text-sm font-medium text-zinc-700 mb-1.5">
-            選單圖片（選填）
+            選單圖片 <span className="text-red-500">*必填</span>
           </label>
-          <p className="text-xs text-zinc-400 mb-2">
+          <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-2">
+            ⚠️ LINE 規定：未上傳圖片的 Rich Menu <strong>無法套用</strong>給用戶。<br />
             建議尺寸：{LAYOUTS[layout].size.width} × {LAYOUTS[layout].size.height} px，JPG 或 PNG，最大 1 MB
           </p>
           <div className="flex items-center gap-3">
