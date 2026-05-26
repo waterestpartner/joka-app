@@ -373,11 +373,9 @@ export default function RichMenuPage() {
       }))
 
       const res = await fetch('/api/rich-menu', { method: 'POST', body: formData })
-      const json = await res.json() as { richMenuId?: string; success?: boolean; warning?: string; error?: string; menuRowId?: string }
+      const json = await res.json() as { richMenuId?: string; success?: boolean; error?: string; menuRowId?: string }
       if (!res.ok) throw new Error(json.error ?? '建立失敗')
-      setCreateResult(json.warning
-        ? `建立成功（ID: ${json.richMenuId}），但${json.warning}。請至下方列表按「套用至 LINE」推送。`
-        : `建立成功！請至下方列表按「套用至 LINE」才會推送給對應的會員。`)
+      setCreateResult(`建立成功！請至下方列表按「套用至 LINE」才會推送給對應的會員。`)
       // 清空 audience 選擇
       setSelectedMemberIds([])
       setSelectedTagIds([])

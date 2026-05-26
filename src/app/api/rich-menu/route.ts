@@ -194,10 +194,33 @@ export async function POST(req: NextRequest) {
   }
   const richMenuId = createResult.id
 
-  let imageWarning: string | null = null
+  // 圖片上傳：失敗時自動 rollback 刪除 LINE 端的孤兒 menu（沒圖片的 menu 反正無法套用）
   if (imageBuffer) {
-    const uploaded = await uploadRichMenuImage(richMenuId, imageBuffer, imageContentType, token)
-    if (!uploaded) imageWarning = '圖片上傳失敗，請至 LINE Developers Console 手動上傳圖片'
+    const uploadRes = await uploadRichMenuImage(richMenuId, imageBuffer, imageContentType, token)
+    if (!uploadRes.ok) {
+      // 解析 LINE 圖片錯誤訊息
+      let friendly = uploadRes.error
+      try {
+        const parsed = JSON.parse(uploadRes.error) as { message?: string }
+        if (parsed.message) friendly = parsed.message
+      } catch { /* not JSON, use raw */ }
+
+      // 翻譯常見錯誤
+      const low = friendly.toLowerCase()
+      if (low.includes('image must be') || low.includes('size') || low.includes('dimension')) {
+        friendly = `圖片尺寸不符：LINE 要求 ${definition.size.width}×${definition.size.height} px，且檔案 ≤ 1 MB。${friendly}`
+      } else if (low.includes('format')) {
+        friendly = `圖片格式錯誤：只接受 JPG 或 PNG。${friendly}`
+      }
+
+      // Rollback：刪掉孤兒 menu
+      await deleteRichMenu(richMenuId, token).catch(() => {/* best effort */})
+
+      return NextResponse.json({
+        error: `圖片上傳失敗：${friendly}（已自動撤銷剛建立的選單，請修正圖片後重試）`,
+        line_status: uploadRes.status,
+      }, { status: 400 })
+    }
   }
 
   // 2. 若有 audience，寫入本地 rich_menus 表
@@ -243,7 +266,6 @@ export async function POST(req: NextRequest) {
     richMenuId,
     menuRowId,
     success: true,
-    warning: imageWarning,
   })
 }
 

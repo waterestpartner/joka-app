@@ -227,13 +227,17 @@ export async function createRichMenu(
   }
 }
 
-/** Upload image to a rich menu */
+export type UploadRichMenuImageResult =
+  | { ok: true }
+  | { ok: false; error: string; status?: number }
+
+/** Upload image to a rich menu. 回傳 Result type，失敗時帶 LINE 真實錯誤訊息 */
 export async function uploadRichMenuImage(
   richMenuId: string,
   imageBuffer: ArrayBuffer,
   contentType: 'image/jpeg' | 'image/png',
   token: string
-): Promise<boolean> {
+): Promise<UploadRichMenuImageResult> {
   try {
     const res = await fetch(`https://api-data.line.me/v2/bot/richmenu/${richMenuId}/content`, {
       method: 'POST',
@@ -242,8 +246,16 @@ export async function uploadRichMenuImage(
       cache: 'no-store',
       signal: AbortSignal.timeout(30000), // 圖片上傳較慢，給較長 timeout
     })
-    return res.ok
-  } catch (e) { console.error('[rich-menu] upload image error:', e); return false }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      console.error('[rich-menu] upload image error:', res.status, text)
+      return { ok: false, error: text || `HTTP ${res.status}`, status: res.status }
+    }
+    return { ok: true }
+  } catch (e) {
+    console.error('[rich-menu] upload image error:', e)
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 /** Set rich menu as default for all users */
