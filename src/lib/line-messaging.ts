@@ -403,3 +403,106 @@ export async function unlinkRichMenuFromUser(
     console.error('[line-richmenu] unlinkRichMenuFromUser network error:', err)
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bulk Rich Menu link/unlink（最多 500 user IDs 一批）
+// 用於 audience 分眾 apply，批次推給多人
+// 參考：https://developers.line.biz/en/reference/messaging-api/#link-rich-menu-to-multiple-users
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BULK_BATCH_LIMIT = 500
+
+export interface BulkRichMenuResult {
+  ok: number
+  failed: { user_ids: string[]; status: number; error: unknown }[]
+}
+
+/**
+ * 批次 link 一張 Rich Menu 給多個 LINE 用戶。
+ * 自動分批（每批 500），任何批次失敗會記錄到 failed[]，不中斷其他批次。
+ */
+export async function linkRichMenuBulk(
+  richMenuId: string,
+  lineUserIds: string[],
+  channelAccessToken: string
+): Promise<BulkRichMenuResult> {
+  const result: BulkRichMenuResult = { ok: 0, failed: [] }
+  if (!channelAccessToken || !richMenuId || lineUserIds.length === 0) return result
+
+  // De-dup + 過濾空字串
+  const uniq = [...new Set(lineUserIds.filter((u) => u && u.trim()))]
+
+  for (let i = 0; i < uniq.length; i += BULK_BATCH_LIMIT) {
+    const batch = uniq.slice(i, i + BULK_BATCH_LIMIT)
+    try {
+      const res = await fetch(
+        `https://api.line.me/v2/bot/richmenu/bulk/link`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${channelAccessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ richMenuId, userIds: batch }),
+          cache: 'no-store',
+          signal: AbortSignal.timeout(15000), // bulk 操作放寬到 15s
+        }
+      )
+      if (res.ok) {
+        result.ok += batch.length
+      } else {
+        const body = await res.json().catch(() => ({}))
+        console.error('[line-richmenu] linkRichMenuBulk error:', res.status, body)
+        result.failed.push({ user_ids: batch, status: res.status, error: body })
+      }
+    } catch (err) {
+      console.error('[line-richmenu] linkRichMenuBulk network error:', err)
+      result.failed.push({ user_ids: batch, status: 0, error: String(err) })
+    }
+  }
+  return result
+}
+
+/**
+ * 批次 unlink 多個 LINE 用戶的專屬 Rich Menu。
+ * 自動分批（每批 500）。
+ */
+export async function unlinkRichMenuBulk(
+  lineUserIds: string[],
+  channelAccessToken: string
+): Promise<BulkRichMenuResult> {
+  const result: BulkRichMenuResult = { ok: 0, failed: [] }
+  if (!channelAccessToken || lineUserIds.length === 0) return result
+
+  const uniq = [...new Set(lineUserIds.filter((u) => u && u.trim()))]
+
+  for (let i = 0; i < uniq.length; i += BULK_BATCH_LIMIT) {
+    const batch = uniq.slice(i, i + BULK_BATCH_LIMIT)
+    try {
+      const res = await fetch(
+        `https://api.line.me/v2/bot/richmenu/bulk/unlink`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${channelAccessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ userIds: batch }),
+          cache: 'no-store',
+          signal: AbortSignal.timeout(15000),
+        }
+      )
+      if (res.ok) {
+        result.ok += batch.length
+      } else {
+        const body = await res.json().catch(() => ({}))
+        console.error('[line-richmenu] unlinkRichMenuBulk error:', res.status, body)
+        result.failed.push({ user_ids: batch, status: res.status, error: body })
+      }
+    } catch (err) {
+      console.error('[line-richmenu] unlinkRichMenuBulk network error:', err)
+      result.failed.push({ user_ids: batch, status: 0, error: String(err) })
+    }
+  }
+  return result
+}
