@@ -664,11 +664,12 @@ export default function MemberDetailPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">備註（選填）</label>
-                <input
+                <textarea
+                  rows={3}
                   value={pointNote}
                   onChange={(e) => setPointNote(e.target.value)}
                   placeholder="調整原因…"
-                  className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
                 />
               </div>
             </div>

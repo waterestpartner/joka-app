@@ -530,13 +530,13 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
           <label className="text-sm font-medium text-gray-600" htmlFor="scanner-note">
             備註（選填）
           </label>
-          <input
+          <textarea
             id="scanner-note"
-            type="text"
+            rows={3}
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="例：洗衣機清潔服務"
-            className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-base text-gray-800 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
+            className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-base text-gray-800 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 resize-none"
           />
         </div>
 
@@ -646,7 +646,7 @@ export function PointScanner({ tenantId, onSuccess }: PointScannerProps) {
                   </span>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {tx.note && (
-                      <span className="text-xs text-gray-500">{tx.note}</span>
+                      <span className="text-xs text-gray-500 whitespace-pre-wrap">{tx.note}</span>
                     )}
                     {tx.tierUpgraded && (
                       <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">

@@ -169,12 +169,12 @@ export default function AddPointsModal({ member, onClose, onSuccess }: Props) {
             <label className="block text-sm font-medium text-zinc-700 mb-1.5">
               備註（選填）
             </label>
-            <input
-              type="text"
+            <textarea
+              rows={3}
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder={mode === 'add' ? '例：消費 NT$500' : '例：點數修正'}
-              className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition"
+              className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755] focus:ring-offset-1 transition resize-none"
             />
           </div>
 
