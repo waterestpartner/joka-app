@@ -45,6 +45,8 @@ function TenantBadge({
   const isProd = environment === 'production'
   return (
     <div
+      role="status"
+      aria-label={isProd ? `目前為正式環境：${name}` : `目前為測試環境：${name}`}
       className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${
         isProd
           ? 'bg-rose-50 text-rose-700 ring-rose-200'
@@ -281,25 +283,27 @@ export default function DashboardSidebar({
   return (
     <>
       {/* ── Desktop sidebar ──────────────────────────────────────────────────── */}
-      <aside className="hidden md:flex w-60 flex-shrink-0 bg-white border-r border-zinc-100 flex-col shadow-[1px_0_0_0_#f4f4f5]">
+      <aside className="hidden md:flex w-60 flex-shrink-0 bg-white border-r border-zinc-100 flex-col shadow-[1px_0_0_0_#f4f4f5] h-screen sticky top-0 overflow-hidden">
         {/* Production warning stripe — 紅底白字，整個 sidebar 頂端 */}
         {isProd && (
-          <div className="bg-rose-600 text-white text-[10px] font-bold tracking-wider text-center py-1 uppercase">
+          <div className="flex-shrink-0 bg-rose-600 text-white text-[10px] font-bold tracking-wider text-center py-1 uppercase">
             正式環境 · 真實客戶
           </div>
         )}
 
         {/* Logo + tenant badge */}
-        <div className="h-16 flex items-center px-4 gap-2 border-b border-zinc-100">
+        <div className="flex-shrink-0 h-16 flex items-center px-4 gap-2 border-b border-zinc-100">
           <span className="text-xl font-extrabold tracking-tight text-[var(--primary)]">JOKA</span>
           <TenantBadge name={tenantName} environment={tenantEnvironment} compact />
         </div>
-        <NavContent
-          navLinks={navLinks}
-          email={email}
-          isOwner={isOwner}
-          signOutAction={signOutAction}
-        />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <NavContent
+            navLinks={navLinks}
+            email={email}
+            isOwner={isOwner}
+            signOutAction={signOutAction}
+          />
+        </div>
       </aside>
 
       {/* ── Mobile top bar ────────────────────────────────────────────────────── */}
@@ -329,13 +333,13 @@ export default function DashboardSidebar({
             className="md:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="md:hidden fixed inset-y-0 left-0 z-50 w-72 bg-white flex flex-col shadow-2xl">
+          <aside className="md:hidden fixed inset-y-0 left-0 z-50 w-72 bg-white flex flex-col shadow-2xl overflow-hidden">
             {isProd && (
-              <div className="bg-rose-600 text-white text-[10px] font-bold tracking-wider text-center py-1 uppercase">
+              <div className="flex-shrink-0 bg-rose-600 text-white text-[10px] font-bold tracking-wider text-center py-1 uppercase">
                 正式環境 · 真實客戶
               </div>
             )}
-            <div className="h-14 flex items-center px-3 border-b border-zinc-100 gap-2">
+            <div className="flex-shrink-0 h-14 flex items-center px-3 border-b border-zinc-100 gap-2">
               <span className="text-lg font-extrabold tracking-tight text-[var(--primary)] flex-shrink-0">
                 JOKA
               </span>
@@ -348,13 +352,15 @@ export default function DashboardSidebar({
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <NavContent
-              navLinks={navLinks}
-              email={email}
-              isOwner={isOwner}
-              signOutAction={signOutAction}
-              onLinkClick={() => setMobileOpen(false)}
-            />
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <NavContent
+                navLinks={navLinks}
+                email={email}
+                isOwner={isOwner}
+                signOutAction={signOutAction}
+                onLinkClick={() => setMobileOpen(false)}
+              />
+            </div>
           </aside>
         </>
       )}
