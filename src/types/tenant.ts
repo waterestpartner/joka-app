@@ -22,6 +22,7 @@ export interface Tenant {
   platform_participation: 'disabled' | 'opt_in' | 'enabled' // Model C 跨品牌整合（預設 'disabled'）
   liff_provider_type: 'liff' | 'mini_app' // LIFF 佈署方式（預設 'liff'）
   line_login_channel_id: string | null    // LINE Login Channel ID（與 Messaging API Channel 不同）
+  environment: 'test' | 'production'  // 視覺化警示用，production = 真實客戶 tenant
   created_at: string
 }
 

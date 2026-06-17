@@ -134,11 +134,13 @@ export async function createTenant(data: {
   adminEmail: string
   primaryColor?: string
   industryTemplateKey?: string
+  environment?: 'test' | 'production'
 }): Promise<Tenant | null> {
   try {
     const supabase = createSupabaseAdminClient()
 
-    // 1. 建立 tenant row（記錄使用的產業範本 key）
+    // 1. 建立 tenant row（記錄使用的產業範本 key + 環境標籤）
+    // 新 tenant 預設 'test'，避免一建立就被當成 production 觸發推播流程
     const { data: tenant, error: tenantError } = await supabase
       .from('tenants')
       .insert({
@@ -147,6 +149,7 @@ export async function createTenant(data: {
         primary_color: data.primaryColor ?? '#06C755',
         push_enabled: true,
         industry_template_key: data.industryTemplateKey ?? null,
+        environment: data.environment ?? 'test',
       })
       .select()
       .single()

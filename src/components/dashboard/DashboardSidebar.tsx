@@ -25,7 +25,37 @@ interface Props {
   navLinks: NavLink[]
   email: string
   isOwner: boolean
+  tenantName: string | null
+  tenantEnvironment: 'test' | 'production'
   signOutAction: () => Promise<void>
+}
+
+// ── Tenant badge（顯示在 sidebar 頂端 + 手機 top bar）─────────────────────────
+// production tenant 顯示紅色警示，避免商家在錯的 tenant 操作真實客戶
+function TenantBadge({
+  name,
+  environment,
+  compact = false,
+}: {
+  name: string | null
+  environment: 'test' | 'production'
+  compact?: boolean
+}) {
+  if (!name) return null
+  const isProd = environment === 'production'
+  return (
+    <div
+      className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${
+        isProd
+          ? 'bg-rose-50 text-rose-700 ring-rose-200'
+          : 'bg-blue-50 text-blue-700 ring-blue-200'
+      } ${compact ? 'max-w-[140px]' : ''}`}
+      title={isProd ? '正式環境：操作會打到真實客戶' : '測試環境：可安全測試'}
+    >
+      <span>{isProd ? '⚠️' : '🧪'}</span>
+      <span className="truncate">{name}</span>
+    </div>
+  )
 }
 
 // ── Icon map (href segment → icon) ────────────────────────────────────────────
@@ -237,19 +267,32 @@ function NavContent({
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function DashboardSidebar({ navLinks, email, isOwner, signOutAction }: Props) {
+export default function DashboardSidebar({
+  navLinks,
+  email,
+  isOwner,
+  tenantName,
+  tenantEnvironment,
+  signOutAction,
+}: Props) {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const isProd = tenantEnvironment === 'production'
 
   return (
     <>
       {/* ── Desktop sidebar ──────────────────────────────────────────────────── */}
       <aside className="hidden md:flex w-60 flex-shrink-0 bg-white border-r border-zinc-100 flex-col shadow-[1px_0_0_0_#f4f4f5]">
-        {/* Logo */}
-        <div className="h-16 flex items-center px-5 border-b border-zinc-100">
+        {/* Production warning stripe — 紅底白字，整個 sidebar 頂端 */}
+        {isProd && (
+          <div className="bg-rose-600 text-white text-[10px] font-bold tracking-wider text-center py-1 uppercase">
+            正式環境 · 真實客戶
+          </div>
+        )}
+
+        {/* Logo + tenant badge */}
+        <div className="h-16 flex items-center px-4 gap-2 border-b border-zinc-100">
           <span className="text-xl font-extrabold tracking-tight text-[var(--primary)]">JOKA</span>
-          <span className="ml-2 text-xs font-medium text-zinc-400 bg-zinc-100 rounded-full px-2 py-0.5">
-            後台
-          </span>
+          <TenantBadge name={tenantName} environment={tenantEnvironment} compact />
         </div>
         <NavContent
           navLinks={navLinks}
@@ -260,16 +303,23 @@ export default function DashboardSidebar({ navLinks, email, isOwner, signOutActi
       </aside>
 
       {/* ── Mobile top bar ────────────────────────────────────────────────────── */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-30 h-14 bg-white border-b border-zinc-100 flex items-center px-4 gap-3 shadow-sm">
-        <button
-          onClick={() => setMobileOpen(true)}
-          aria-label="開啟選單"
-          className="p-2 rounded-xl text-zinc-500 hover:bg-zinc-100 transition"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-        <span className="text-lg font-extrabold tracking-tight text-[var(--primary)]">JOKA</span>
-        <span className="text-xs text-zinc-400">管理後台</span>
+      <div className="md:hidden fixed top-0 left-0 right-0 z-30 bg-white border-b border-zinc-100 shadow-sm">
+        {isProd && (
+          <div className="bg-rose-600 text-white text-[10px] font-bold tracking-wider text-center py-0.5 uppercase">
+            正式環境 · 真實客戶
+          </div>
+        )}
+        <div className="h-14 flex items-center px-3 gap-2">
+          <button
+            onClick={() => setMobileOpen(true)}
+            aria-label="開啟選單"
+            className="p-2 rounded-xl text-zinc-500 hover:bg-zinc-100 transition flex-shrink-0"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <span className="text-lg font-extrabold tracking-tight text-[var(--primary)] flex-shrink-0">JOKA</span>
+          <TenantBadge name={tenantName} environment={tenantEnvironment} compact />
+        </div>
       </div>
 
       {/* ── Mobile drawer overlay + panel ─────────────────────────────────────── */}
@@ -280,15 +330,20 @@ export default function DashboardSidebar({ navLinks, email, isOwner, signOutActi
             onClick={() => setMobileOpen(false)}
           />
           <aside className="md:hidden fixed inset-y-0 left-0 z-50 w-72 bg-white flex flex-col shadow-2xl">
-            <div className="h-14 flex items-center px-4 border-b border-zinc-100 gap-3">
-              <span className="text-lg font-extrabold tracking-tight text-[var(--primary)] flex-1">
+            {isProd && (
+              <div className="bg-rose-600 text-white text-[10px] font-bold tracking-wider text-center py-1 uppercase">
+                正式環境 · 真實客戶
+              </div>
+            )}
+            <div className="h-14 flex items-center px-3 border-b border-zinc-100 gap-2">
+              <span className="text-lg font-extrabold tracking-tight text-[var(--primary)] flex-shrink-0">
                 JOKA
               </span>
-              <span className="text-xs text-zinc-400 flex-1">管理後台</span>
+              <TenantBadge name={tenantName} environment={tenantEnvironment} compact />
               <button
                 onClick={() => setMobileOpen(false)}
                 aria-label="關閉選單"
-                className="p-2 rounded-xl text-zinc-400 hover:bg-zinc-100 transition"
+                className="p-2 rounded-xl text-zinc-400 hover:bg-zinc-100 transition ml-auto flex-shrink-0"
               >
                 <X className="h-5 w-5" />
               </button>

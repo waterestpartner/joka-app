@@ -19,11 +19,19 @@ export async function POST(req: NextRequest) {
   if (!isAdminAuth(auth)) return auth
 
   const body = await req.json().catch(() => ({}))
-  const { name, slug, adminEmail, primaryColor, industryTemplateKey, initialPassword } = body ?? {}
+  const { name, slug, adminEmail, primaryColor, industryTemplateKey, initialPassword, environment } = body ?? {}
 
   if (!name || !slug || !adminEmail) {
     return NextResponse.json(
       { error: 'name, slug, adminEmail are required' },
+      { status: 400 }
+    )
+  }
+
+  // environment 驗證（可選，預設由 repository 套 'test'）
+  if (environment !== undefined && environment !== 'test' && environment !== 'production') {
+    return NextResponse.json(
+      { error: 'environment 必須是 "test" 或 "production"' },
       { status: 400 }
     )
   }
@@ -86,6 +94,7 @@ export async function POST(req: NextRequest) {
     adminEmail: adminEmail as string,
     primaryColor: primaryColor as string | undefined,
     industryTemplateKey: (industryTemplateKey as string) || undefined,
+    environment: environment as 'test' | 'production' | undefined,
   })
 
   if (!tenant) {

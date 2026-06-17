@@ -7,6 +7,7 @@ interface TenantRow {
   name: string
   slug: string
   push_enabled: boolean
+  environment: 'test' | 'production'
   member_count: number
   owner_email: string | null
   created_at: string
@@ -70,6 +71,7 @@ export default function AdminTenantsPage() {
     primaryColor: '#06C755',
     industryTemplateKey: '',
     initialPassword: '',
+    environment: 'test' as 'test' | 'production',
   })
   const [showFormPw, setShowFormPw] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -131,7 +133,7 @@ export default function AdminTenantsPage() {
       const capturedEmail = form.adminEmail
       const capturedPw = form.initialPassword
       setShowForm(false)
-      setForm({ name: '', slug: '', adminEmail: '', primaryColor: '#06C755', industryTemplateKey: '', initialPassword: '' })
+      setForm({ name: '', slug: '', adminEmail: '', primaryColor: '#06C755', industryTemplateKey: '', initialPassword: '', environment: 'test' })
       await fetchTenants()
       if (capturedPw) {
         setCredential({ email: capturedEmail, password: capturedPw, type: 'created' })
@@ -202,6 +204,30 @@ export default function AdminTenantsPage() {
     setLinkLoading(false)
   }
 
+  // ── 切換環境（test ↔ production）─────────────────────────
+  const [envSwitching, setEnvSwitching] = useState<string | null>(null)
+  async function toggleEnvironment(tenant: TenantRow) {
+    const next = tenant.environment === 'production' ? 'test' : 'production'
+    const warning = next === 'production'
+      ? `將「${tenant.name}」切到「正式環境」？\n\n切到正式後，這個 tenant 的會員會被視為真實客戶，所有推播、自動標籤、cron 都會打給他們。確定？`
+      : `將「${tenant.name}」切回「測試環境」？\n\n這只會改變視覺警示，不會自動關閉 push_enabled。`
+    if (!confirm(warning)) return
+
+    setEnvSwitching(tenant.id)
+    const res = await fetch(`/api/admin/tenants/${tenant.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ environment: next }),
+    })
+    setEnvSwitching(null)
+    if (res.ok) {
+      await fetchTenants()
+    } else {
+      const data = await res.json().catch(() => ({}))
+      alert((data as { error?: string }).error ?? '切換失敗')
+    }
+  }
+
   function copyToClipboard(text: string, setCopiedFn: (v: boolean) => void) {
     navigator.clipboard.writeText(text).then(() => {
       setCopiedFn(true)
@@ -261,6 +287,47 @@ export default function AdminTenantsPage() {
                   <p className="mt-1 text-xs text-zinc-400">Webhook URL：/api/line-webhook/{form.slug}</p>
                 )}
               </div>
+
+              {/* 環境 ─────────────────────────────────── */}
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1.5">
+                  環境 <span className="text-red-500">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, environment: 'test' }))}
+                    className={`px-3 py-2.5 rounded-lg text-sm font-medium border transition ${
+                      form.environment === 'test'
+                        ? 'bg-blue-50 border-blue-300 text-blue-700 ring-2 ring-blue-200'
+                        : 'bg-white border-zinc-300 text-zinc-500 hover:bg-zinc-50'
+                    }`}
+                  >
+                    🧪 測試環境
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm('要建立「正式環境」tenant？\n\n正式環境會被當成真實客戶處理，請確定 LINE@ 與會員都已準備好。')) {
+                        setForm((f) => ({ ...f, environment: 'production' }))
+                      }
+                    }}
+                    className={`px-3 py-2.5 rounded-lg text-sm font-medium border transition ${
+                      form.environment === 'production'
+                        ? 'bg-rose-50 border-rose-300 text-rose-700 ring-2 ring-rose-200'
+                        : 'bg-white border-zinc-300 text-zinc-500 hover:bg-zinc-50'
+                    }`}
+                  >
+                    ⚠️ 正式環境
+                  </button>
+                </div>
+                <p className="mt-1.5 text-xs text-zinc-400">
+                  {form.environment === 'test'
+                    ? '建議：所有新 tenant 先用「測試」，驗證完再切換正式'
+                    : '此 tenant 將被視為真實客戶環境，dashboard 會顯示紅色警示條'}
+                </p>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">
                   管理者 Email <span className="text-red-500">*</span>
@@ -548,6 +615,7 @@ export default function AdminTenantsPage() {
                 <tr className="border-b border-zinc-100 bg-zinc-50">
                   <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">店家</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Slug</th>
+                  <th className="text-center px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">環境</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Owner</th>
                   <th className="text-center px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">會員數</th>
                   <th className="text-center px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">推播</th>
@@ -572,6 +640,23 @@ export default function AdminTenantsPage() {
                     </td>
                     <td className="px-5 py-4">
                       <code className="text-xs bg-zinc-100 text-zinc-600 px-2 py-1 rounded">{t.slug}</code>
+                    </td>
+                    <td className="px-5 py-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => toggleEnvironment(t)}
+                        disabled={envSwitching === t.id}
+                        title="點擊切換環境"
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold transition disabled:opacity-50 ${
+                          t.environment === 'production'
+                            ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100'
+                            : 'bg-blue-50 text-blue-700 ring-1 ring-blue-200 hover:bg-blue-100'
+                        }`}
+                      >
+                        {envSwitching === t.id
+                          ? '切換中…'
+                          : t.environment === 'production' ? '⚠️ 正式' : '🧪 測試'}
+                      </button>
                     </td>
                     <td className="px-5 py-4">
                       <span className="text-xs text-zinc-500">{t.owner_email ?? '—'}</span>

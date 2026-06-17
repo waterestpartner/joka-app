@@ -89,15 +89,31 @@ export default async function DashboardLayout({
     )
   }
 
-  // Fetch role
+  // Fetch role + tenant_id
   const adminClient = createSupabaseAdminClient()
   const { data: tu } = await adminClient
     .from('tenant_users')
-    .select('role')
+    .select('role, tenant_id')
     .eq('email', user.email!)
     .maybeSingle()
   const role = (tu?.role as 'owner' | 'staff') ?? 'owner'
   const isOwner = role === 'owner'
+  const tenantId = (tu?.tenant_id as string | undefined) ?? null
+
+  // 取當前 tenant 的 name + environment（用於 sidebar 視覺警示）
+  let tenantName: string | null = null
+  let tenantEnvironment: 'test' | 'production' = 'production'
+  if (tenantId) {
+    const { data: tenant } = await adminClient
+      .from('tenants')
+      .select('name, environment')
+      .eq('id', tenantId)
+      .maybeSingle()
+    if (tenant) {
+      tenantName = (tenant.name as string) ?? null
+      tenantEnvironment = (tenant.environment as 'test' | 'production') ?? 'production'
+    }
+  }
 
   const navLinks = isOwner
     ? [...staffLinks, ...ownerOnlyLinks]
@@ -111,6 +127,8 @@ export default async function DashboardLayout({
         navLinks={navLinks}
         email={user.email!}
         isOwner={isOwner}
+        tenantName={tenantName}
+        tenantEnvironment={tenantEnvironment}
         signOutAction={signOutAction}
       />
 
