@@ -1,8 +1,10 @@
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import SetupBanner from '@/components/dashboard/SetupBanner'
 import DashboardSidebar from '@/components/dashboard/DashboardSidebar'
+import EnvVersionSync from '@/components/dashboard/EnvVersionSync'
 
 async function signOutAction() {
   'use server'
@@ -100,18 +102,29 @@ export default async function DashboardLayout({
   const isOwner = role === 'owner'
   const tenantId = (tu?.tenant_id as string | undefined) ?? null
 
-  // 取當前 tenant 的 name + environment（用於 sidebar 視覺警示）
+  // 取當前 tenant 的 name + environment + env_updated_at（用於 sidebar 視覺警示）
   let tenantName: string | null = null
   let tenantEnvironment: 'test' | 'production' = 'production'
+  let envUpdatedAt: string | null = null
   if (tenantId) {
     const { data: tenant } = await adminClient
       .from('tenants')
-      .select('name, environment')
+      .select('name, environment, env_updated_at')
       .eq('id', tenantId)
       .maybeSingle()
     if (tenant) {
       tenantName = (tenant.name as string) ?? null
       tenantEnvironment = (tenant.environment as 'test' | 'production') ?? 'production'
+      envUpdatedAt = (tenant.env_updated_at as string | null) ?? null
+    }
+
+    // 環境版本比對：若超管在店家 session 存活期間切換了環境，強制重新登入
+    if (envUpdatedAt) {
+      const cookieStore = await cookies()
+      const savedEnvVer = cookieStore.get('joka-env-ver')?.value
+      if (savedEnvVer && decodeURIComponent(savedEnvVer) !== envUpdatedAt) {
+        redirect('/dashboard/login?reason=env_changed')
+      }
     }
   }
 
@@ -122,6 +135,9 @@ export default async function DashboardLayout({
   // Authenticated — render full sidebar layout
   return (
     <div className="min-h-screen flex bg-zinc-50">
+      {/* 同步環境版本 cookie（client-side，非阻塞） */}
+      <EnvVersionSync envVer={envUpdatedAt} />
+
       {/* Sidebar — desktop fixed, mobile hamburger drawer */}
       <DashboardSidebar
         navLinks={navLinks}

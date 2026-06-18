@@ -34,9 +34,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const supabase = createSupabaseAdminClient()
   const { data, error } = await supabase
     .from('tenants')
-    .update({ environment })
+    .update({ environment, env_updated_at: new Date().toISOString() })
     .eq('id', id)
-    .select('id, name, slug, environment')
+    .select('id, name, slug, environment, env_updated_at')
     .single()
 
   if (error || !data) {

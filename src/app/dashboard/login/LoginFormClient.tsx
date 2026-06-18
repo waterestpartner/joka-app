@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/lib/supabase'
 
@@ -10,6 +10,12 @@ export default function LoginFormClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const resetError = searchParams.get('error')
+  const reason = searchParams.get('reason')
+
+  // 清除環境版本 cookie，防止環境切換後無限重定向
+  useEffect(() => {
+    document.cookie = 'joka-env-ver=; path=/dashboard; max-age=0'
+  }, [])
 
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
@@ -18,6 +24,7 @@ export default function LoginFormClient() {
   const [error, setError] = useState<string | null>(
     resetError === 'invalid_reset_link' ? '密碼重設連結無效或已過期，請重新申請。' : null
   )
+  const envChanged = reason === 'env_changed'
   const [forgotSent, setForgotSent] = useState(false)
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
@@ -83,6 +90,12 @@ export default function LoginFormClient() {
             {mode === 'login' ? '請登入以繼續' : '輸入您的 Email 以重設密碼'}
           </p>
         </div>
+
+        {envChanged && (
+          <div className="mb-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+            管理員已更新此帳號的環境設定，請重新登入以套用變更。
+          </div>
+        )}
 
         <div className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-8">
           {/* ── 登入表單 ── */}

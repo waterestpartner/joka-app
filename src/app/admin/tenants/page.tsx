@@ -8,6 +8,7 @@ interface TenantRow {
   slug: string
   push_enabled: boolean
   environment: 'test' | 'production'
+  env_updated_at: string | null
   member_count: number
   owner_email: string | null
   created_at: string
@@ -33,6 +34,16 @@ function formatDate(iso: string) {
     month: '2-digit',
     day: '2-digit',
   })
+}
+
+function formatRelativeTime(iso: string | null) {
+  if (!iso) return null
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (mins < 1) return '剛剛'
+  if (mins < 60) return `${mins} 分鐘前`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs} 小時前`
+  return `${Math.floor(hrs / 24)} 天前`
 }
 
 /** 產生 16 碼強密碼（含大小寫、數字、特殊字元各至少 1 個）*/
@@ -204,6 +215,12 @@ export default function AdminTenantsPage() {
     setLinkLoading(false)
   }
 
+  // Toast notification
+  const [toast, setToast] = useState<{ message: string; ok: boolean } | null>(null)
+
+  // Env filter
+  const [envFilter, setEnvFilter] = useState<'all' | 'test' | 'production'>('all')
+
   // ── 切換環境（test ↔ production）─────────────────────────
   const [envSwitching, setEnvSwitching] = useState<string | null>(null)
   async function toggleEnvironment(tenant: TenantRow) {
@@ -222,9 +239,13 @@ export default function AdminTenantsPage() {
     setEnvSwitching(null)
     if (res.ok) {
       await fetchTenants()
+      const label = next === 'production' ? '正式' : '測試'
+      setToast({ message: `「${tenant.name}」已切換至${label}環境`, ok: true })
+      setTimeout(() => setToast(null), 4000)
     } else {
       const data = await res.json().catch(() => ({}))
-      alert((data as { error?: string }).error ?? '切換失敗')
+      setToast({ message: (data as { error?: string }).error ?? '切換失敗', ok: false })
+      setTimeout(() => setToast(null), 4000)
     }
   }
 
@@ -235,8 +256,21 @@ export default function AdminTenantsPage() {
     })
   }
 
+  const filteredTenants = envFilter === 'all'
+    ? tenants
+    : tenants.filter((t) => t.environment === envFilter)
+
   return (
     <div className="space-y-6">
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold shadow-lg ${
+          toast.ok ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
+        }`}>
+          {toast.ok ? '✓' : '✕'} {toast.message}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -321,11 +355,11 @@ export default function AdminTenantsPage() {
                     ⚠️ 正式環境
                   </button>
                 </div>
-                <p className="mt-1.5 text-xs text-zinc-400">
+                <div className="mt-1.5 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
                   {form.environment === 'test'
-                    ? '建議：所有新 tenant 先用「測試」，驗證完再切換正式'
-                    : '此 tenant 將被視為真實客戶環境，dashboard 會顯示紅色警示條'}
-                </p>
+                    ? '建議：所有新 tenant 先用「測試」，驗證完再切換正式。'
+                    : '⚠️ 此 tenant 將被視為真實客戶環境，dashboard 會顯示醒目紅色警示條。'}
+                </div>
               </div>
 
               <div>
@@ -602,12 +636,34 @@ export default function AdminTenantsPage() {
         </div>
       )}
 
+      {/* ── Env filter ──────────────────────────────────────── */}
+      <div className="flex items-center gap-2">
+        {(['all', 'test', 'production'] as const).map((f) => (
+          <button
+            key={f}
+            type="button"
+            onClick={() => setEnvFilter(f)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+              envFilter === f
+                ? 'bg-zinc-900 text-white'
+                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+            }`}
+          >
+            {f === 'all' ? `全部 (${tenants.length})` : f === 'test'
+              ? `🧪 測試 (${tenants.filter((t) => t.environment === 'test').length})`
+              : `⚠️ 正式 (${tenants.filter((t) => t.environment === 'production').length})`}
+          </button>
+        ))}
+      </div>
+
       {/* ── Tenants table ───────────────────────────────────── */}
       <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
         {loading ? (
           <div className="p-12 text-center text-zinc-400">載入中…</div>
-        ) : tenants.length === 0 ? (
-          <div className="p-12 text-center text-zinc-400">尚無租戶，點選右上角新增第一個吧！</div>
+        ) : filteredTenants.length === 0 ? (
+          <div className="p-12 text-center text-zinc-400">
+            {tenants.length === 0 ? '尚無租戶，點選右上角新增第一個吧！' : '此篩選條件下無租戶'}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -624,7 +680,7 @@ export default function AdminTenantsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {tenants.map((t) => (
+                {filteredTenants.map((t) => (
                   <tr key={t.id} className="hover:bg-zinc-50 transition-colors">
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
@@ -649,7 +705,7 @@ export default function AdminTenantsPage() {
                         title="點擊切換環境"
                         className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold transition disabled:opacity-50 ${
                           t.environment === 'production'
-                            ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100'
+                            ? 'bg-red-600 text-white ring-1 ring-red-700 hover:bg-red-700'
                             : 'bg-blue-50 text-blue-700 ring-1 ring-blue-200 hover:bg-blue-100'
                         }`}
                       >
@@ -657,6 +713,9 @@ export default function AdminTenantsPage() {
                           ? '切換中…'
                           : t.environment === 'production' ? '⚠️ 正式' : '🧪 測試'}
                       </button>
+                      {t.env_updated_at && (
+                        <p className="mt-0.5 text-[10px] text-zinc-400">{formatRelativeTime(t.env_updated_at)}</p>
+                      )}
                     </td>
                     <td className="px-5 py-4">
                       <span className="text-xs text-zinc-500">{t.owner_email ?? '—'}</span>

@@ -49,7 +49,7 @@ function TenantBadge({
       aria-label={isProd ? `目前為正式環境：${name}` : `目前為測試環境：${name}`}
       className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${
         isProd
-          ? 'bg-rose-50 text-rose-700 ring-rose-200'
+          ? 'bg-red-600 text-white ring-red-700'
           : 'bg-blue-50 text-blue-700 ring-blue-200'
       } ${compact ? 'max-w-[140px]' : ''}`}
       title={isProd ? '正式環境：操作會打到真實客戶' : '測試環境：可安全測試'}
