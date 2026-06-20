@@ -125,6 +125,35 @@ export default function AdminTenantsPage() {
   const [linkError, setLinkError] = useState<string | null>(null)
   const [linkCopied, setLinkCopied] = useState(false)
 
+  // ── 綁定帳號 Modal state ──────────────────────────────────────────────────────
+  const [bindModal, setBindModal] = useState<{
+    tenant: TenantRow
+    email: string
+    role: 'owner' | 'staff'
+    submitting: boolean
+    error: string | null
+  } | null>(null)
+
+  async function handleBind(e: React.FormEvent) {
+    e.preventDefault()
+    if (!bindModal) return
+    setBindModal((prev) => prev ? { ...prev, submitting: true, error: null } : null)
+
+    const res = await fetch(`/api/admin/tenants/${bindModal.tenant.id}/bind-user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: bindModal.email, role: bindModal.role }),
+    })
+    const data = await res.json().catch(() => ({}))
+
+    if (res.ok) {
+      setBindModal(null)
+      showToast(`已將 ${bindModal.email} 綁定至「${bindModal.tenant.name}」（${bindModal.role}）`, true)
+    } else {
+      setBindModal((prev) => prev ? { ...prev, submitting: false, error: (data as { error?: string }).error ?? '綁定失敗' } : null)
+    }
+  }
+
   // ── 刪除 Modal state ──────────────────────────────────────────────────────────
   const [deleteModal, setDeleteModal] = useState<{
     tenantId: string
@@ -734,6 +763,91 @@ export default function AdminTenantsPage() {
         </div>
       )}
 
+      {/* ── ＋ 綁定帳號 Modal ─────────────────────────────────── */}
+      {bindModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => !bindModal.submitting && setBindModal(null)}>
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 space-y-5" onClick={(e) => e.stopPropagation()}>
+            <div>
+              <h2 className="text-lg font-bold text-zinc-900">綁定帳號至租戶</h2>
+              <p className="mt-1 text-sm text-zinc-500">
+                租戶：<strong>{bindModal.tenant.name}</strong>
+                <code className="ml-2 text-xs bg-zinc-100 text-zinc-500 px-1.5 py-0.5 rounded">{bindModal.tenant.slug}</code>
+              </p>
+              <p className="mt-1 text-xs text-zinc-400">
+                綁定後，該 email 登入後台即可透過 sidebar 下拉切換到此品牌。
+              </p>
+            </div>
+
+            <form onSubmit={handleBind} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">
+                  Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  autoFocus
+                  value={bindModal.email}
+                  onChange={(e) => setBindModal((prev) => prev ? { ...prev, email: e.target.value, error: null } : null)}
+                  placeholder="已存在的後台帳號 email"
+                  className="w-full rounded-lg border border-zinc-300 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1.5">角色</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['owner', 'staff'] as const).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setBindModal((prev) => prev ? { ...prev, role: r } : null)}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium border transition ${
+                        bindModal.role === r
+                          ? 'bg-[#06C755] border-[#06C755] text-white'
+                          : 'bg-white border-zinc-300 text-zinc-500 hover:bg-zinc-50'
+                      }`}
+                    >
+                      {r === 'owner' ? '👑 Owner（主帳號）' : '👤 Staff（員工）'}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-xs text-zinc-400">
+                  {bindModal.role === 'owner'
+                    ? 'Owner 可存取設定、Webhook、等級管理等敏感操作'
+                    : 'Staff 只能操作日常業務（掃碼、推播、查看）'}
+                </p>
+              </div>
+
+              {bindModal.error && (
+                <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                  {bindModal.error}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setBindModal(null)}
+                  disabled={bindModal.submitting}
+                  className="flex-1 py-2.5 rounded-lg text-sm font-medium text-zinc-600 bg-zinc-100 hover:bg-zinc-200 transition disabled:opacity-50"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  disabled={bindModal.submitting || !bindModal.email}
+                  className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+                  style={{ backgroundColor: '#06C755' }}
+                >
+                  {bindModal.submitting ? '綁定中…' : '確認綁定'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ── 🗑 刪除租戶確認 Modal ─────────────────────────────── */}
       {deleteModal && (
         <div
@@ -1058,6 +1172,13 @@ export default function AdminTenantsPage() {
                           className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition"
                         >
                           設定連結
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBindModal({ tenant: t, email: '', role: 'owner', submitting: false, error: null })}
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition"
+                        >
+                          ＋ 綁定帳號
                         </button>
                         <button
                           type="button"
