@@ -137,6 +137,10 @@ export default function AdminTenantsPage() {
   async function handleBind(e: React.FormEvent) {
     e.preventDefault()
     if (!bindModal) return
+    if (!bindModal.email.trim()) {
+      setBindModal((prev) => prev ? { ...prev, error: '請輸入 Email' } : null)
+      return
+    }
     setBindModal((prev) => prev ? { ...prev, submitting: true, error: null } : null)
 
     const res = await fetch(`/api/admin/tenants/${bindModal.tenant.id}/bind-user`, {
@@ -153,6 +157,13 @@ export default function AdminTenantsPage() {
       setBindModal((prev) => prev ? { ...prev, submitting: false, error: (data as { error?: string }).error ?? '綁定失敗' } : null)
     }
   }
+
+  // ── 環境切換確認 Modal state ──────────────────────────────────────────────────
+  const [envConfirmModal, setEnvConfirmModal] = useState<{
+    tenant: TenantRow
+    next: 'test' | 'production'
+    switching: boolean
+  } | null>(null)
 
   // ── 刪除 Modal state ──────────────────────────────────────────────────────────
   const [deleteModal, setDeleteModal] = useState<{
@@ -288,13 +299,15 @@ export default function AdminTenantsPage() {
 
   // ── 切換環境（test ↔ production）─────────────────────────
   const [envSwitching, setEnvSwitching] = useState<string | null>(null)
-  async function toggleEnvironment(tenant: TenantRow) {
+  function toggleEnvironment(tenant: TenantRow) {
     const next = tenant.environment === 'production' ? 'test' : 'production'
-    const warning = next === 'production'
-      ? `將「${tenant.name}」切到「正式環境」？\n\n切到正式後，這個 tenant 的會員會被視為真實客戶，所有推播、自動標籤、cron 都會打給他們。確定？`
-      : `將「${tenant.name}」切回「測試環境」？\n\n這只會改變視覺警示，不會自動關閉 push_enabled。`
-    if (!confirm(warning)) return
+    setEnvConfirmModal({ tenant, next, switching: false })
+  }
 
+  async function confirmToggleEnvironment() {
+    if (!envConfirmModal) return
+    const { tenant, next } = envConfirmModal
+    setEnvConfirmModal((prev) => prev ? { ...prev, switching: true } : null)
     setEnvSwitching(tenant.id)
     const res = await fetch(`/api/admin/tenants/${tenant.id}`, {
       method: 'PATCH',
@@ -302,6 +315,7 @@ export default function AdminTenantsPage() {
       body: JSON.stringify({ environment: next }),
     })
     setEnvSwitching(null)
+    setEnvConfirmModal(null)
     if (res.ok) {
       await fetchTenants()
       const label = next === 'production' ? '正式' : '測試'
@@ -836,14 +850,70 @@ export default function AdminTenantsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={bindModal.submitting || !bindModal.email}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
-                  style={{ backgroundColor: '#06C755' }}
+                  disabled={bindModal.submitting || !bindModal.email.trim()}
+                  className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 text-white"
+                  style={bindModal.email.trim() && !bindModal.submitting ? { backgroundColor: '#06C755' } : undefined}
                 >
                   {bindModal.submitting ? '綁定中…' : '確認綁定'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── 🌍 環境切換確認 Modal ─────────────────────────────── */}
+      {envConfirmModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => !envConfirmModal.switching && setEnvConfirmModal(null)}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={`px-6 py-5 border-b ${envConfirmModal.next === 'production' ? 'bg-red-50 border-red-100' : 'bg-blue-50 border-blue-100'}`}>
+              <h2 className={`text-lg font-bold ${envConfirmModal.next === 'production' ? 'text-red-900' : 'text-blue-900'}`}>
+                {envConfirmModal.next === 'production' ? '⚠️ 切換為正式環境' : '🧪 切回測試環境'}
+              </h2>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-zinc-700">
+                確定要將 <strong>「{envConfirmModal.tenant.name}」</strong> 切換為
+                <strong className={envConfirmModal.next === 'production' ? ' text-red-600' : ' text-blue-600'}>
+                  {envConfirmModal.next === 'production' ? '正式環境' : '測試環境'}
+                </strong>？
+              </p>
+              {envConfirmModal.next === 'production' ? (
+                <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                  切到正式後，這個 tenant 的會員將被視為真實客戶，所有推播、自動標籤、cron 都會打給他們。
+                </div>
+              ) : (
+                <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700">
+                  這只會改變視覺警示，不會自動關閉 push_enabled。
+                </div>
+              )}
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setEnvConfirmModal(null)}
+                  disabled={envConfirmModal.switching}
+                  className="flex-1 py-2.5 rounded-lg text-sm font-medium text-zinc-600 bg-zinc-100 hover:bg-zinc-200 transition disabled:opacity-50"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmToggleEnvironment}
+                  disabled={envConfirmModal.switching}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    envConfirmModal.next === 'production' ? 'bg-red-600' : 'bg-blue-600'
+                  }`}
+                >
+                  {envConfirmModal.switching ? '切換中…' : '確認切換'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1047,7 +1117,7 @@ export default function AdminTenantsPage() {
                 className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition ${
                   deleteEnabled
                     ? 'bg-red-600 text-white hover:bg-red-700'
-                    : 'bg-zinc-100 text-red-400 cursor-not-allowed border border-red-200'
+                    : 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
                 }`}
               >
                 {deleteModal.deleting ? (

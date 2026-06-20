@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { requireDashboardAuth, isDashboardAuth } from '@/lib/auth-helpers'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { getTenantById } from '@/repositories/tenantRepository'
 import { formatNumber } from '@/lib/utils'
@@ -9,19 +9,6 @@ import {
   Users, UserPlus, Zap, Send, Ticket, TrendingUp,
   CheckCircle2, Circle, Rocket, Check, AlertCircle,
 } from 'lucide-react'
-
-// ── helpers ────────────────────────────────────────────────────────────────────
-
-async function getTenantIdForUser(email: string): Promise<string | null> {
-  const supabase = createSupabaseAdminClient()
-  const { data } = await supabase
-    .from('tenant_users')
-    .select('tenant_id')
-    .eq('email', email)
-    .limit(1)
-    .single()
-  return (data?.tenant_id as string) ?? null
-}
 
 function monthStart(): string {
   const now = new Date()
@@ -161,13 +148,8 @@ function TierBar({
 // ── page ───────────────────────────────────────────────────────────────────────
 
 export default async function OverviewPage() {
-  const supabase = await createSupabaseServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  const email = user?.email ?? ''
-  const tenantId = await getTenantIdForUser(email)
-
-  if (!tenantId) {
+  const auth = await requireDashboardAuth()
+  if (!isDashboardAuth(auth)) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold text-zinc-900">數據總覽</h1>
@@ -179,14 +161,12 @@ export default async function OverviewPage() {
     )
   }
 
+  const { email, tenantId, role: authRole } = auth
+
   // ── 第一次登入的 Owner：品牌名稱尚未填寫 → 直接帶到設定精靈 ───────────────────
   {
-    const admin0 = createSupabaseAdminClient()
-    const [tenantQuick, roleData] = await Promise.all([
-      getTenantById(tenantId),
-      admin0.from('tenant_users').select('role').eq('email', email).maybeSingle(),
-    ])
-    const isOwnerCheck = (roleData.data?.role as string) === 'owner'
+    const isOwnerCheck = authRole === 'owner'
+    const tenantQuick = await getTenantById(tenantId)
     if (isOwnerCheck && tenantQuick && !tenantQuick.name?.trim()) {
       redirect('/dashboard/setup')
     }
