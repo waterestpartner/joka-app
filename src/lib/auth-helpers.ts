@@ -2,8 +2,16 @@
 // 只在 server-side 使用（API routes）
 
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { createSupabaseServerClient } from './supabase-server'
 import { createSupabaseAdminClient } from './supabase-admin'
+
+/**
+ * 「目前操作中的品牌」cookie 名稱。
+ * 一個 email 可能在 tenant_users 有多筆（管理多個 LINE@），此 cookie 記住目前選哪個。
+ * 由 /api/dashboard/switch-tenant 設定，requireDashboardAuth() 與 dashboard layout 讀取。
+ */
+export const ACTIVE_TENANT_COOKIE = 'joka-active-tenant'
 
 export interface DashboardAuth {
   email: string
@@ -18,10 +26,15 @@ export interface AdminAuth {
 /**
  * 驗證 Dashboard 管理者的身分：
  *   1. 確認 Supabase Auth session 有效（已登入後台）
- *   2. 從 tenant_users 查出此管理者的 tenantId 與 role
+ *   2. 從 tenant_users 查出此管理者**所有**的 (tenantId, role)
+ *   3. 依 ACTIVE_TENANT_COOKIE 選出「目前操作中的品牌」；
+ *      無 cookie 或 cookie 指向沒權限的品牌 → fallback 第一個（最早加入的）
  *
- * 成功回傳 { email, tenantId, role }。
+ * 成功回傳 { email, tenantId, role }（已是目前選中品牌的 role）。
  * 失敗回傳 NextResponse（401 / 403），呼叫端應直接 return 它。
+ *
+ * ⚠️ 多租戶安全：active tenant 一定要在這個 email 的 memberships 裡，
+ *    攻擊者改 cookie 指向別家品牌也無效（不在清單就被忽略，fallback 自己第一個）。
  */
 export async function requireDashboardAuth(): Promise<
   DashboardAuth | NextResponse
@@ -36,21 +49,29 @@ export async function requireDashboardAuth(): Promise<
   }
 
   const supabase = createSupabaseAdminClient()
-  const { data } = await supabase
+  const { data: memberships } = await supabase
     .from('tenant_users')
-    .select('tenant_id, role')
+    .select('tenant_id, role, created_at')
     .eq('email', user.email)
-    .limit(1)
-    .single()
+    .order('created_at', { ascending: true })
 
-  if (!data?.tenant_id) {
+  if (!memberships || memberships.length === 0) {
     return NextResponse.json({ error: 'Forbidden: tenant not found' }, { status: 403 })
+  }
+
+  // 依 active-tenant cookie 選中目前操作的品牌
+  const cookieStore = await cookies()
+  const activeTenantId = cookieStore.get(ACTIVE_TENANT_COOKIE)?.value
+  let active = memberships[0]
+  if (activeTenantId) {
+    const match = memberships.find((m) => m.tenant_id === activeTenantId)
+    if (match) active = match // 只有真的有權限才採用，否則維持第一個
   }
 
   return {
     email: user.email,
-    tenantId: data.tenant_id as string,
-    role: (data.role as 'owner' | 'staff') ?? 'owner',
+    tenantId: active.tenant_id as string,
+    role: (active.role as 'owner' | 'staff') ?? 'owner',
   }
 }
 

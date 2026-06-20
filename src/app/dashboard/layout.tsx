@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
+import { ACTIVE_TENANT_COOKIE } from '@/lib/auth-helpers'
 import SetupBanner from '@/components/dashboard/SetupBanner'
 import DashboardSidebar from '@/components/dashboard/DashboardSidebar'
 import EnvVersionSync from '@/components/dashboard/EnvVersionSync'
@@ -91,42 +92,69 @@ export default async function DashboardLayout({
     )
   }
 
-  // Fetch role + tenant_id
+  // 撈全部 membership（一個 email 可管理多個 LINE@）
   const adminClient = createSupabaseAdminClient()
-  const { data: tu } = await adminClient
+  const cookieStore = await cookies()
+
+  const { data: memberships } = await adminClient
     .from('tenant_users')
-    .select('role, tenant_id')
+    .select('tenant_id, role, created_at')
     .eq('email', user.email!)
-    .maybeSingle()
-  const role = (tu?.role as 'owner' | 'staff') ?? 'owner'
+    .order('created_at', { ascending: true })
+
+  if (!memberships || memberships.length === 0) {
+    return (
+      <div className="min-h-screen bg-zinc-50 flex flex-col">{children}</div>
+    )
+  }
+
+  // 依 ACTIVE_TENANT_COOKIE 決定目前操作的品牌（安全：必須在 membership 清單內）
+  const activeTenantCookieValue = cookieStore.get(ACTIVE_TENANT_COOKIE)?.value
+  let activeMembership = memberships[0]
+  if (activeTenantCookieValue) {
+    const match = memberships.find((m) => m.tenant_id === activeTenantCookieValue)
+    if (match) activeMembership = match
+  }
+
+  const activeTenantId = activeMembership.tenant_id as string
+  const role = (activeMembership.role as 'owner' | 'staff') ?? 'owner'
   const isOwner = role === 'owner'
-  const tenantId = (tu?.tenant_id as string | undefined) ?? null
 
-  // 取當前 tenant 的 name + environment + env_updated_at（用於 sidebar 視覺警示）
-  let tenantName: string | null = null
-  let tenantEnvironment: 'test' | 'production' = 'production'
-  let envUpdatedAt: string | null = null
-  if (tenantId) {
-    const { data: tenant } = await adminClient
-      .from('tenants')
-      .select('name, environment, env_updated_at')
-      .eq('id', tenantId)
-      .maybeSingle()
-    if (tenant) {
-      tenantName = (tenant.name as string) ?? null
-      tenantEnvironment = (tenant.environment as 'test' | 'production') ?? 'production'
-      envUpdatedAt = (tenant.env_updated_at as string | null) ?? null
-    }
+  // 一次撈所有 tenant 的詳細資料
+  const tenantIds = memberships.map((m) => m.tenant_id as string)
+  const { data: tenantsData } = await adminClient
+    .from('tenants')
+    .select('id, name, environment, env_updated_at')
+    .in('id', tenantIds)
 
-    // 環境版本比對：若超管在店家 session 存活期間切換了環境，強制重新登入
-    if (envUpdatedAt) {
-      const cookieStore = await cookies()
-      const savedEnvVer = cookieStore.get('joka-env-ver')?.value
-      if (savedEnvVer && decodeURIComponent(savedEnvVer) !== envUpdatedAt) {
-        redirect('/dashboard/login?reason=env_changed')
-      }
+  const tenantMap = new Map(
+    (tenantsData ?? []).map((t) => [t.id as string, t])
+  )
+
+  // 目前操作的 tenant 資料
+  const activeTenantData = tenantMap.get(activeTenantId)
+  const tenantName = (activeTenantData?.name as string) ?? null
+  const tenantEnvironment = (activeTenantData?.environment as 'test' | 'production') ?? 'production'
+  const envUpdatedAt = (activeTenantData?.env_updated_at as string | null) ?? null
+
+  // 環境版本比對：超管切換環境 → 強制重新登入
+  if (envUpdatedAt) {
+    const savedEnvVer = cookieStore.get('joka-env-ver')?.value
+    if (savedEnvVer && decodeURIComponent(savedEnvVer) !== envUpdatedAt) {
+      redirect('/dashboard/login?reason=env_changed')
     }
   }
+
+  // 建立品牌切換清單（傳給 sidebar）
+  const allTenants = memberships.map((m) => {
+    const td = tenantMap.get(m.tenant_id as string)
+    return {
+      tenantId: m.tenant_id as string,
+      role: (m.role as 'owner' | 'staff') ?? 'owner',
+      name: (td?.name as string) ?? (m.tenant_id as string),
+      environment: (td?.environment as 'test' | 'production') ?? 'production',
+    }
+  })
 
   const navLinks = isOwner
     ? [...staffLinks, ...ownerOnlyLinks]
@@ -145,6 +173,8 @@ export default async function DashboardLayout({
         isOwner={isOwner}
         tenantName={tenantName}
         tenantEnvironment={tenantEnvironment}
+        allTenants={allTenants}
+        activeTenantId={activeTenantId}
         signOutAction={signOutAction}
       />
 

@@ -11,7 +11,7 @@ import {
   Settings, Building2, Shield, Webhook, Key,
   Rocket, LogOut, Menu, X, FileText, SlidersHorizontal,
   Star, Timer, Link2, Users2, Repeat, Swords, Layout, CalendarHeart,
-  ChevronRight,
+  ChevronRight, ChevronDown, Check,
 } from 'lucide-react'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -21,17 +21,25 @@ interface NavLink {
   label: string
 }
 
+interface TenantItem {
+  tenantId: string
+  name: string
+  environment: 'test' | 'production'
+  role: 'owner' | 'staff'
+}
+
 interface Props {
   navLinks: NavLink[]
   email: string
   isOwner: boolean
   tenantName: string | null
   tenantEnvironment: 'test' | 'production'
+  allTenants: TenantItem[]
+  activeTenantId: string
   signOutAction: () => Promise<void>
 }
 
 // ── Tenant badge（顯示在 sidebar 頂端 + 手機 top bar）─────────────────────────
-// production tenant 顯示紅色警示，避免商家在錯的 tenant 操作真實客戶
 function TenantBadge({
   name,
   environment,
@@ -56,6 +64,105 @@ function TenantBadge({
     >
       <span>{isProd ? '⚠️' : '🧪'}</span>
       <span className="truncate">{name}</span>
+    </div>
+  )
+}
+
+// ── Brand switcher（一個 email 管理多個 LINE@ 時顯示切換按鈕）─────────────────
+
+function BrandSwitcher({
+  allTenants,
+  activeTenantId,
+}: {
+  allTenants: TenantItem[]
+  activeTenantId: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [switching, setSwitching] = useState(false)
+
+  const active = allTenants.find((t) => t.tenantId === activeTenantId) ?? allTenants[0]
+
+  // 只有一個品牌時，直接顯示 badge，不加切換按鈕
+  if (allTenants.length <= 1) {
+    return <TenantBadge name={active?.name ?? null} environment={active?.environment ?? 'production'} compact />
+  }
+
+  const handleSwitch = async (tenantId: string) => {
+    if (tenantId === activeTenantId || switching) return
+    setSwitching(true)
+    try {
+      const res = await fetch('/api/dashboard/switch-tenant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId }),
+      })
+      if (res.ok) {
+        window.location.href = '/dashboard/overview'
+      }
+    } finally {
+      setSwitching(false)
+      setOpen(false)
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        disabled={switching}
+        title="切換品牌"
+        className="flex items-center gap-1 rounded-lg px-1 py-0.5 hover:bg-zinc-100 transition disabled:opacity-50"
+      >
+        <TenantBadge name={active?.name ?? null} environment={active?.environment ?? 'production'} compact />
+        <ChevronDown className={`h-3 w-3 text-zinc-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <>
+          {/* Backdrop */}
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          {/* Dropdown */}
+          <div className="absolute left-0 top-full mt-1.5 z-20 w-60 bg-white rounded-xl shadow-xl border border-zinc-100 py-1.5 overflow-hidden">
+            <p className="px-3 pb-1.5 pt-0.5 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+              切換品牌
+            </p>
+            {allTenants.map((t) => {
+              const isActive = t.tenantId === activeTenantId
+              const isProd = t.environment === 'production'
+              return (
+                <button
+                  key={t.tenantId}
+                  onClick={() => handleSwitch(t.tenantId)}
+                  disabled={switching || isActive}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm transition ${
+                    isActive
+                      ? 'bg-zinc-50 cursor-default'
+                      : 'hover:bg-zinc-50 cursor-pointer'
+                  }`}
+                >
+                  {/* Env dot */}
+                  <span
+                    className={`h-2 w-2 rounded-full flex-shrink-0 ${isProd ? 'bg-red-500' : 'bg-blue-400'}`}
+                    title={isProd ? '正式環境' : '測試環境'}
+                  />
+                  {/* Name */}
+                  <span className={`truncate flex-1 ${isActive ? 'text-zinc-400' : 'text-zinc-700 font-medium'}`}>
+                    {t.name}
+                  </span>
+                  {/* Role badge */}
+                  <span className={`text-[10px] font-bold flex-shrink-0 ${
+                    t.role === 'owner' ? 'text-[var(--primary)]' : 'text-zinc-400'
+                  }`}>
+                    {t.role === 'owner' ? 'Owner' : 'Staff'}
+                  </span>
+                  {/* Active check */}
+                  {isActive && <Check className="h-3.5 w-3.5 text-zinc-300 flex-shrink-0" />}
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -106,7 +213,6 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   branches:         <Building2 className="h-4 w-4" />,
 }
 
-// Sub-route icon overrides for analytics
 const ANALYTICS_ICON_MAP: Record<string, React.ReactNode> = {
   rfm:      <PieChart className="h-4 w-4" />,
   push:     <Send className="h-4 w-4" />,
@@ -147,7 +253,6 @@ const ANALYTICS_PATHS = new Set(['analytics', 'leaderboard'])
 const SETTINGS_PATHS = new Set([
   'setup', 'settings', 'tiers', 'team', 'api-keys', 'webhooks', 'audit-logs', 'rich-menu', 'branches',
 ])
-// special: /dashboard/members/merge and /dashboard/members/birthdays go to 會員管理
 
 function getGroup(href: string): string {
   if (SPECIAL_ICON_MAP[href]) return '會員管理'
@@ -186,7 +291,6 @@ function NavContent({
 }) {
   const pathname = usePathname()
 
-  // Group links
   const grouped = GROUP_ORDER.reduce<Record<string, NavLink[]>>((acc, g) => {
     acc[g] = []
     return acc
@@ -205,7 +309,6 @@ function NavContent({
           if (links.length === 0) return null
           return (
             <div key={group} className="mb-1">
-              {/* Group label */}
               {group !== 'general' && (
                 <p className={`px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest ${GROUP_ACCENT[group]}`}>
                   {group}
@@ -275,6 +378,8 @@ export default function DashboardSidebar({
   isOwner,
   tenantName,
   tenantEnvironment,
+  allTenants,
+  activeTenantId,
   signOutAction,
 }: Props) {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -284,18 +389,18 @@ export default function DashboardSidebar({
     <>
       {/* ── Desktop sidebar ──────────────────────────────────────────────────── */}
       <aside className="hidden md:flex w-60 flex-shrink-0 bg-white border-r border-zinc-100 flex-col shadow-[1px_0_0_0_#f4f4f5] h-screen sticky top-0 overflow-hidden">
-        {/* Production warning stripe — 紅底白字，整個 sidebar 頂端 */}
         {isProd && (
           <div className="flex-shrink-0 bg-rose-600 text-white text-[10px] font-bold tracking-wider text-center py-1 uppercase">
             正式環境 · 真實客戶
           </div>
         )}
 
-        {/* Logo + tenant badge */}
+        {/* Logo + brand switcher */}
         <div className="flex-shrink-0 h-16 flex items-center px-4 gap-2 border-b border-zinc-100">
-          <span className="text-xl font-extrabold tracking-tight text-[var(--primary)]">JOKA</span>
-          <TenantBadge name={tenantName} environment={tenantEnvironment} compact />
+          <span className="text-xl font-extrabold tracking-tight text-[var(--primary)] flex-shrink-0">JOKA</span>
+          <BrandSwitcher allTenants={allTenants} activeTenantId={activeTenantId} />
         </div>
+
         <div className="flex-1 flex flex-col overflow-hidden">
           <NavContent
             navLinks={navLinks}
@@ -343,7 +448,8 @@ export default function DashboardSidebar({
               <span className="text-lg font-extrabold tracking-tight text-[var(--primary)] flex-shrink-0">
                 JOKA
               </span>
-              <TenantBadge name={tenantName} environment={tenantEnvironment} compact />
+              {/* 抽屜內顯示品牌切換器 */}
+              <BrandSwitcher allTenants={allTenants} activeTenantId={activeTenantId} />
               <button
                 onClick={() => setMobileOpen(false)}
                 aria-label="關閉選單"

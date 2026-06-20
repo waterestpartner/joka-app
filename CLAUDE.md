@@ -3,7 +3,7 @@
 # JOKA — 專案完整說明書
 
 > 給 AI 看的完整指南。每次開 session 必讀。包含架構決定的「為什麼」，不只是「是什麼」。
-> 最後更新：2026-04-24（v0.17.0 — 批量會員操作 + API 金鑰管理 + 手機響應式側邊欄 + 員工操作分析 + 操作記錄 CSV 匯出 + 點數到期日曆 + CSV 匯入預覽 + 合併重複會員）
+> 最後更新：2026-06-20（v0.18.0 — 環境保護機制 + 7 個 UI/UX 修復）
 
 ---
 
@@ -50,6 +50,8 @@
 
 ```
 tenants                         — 品牌主表（LINE OA/LIFF 設定、功能開關、點數規則）
+                                  ⚠️ environment: 'test'|'production'（超管設定，視覺保護用）
+                                  ⚠️ env_updated_at: TIMESTAMPTZ（環境切換時間，作為 session 版本號）
 tenant_users                    — 商家帳號（後台登入用，Supabase Auth）role: 'owner'|'staff'
 
 members                         — 每個品牌的會員（points, tier, referral_code, line_uid）
@@ -135,6 +137,15 @@ platform_member_consents        — 每位會員在每個品牌的同意書（Mo
 
 ### 10. Model C 漸進式設計
 **Why：** 商業上目前不需要跨品牌功能，但未來可能有。現在在 DB 層預留 `platform_members` 表，等需要再打開，不需大改架構。`platform_participation = 'disabled'` 代表完全不影響現有邏輯。
+
+### 11. 環境保護機制（Cookie 版本比對強制重新登入）
+**Why：** JOKA 有測試 tenant 和正式 tenant，超管可能在店家 session 仍存活時切換環境。若不強制重新整理，店家繼續用舊 session 操作，卻以為自己在正式環境（或反之），會造成誤推播或誤操作真實客戶。
+**機制：**
+1. 超管 PATCH `/api/admin/tenants/[id]` 切換環境時，同步寫入 `env_updated_at = now()`
+2. `DashboardLayout`（Server Component）每次 render 時比對 DB 的 `env_updated_at` vs 瀏覽器 cookie `joka-env-ver`
+3. 若不一致 → `redirect('/dashboard/login?reason=env_changed')`，強制重新登入
+4. `EnvVersionSync`（Client Component）負責在每次頁面掛載時把最新的 `env_updated_at` 寫入 cookie
+5. `LoginFormClient` 在 mount 時清除 `joka-env-ver` cookie，防止重新登入後再次被踢
 
 ---
 
@@ -297,6 +308,9 @@ src/components/dashboard/DashboardSidebar.tsx — 響應式側邊欄（Client Co
                                                 桌面：固定側欄；手機：漢堡 top bar + 滑入 Drawer
 src/components/dashboard/MemberTable.tsx    — 會員列表（含 checkbox 批量選取 + 批量操作工具列）
 src/components/dashboard/MemberImportButton.tsx — CSV 匯入（含預覽步驟機：idle→preview→importing→result）
+src/components/dashboard/EnvVersionSync.tsx     — 環境版本 cookie 同步（Client Component，寫入 joka-env-ver）
+                                                   DashboardLayout 每次 render 後呼叫，讓 Server Component 下次可比對
+src/app/logout/route.ts                         — GET /logout → signOut + redirect('/dashboard/login')
 ```
 
 ---
@@ -357,6 +371,8 @@ supabase/line-messages.sql               ✅ （v0.14.2，LINE 訊息收件匣 +
 supabase/auto-tag-rules.sql              ✅ （v0.15.0，自動標籤規則）
 -- v0.16.0: no new migrations (all features use existing tables)
 supabase/api-keys.sql                    ✅ （v0.17.0，API 金鑰管理）
+supabase/tenant-environment.sql          ✅ （v0.18.0，tenants.environment 欄位）
+supabase/env-updated-at.sql              ✅ （v0.18.0，tenants.env_updated_at 欄位）
 ```
 
 ---
@@ -421,6 +437,10 @@ supabase/api-keys.sql                    ✅ （v0.17.0，API 金鑰管理）
 - ✅ **點數到期日曆（月曆熱度圖，紅/橙/黃色顯示到期人數，與列表切換）**
 - ✅ **CSV 匯入預覽（選檔後顯示欄位對應設定 + 前 5 行資料預覽，確認後才匯入）**
 - ✅ **合併重複會員（/members/merge，搜尋兩個帳號 → 確認合併，點數/交易/標籤全部轉移）**
+- ✅ **環境保護機制（超管切環境 → 店家 session 強制重新登入，cookie 版本比對）**
+- ✅ **超管租戶管理（/admin/tenants）：環境篩選按鈕 + 切換 toast + env_updated_at 相對時間 + 新增 tenant modal 琥珀色提示**
+- ✅ **正式環境 badge 深紅色（bg-red-600 text-white），測試環境藍色**
+- ✅ **/logout route handler（GET /logout → signOut + redirect）**
 
 **Vercel Cron（8 個）：** birthday / expire-points / dormant / scheduled-push / webhook-retry / push-triggers / backfill-platform-members / auto-tag
 
@@ -440,4 +460,4 @@ supabase/api-keys.sql                    ✅ （v0.17.0，API 金鑰管理）
 
 ---
 
-_最後更新：2026-04-24（v0.17.0）_
+_最後更新：2026-06-20（v0.18.0）_

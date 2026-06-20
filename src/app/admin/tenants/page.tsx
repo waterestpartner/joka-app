@@ -28,6 +28,24 @@ interface CredentialResult {
   type: 'created' | 'reset'
 }
 
+interface TenantCounts {
+  tenant: {
+    id: string
+    name: string
+    slug: string
+    environment: 'test' | 'production'
+    owner_email: string | null
+    has_liff: boolean
+    has_channel: boolean
+  }
+  counts: {
+    members: number
+    transactions: number
+    other_data: number
+    line_messages: number
+  }
+}
+
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('zh-TW', {
     year: 'numeric',
@@ -106,6 +124,19 @@ export default function AdminTenantsPage() {
   const [linkLoading, setLinkLoading] = useState(false)
   const [linkError, setLinkError] = useState<string | null>(null)
   const [linkCopied, setLinkCopied] = useState(false)
+
+  // ── 刪除 Modal state ──────────────────────────────────────────────────────────
+  const [deleteModal, setDeleteModal] = useState<{
+    tenantId: string
+    counts: TenantCounts | null
+    loadingCounts: boolean
+    confirmSlug: string
+    understood: boolean
+    productionConfirm: string
+    deleteAuthUser: boolean
+    deleting: boolean
+    error: string | null
+  } | null>(null)
 
   async function fetchTenants() {
     setLoading(true)
@@ -218,6 +249,11 @@ export default function AdminTenantsPage() {
   // Toast notification
   const [toast, setToast] = useState<{ message: string; ok: boolean } | null>(null)
 
+  function showToast(message: string, ok: boolean) {
+    setToast({ message, ok })
+    setTimeout(() => setToast(null), 5000)
+  }
+
   // Env filter
   const [envFilter, setEnvFilter] = useState<'all' | 'test' | 'production'>('all')
 
@@ -240,12 +276,63 @@ export default function AdminTenantsPage() {
     if (res.ok) {
       await fetchTenants()
       const label = next === 'production' ? '正式' : '測試'
-      setToast({ message: `「${tenant.name}」已切換至${label}環境`, ok: true })
-      setTimeout(() => setToast(null), 4000)
+      showToast(`「${tenant.name}」已切換至${label}環境`, true)
     } else {
       const data = await res.json().catch(() => ({}))
-      setToast({ message: (data as { error?: string }).error ?? '切換失敗', ok: false })
-      setTimeout(() => setToast(null), 4000)
+      showToast((data as { error?: string }).error ?? '切換失敗', false)
+    }
+  }
+
+  // ── 開啟刪除確認 Modal ────────────────────────────────────
+  async function openDeleteModal(tenant: TenantRow) {
+    setDeleteModal({
+      tenantId: tenant.id,
+      counts: null,
+      loadingCounts: true,
+      confirmSlug: '',
+      understood: false,
+      productionConfirm: '',
+      deleteAuthUser: true,
+      deleting: false,
+      error: null,
+    })
+
+    const res = await fetch(`/api/admin/tenants/${tenant.id}`)
+    if (res.ok) {
+      const data = await res.json() as TenantCounts
+      setDeleteModal((prev) => prev ? { ...prev, counts: data, loadingCounts: false } : null)
+    } else {
+      setDeleteModal((prev) => prev ? { ...prev, loadingCounts: false } : null)
+    }
+  }
+
+  // ── 執行刪除 ─────────────────────────────────────────────
+  async function handleDelete() {
+    if (!deleteModal) return
+    const { tenantId, counts, confirmSlug, deleteAuthUser, productionConfirm } = deleteModal
+
+    setDeleteModal((prev) => prev ? { ...prev, deleting: true, error: null } : null)
+
+    const res = await fetch(`/api/admin/tenants/${tenantId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        confirm_slug: confirmSlug,
+        delete_auth_user: deleteAuthUser,
+        production_confirm: productionConfirm || undefined,
+      }),
+    })
+
+    const data = await res.json().catch(() => ({}))
+
+    if (res.ok) {
+      setDeleteModal(null)
+      await fetchTenants()
+      showToast(`已永久刪除租戶「${counts?.tenant.name ?? tenantId}」`, true)
+    } else {
+      setDeleteModal((prev) =>
+        prev ? { ...prev, deleting: false, error: (data as { error?: string }).error ?? '刪除失敗' } : null
+      )
     }
   }
 
@@ -259,6 +346,17 @@ export default function AdminTenantsPage() {
   const filteredTenants = envFilter === 'all'
     ? tenants
     : tenants.filter((t) => t.environment === envFilter)
+
+  // Delete 按鈕 enable 邏輯
+  const deleteEnabled = (() => {
+    if (!deleteModal) return false
+    const { counts, confirmSlug, understood, productionConfirm, deleting, loadingCounts } = deleteModal
+    if (loadingCounts || deleting || !counts) return false
+    if (confirmSlug !== counts.tenant.slug) return false
+    if (!understood) return false
+    if (counts.tenant.environment === 'production' && productionConfirm !== 'DELETE') return false
+    return true
+  })()
 
   return (
     <div className="space-y-6">
@@ -322,7 +420,7 @@ export default function AdminTenantsPage() {
                 )}
               </div>
 
-              {/* 環境 ─────────────────────────────────── */}
+              {/* 環境 */}
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1.5">
                   環境 <span className="text-red-500">*</span>
@@ -636,6 +734,220 @@ export default function AdminTenantsPage() {
         </div>
       )}
 
+      {/* ── 🗑 刪除租戶確認 Modal ─────────────────────────────── */}
+      {deleteModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => !deleteModal.deleting && setDeleteModal(null)}
+        >
+          <div
+            className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-red-50 border-b border-red-100 px-6 py-5">
+              <h2 className="text-lg font-bold text-red-900 flex items-center gap-2">
+                ⚠️ 確定要永久刪除這個租戶嗎？
+              </h2>
+              <p className="mt-1 text-xs text-red-600">此動作無法復原，請謹慎確認。</p>
+            </div>
+
+            <div className="px-6 py-5 space-y-5">
+              {deleteModal.loadingCounts ? (
+                <div className="text-center py-8 text-zinc-400 text-sm">載入資料中…</div>
+              ) : deleteModal.counts ? (
+                <>
+                  {/* 租戶資訊 */}
+                  <div className="rounded-xl border border-zinc-200 divide-y divide-zinc-100 text-sm">
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-zinc-500">店家</span>
+                      <span className="font-semibold text-zinc-900">{deleteModal.counts.tenant.name}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-zinc-500">Slug</span>
+                      <code className="text-xs bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded">{deleteModal.counts.tenant.slug}</code>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-zinc-500">環境</span>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                        deleteModal.counts.tenant.environment === 'production'
+                          ? 'bg-red-600 text-white'
+                          : 'bg-blue-50 text-blue-700'
+                      }`}>
+                        {deleteModal.counts.tenant.environment === 'production' ? '⚠️ 正式' : '🧪 測試'}
+                      </span>
+                    </div>
+                    {deleteModal.counts.tenant.owner_email && (
+                      <div className="flex items-center justify-between px-4 py-2.5">
+                        <span className="text-zinc-500">Owner</span>
+                        <span className="text-xs text-zinc-700">{deleteModal.counts.tenant.owner_email}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 將被刪除的資料 */}
+                  <div>
+                    <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">此動作會一併刪除：</p>
+                    <ul className="space-y-1 text-sm text-zinc-700">
+                      <li className="flex items-center justify-between">
+                        <span>👥 會員</span>
+                        <span className="font-semibold">{deleteModal.counts.counts.members} 筆</span>
+                      </li>
+                      <li className="flex items-center justify-between">
+                        <span>⚡ 點數紀錄</span>
+                        <span className="font-semibold">{deleteModal.counts.counts.transactions} 筆</span>
+                      </li>
+                      <li className="flex items-center justify-between">
+                        <span>🎫 優惠券 / 任務 / 集章 / 商城 / 公告 / 問卷 / 推薦</span>
+                        <span className="font-semibold">{deleteModal.counts.counts.other_data} 筆</span>
+                      </li>
+                      <li className="flex items-center justify-between">
+                        <span>💬 LINE 訊息收件匣</span>
+                        <span className="font-semibold">{deleteModal.counts.counts.line_messages} 筆</span>
+                      </li>
+                      {(deleteModal.counts.tenant.has_liff || deleteModal.counts.tenant.has_channel) && (
+                        <li className="text-zinc-500">🔑 LINE 憑證（LIFF ID / Channel ID / Secret）</li>
+                      )}
+                    </ul>
+                    <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+                      ⚠️ LINE Developers 上的 Channel / LIFF / Webhook 設定「不會」被自動刪除，請手動至 LINE Developers 處理。
+                    </div>
+                  </div>
+
+                  {/* 正式環境額外警示 */}
+                  {deleteModal.counts.tenant.environment === 'production' && (
+                    <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 font-semibold">
+                      ⚠️ 這是正式環境租戶，刪除後客戶資料無法救回。
+                    </div>
+                  )}
+
+                  {/* 輸入 slug 確認 */}
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 mb-1.5">
+                      請輸入店家 slug「<span className="font-mono font-bold text-zinc-900">{deleteModal.counts.tenant.slug}</span>」以確認：
+                    </label>
+                    <input
+                      type="text"
+                      value={deleteModal.confirmSlug}
+                      onChange={(e) =>
+                        setDeleteModal((prev) => prev ? { ...prev, confirmSlug: e.target.value } : null)
+                      }
+                      placeholder={deleteModal.counts.tenant.slug}
+                      className={`w-full rounded-lg border px-3.5 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 ${
+                        deleteModal.confirmSlug && deleteModal.confirmSlug !== deleteModal.counts.tenant.slug
+                          ? 'border-red-300 focus:ring-red-200 bg-red-50'
+                          : deleteModal.confirmSlug === deleteModal.counts.tenant.slug
+                          ? 'border-green-300 focus:ring-green-200 bg-green-50'
+                          : 'border-zinc-300 focus:ring-zinc-200'
+                      }`}
+                    />
+                    {deleteModal.confirmSlug && deleteModal.confirmSlug !== deleteModal.counts.tenant.slug && (
+                      <p className="mt-1 text-xs text-red-500">slug 不符，請重新確認</p>
+                    )}
+                  </div>
+
+                  {/* 正式環境需輸入 DELETE */}
+                  {deleteModal.counts.tenant.environment === 'production' && (
+                    <div>
+                      <label className="block text-sm font-medium text-red-700 mb-1.5">
+                        正式環境須額外輸入「DELETE」（全大寫）：
+                      </label>
+                      <input
+                        type="text"
+                        value={deleteModal.productionConfirm}
+                        onChange={(e) =>
+                          setDeleteModal((prev) => prev ? { ...prev, productionConfirm: e.target.value } : null)
+                        }
+                        placeholder="DELETE"
+                        className={`w-full rounded-lg border px-3.5 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 ${
+                          deleteModal.productionConfirm && deleteModal.productionConfirm !== 'DELETE'
+                            ? 'border-red-300 focus:ring-red-200 bg-red-50'
+                            : deleteModal.productionConfirm === 'DELETE'
+                            ? 'border-green-300 focus:ring-green-200 bg-green-50'
+                            : 'border-zinc-300 focus:ring-zinc-200'
+                        }`}
+                      />
+                    </div>
+                  )}
+
+                  {/* delete_auth_user 選項 */}
+                  {deleteModal.counts.tenant.owner_email && (
+                    <label className="flex items-start gap-3 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={deleteModal.deleteAuthUser}
+                        onChange={(e) =>
+                          setDeleteModal((prev) => prev ? { ...prev, deleteAuthUser: e.target.checked } : null)
+                        }
+                        className="mt-0.5 h-4 w-4 rounded border-zinc-300 text-red-600 focus:ring-red-200"
+                      />
+                      <span className="text-sm text-zinc-700">
+                        一併刪除 Owner 的 Supabase Auth 帳號
+                        <span className="block text-xs text-zinc-400 mt-0.5">
+                          ({deleteModal.counts.tenant.owner_email})
+                          ── 若該 Email 還管理其他品牌則不會被刪除
+                        </span>
+                      </span>
+                    </label>
+                  )}
+
+                  {/* 我了解 */}
+                  <label className="flex items-center gap-3 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={deleteModal.understood}
+                      onChange={(e) =>
+                        setDeleteModal((prev) => prev ? { ...prev, understood: e.target.checked } : null)
+                      }
+                      className="h-4 w-4 rounded border-zinc-300 text-red-600 focus:ring-red-200"
+                    />
+                    <span className="text-sm font-medium text-zinc-800">我了解此動作無法復原</span>
+                  </label>
+
+                  {/* Error */}
+                  {deleteModal.error && (
+                    <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                      {deleteModal.error}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-red-600">無法載入租戶資料，請關閉後重試。</p>
+              )}
+            </div>
+
+            {/* Footer buttons */}
+            <div className="border-t border-zinc-100 px-6 py-4 flex gap-3 bg-zinc-50">
+              <button
+                type="button"
+                onClick={() => setDeleteModal(null)}
+                disabled={deleteModal.deleting}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium text-zinc-600 bg-white border border-zinc-200 hover:bg-zinc-50 transition disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={!deleteEnabled}
+                className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition ${
+                  deleteEnabled
+                    ? 'bg-red-600 text-white hover:bg-red-700'
+                    : 'bg-zinc-100 text-red-400 cursor-not-allowed border border-red-200'
+                }`}
+              >
+                {deleteModal.deleting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    刪除中…
+                  </span>
+                ) : '永久刪除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Env filter ──────────────────────────────────────── */}
       <div className="flex items-center gap-2">
         {(['all', 'test', 'production'] as const).map((f) => (
@@ -746,6 +1058,13 @@ export default function AdminTenantsPage() {
                           className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition"
                         >
                           設定連結
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openDeleteModal(t)}
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-red-600 border border-red-200 hover:bg-red-600 hover:text-white transition"
+                        >
+                          🗑 刪除
                         </button>
                       </div>
                     </td>
