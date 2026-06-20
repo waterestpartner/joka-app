@@ -799,7 +799,6 @@ export default function AdminTenantsPage() {
                 </label>
                 <input
                   type="email"
-                  required
                   autoFocus
                   value={bindModal.email}
                   onChange={(e) => setBindModal((prev) => prev ? { ...prev, email: e.target.value, error: null } : null)}
@@ -850,9 +849,13 @@ export default function AdminTenantsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={bindModal.submitting || !bindModal.email.trim()}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 text-white"
-                  style={bindModal.email.trim() && !bindModal.submitting ? { backgroundColor: '#06C755' } : undefined}
+                  disabled={bindModal.submitting}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                    bindModal.email.trim()
+                      ? 'text-white hover:opacity-90'
+                      : 'bg-zinc-200 text-zinc-400 cursor-not-allowed'
+                  }`}
+                  style={bindModal.email.trim() ? { backgroundColor: '#06C755' } : undefined}
                 >
                   {bindModal.submitting ? '綁定中…' : '確認綁定'}
                 </button>
