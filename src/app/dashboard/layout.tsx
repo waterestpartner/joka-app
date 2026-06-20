@@ -138,10 +138,12 @@ export default async function DashboardLayout({
   const envUpdatedAt = (activeTenantData?.env_updated_at as string | null) ?? null
 
   // 環境版本比對：超管切換環境 → 強制重新登入
+  // 注意：Server Component 無法修改 cookie，所以 redirect 到 Route Handler
+  // /api/dashboard/env-logout 負責 signOut() + 清除 cookie 再轉去 login
   if (envUpdatedAt) {
     const savedEnvVer = cookieStore.get('joka-env-ver')?.value
     if (savedEnvVer && decodeURIComponent(savedEnvVer) !== envUpdatedAt) {
-      redirect('/dashboard/login?reason=env_changed')
+      redirect('/api/dashboard/env-logout')
     }
   }
 
