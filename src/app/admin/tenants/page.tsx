@@ -13,6 +13,9 @@ interface TenantRow {
   owner_email: string | null
   created_at: string
   logo_url: string | null
+  line_channel_id: string | null
+  channel_access_token: string | null
+  liff_id: string | null
 }
 
 interface TemplateOption {
@@ -1248,6 +1251,7 @@ export default function AdminTenantsPage() {
                   <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Owner</th>
                   <th className="text-center px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">會員數</th>
                   <th className="text-center px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">推播</th>
+                  <th className="text-center px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">LINE</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">建立日期</th>
                   <th className="text-center px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">帳號管理</th>
                 </tr>
@@ -1301,6 +1305,17 @@ export default function AdminTenantsPage() {
                         <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full">✓ 啟用</span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-xs font-medium text-zinc-400 bg-zinc-100 px-2 py-1 rounded-full">停用</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-4 text-center">
+                      {t.channel_access_token && t.liff_id ? (
+                        <span title="Channel Access Token + LIFF 均已設定" className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full">✓ 完整</span>
+                      ) : t.channel_access_token ? (
+                        <span title="Channel Access Token 已設，LIFF ID 未設" className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 px-2 py-1 rounded-full">推播✓ LIFF✗</span>
+                      ) : t.liff_id ? (
+                        <span title="LIFF ID 已設，Channel Access Token 未設" className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 px-2 py-1 rounded-full">LIFF✓ 推播✗</span>
+                      ) : (
+                        <span title="尚未設定任何 LINE 憑證" className="inline-flex items-center gap-1 text-xs font-medium text-zinc-400 bg-zinc-100 px-2 py-1 rounded-full">未串接</span>
                       )}
                     </td>
                     <td className="px-5 py-4 text-zinc-500">{formatDate(t.created_at)}</td>
