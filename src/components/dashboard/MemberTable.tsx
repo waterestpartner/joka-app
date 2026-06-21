@@ -66,6 +66,7 @@ export default function MemberTable({ members, tierSettings, tags = [] }: Props)
 
   const [localMembers, setLocalMembers] = useState<Member[]>(members)
   const [search, setSearch] = useState('')
+  const [lineFilter, setLineFilter] = useState<'all' | 'linked' | 'unlinked'>('all')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
@@ -240,13 +241,19 @@ export default function MemberTable({ members, tierSettings, tags = [] }: Props)
 
   // ── Filter ────────────────────────────────────────────────────────────────
 
+  const isUnlinked = (m: Member) => (m.line_uid ?? '').startsWith('import_')
+
   const filtered = localMembers.filter((m) => {
+    if (lineFilter === 'linked' && isUnlinked(m)) return false
+    if (lineFilter === 'unlinked' && !isUnlinked(m)) return false
     if (!search.trim()) return true
     const q = search.toLowerCase()
     return (
       (m.name ?? '').toLowerCase().includes(q) || (m.phone ?? '').includes(q)
     )
   })
+
+  const unlinkedCount = localMembers.filter(isUnlinked).length
 
   const allFilteredSelected = filtered.length > 0 && filtered.every((m) => selectedIds.has(m.id))
   const someFilteredSelected = filtered.some((m) => selectedIds.has(m.id))
@@ -284,6 +291,29 @@ export default function MemberTable({ members, tierSettings, tags = [] }: Props)
           <span className="text-sm text-zinc-400">
             {filtered.length} / {localMembers.length} 位
           </span>
+        </div>
+
+        {/* LINE 狀態篩選器 */}
+        <div className="flex items-center gap-2">
+          {(
+            [
+              { key: 'all',      label: '全部' },
+              { key: 'linked',   label: '✅ 已綁 LINE' },
+              { key: 'unlinked', label: `⚠️ 未綁 LINE${unlinkedCount > 0 ? ` (${unlinkedCount})` : ''}` },
+            ] as const
+          ).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setLineFilter(key)}
+              className={`rounded-full px-3 py-1 text-xs font-medium border transition ${
+                lineFilter === key
+                  ? 'bg-zinc-800 text-white border-zinc-800'
+                  : 'bg-white text-zinc-500 border-zinc-300 hover:border-zinc-400'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         {/* ── Bulk action toolbar ──────────────────────────────────────────── */}
@@ -378,12 +408,17 @@ export default function MemberTable({ members, tierSettings, tags = [] }: Props)
                         />
                       </td>
                       <td className="px-4 py-3">
-                        <Link
-                          href={`/dashboard/members/${member.id}`}
-                          className="font-medium text-zinc-900 hover:text-green-700 hover:underline"
-                        >
-                          {member.name ?? '—'}
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/dashboard/members/${member.id}`}
+                            className="font-medium text-zinc-900 hover:text-green-700 hover:underline"
+                          >
+                            {member.name ?? '—'}
+                          </Link>
+                          {isUnlinked(member) && (
+                            <span className="text-xs text-zinc-400 whitespace-nowrap">未綁 LINE</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-zinc-600 tabular-nums">
                         {member.phone ?? '—'}
@@ -429,7 +464,7 @@ export default function MemberTable({ members, tierSettings, tags = [] }: Props)
                       colSpan={7}
                       className="px-6 py-12 text-center text-sm text-zinc-400"
                     >
-                      {search ? '找不到符合的會員。' : '尚無會員資料。'}
+                      {search || lineFilter !== 'all' ? '找不到符合的會員。' : '尚無會員資料。'}
                     </td>
                   </tr>
                 )}
