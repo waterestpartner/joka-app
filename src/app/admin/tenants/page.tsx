@@ -101,7 +101,13 @@ export default function AdminTenantsPage() {
     industryTemplateKey: '',
     initialPassword: '',
     environment: 'test' as 'test' | 'production',
+    // LINE 串接（選填）— 代客設定時可一併綁定
+    lineChannelId: '',
+    lineChannelSecret: '',
+    channelAccessToken: '',
+    liffId: '',
   })
+  const [showLineSection, setShowLineSection] = useState(false)
   const [showFormPw, setShowFormPw] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -214,11 +220,17 @@ export default function AdminTenantsPage() {
     if (res.ok) {
       const capturedEmail = form.adminEmail
       const capturedPw = form.initialPassword
+      const result = await res.json().catch(() => ({}))
+      const synced = (result as { line_bot_synced?: { displayName?: string } | null }).line_bot_synced
       setShowForm(false)
-      setForm({ name: '', slug: '', adminEmail: '', primaryColor: '#06C755', industryTemplateKey: '', initialPassword: '', environment: 'test' })
+      setShowLineSection(false)
+      setForm({ name: '', slug: '', adminEmail: '', primaryColor: '#06C755', industryTemplateKey: '', initialPassword: '', environment: 'test', lineChannelId: '', lineChannelSecret: '', channelAccessToken: '', liffId: '' })
       await fetchTenants()
       if (capturedPw) {
         setCredential({ email: capturedEmail, password: capturedPw, type: 'created' })
+      }
+      if (synced?.displayName) {
+        showToast(`已綁定 LINE@「${synced.displayName}」`, true)
       }
     } else {
       const data = await res.json().catch(() => ({}))
@@ -579,6 +591,68 @@ export default function AdminTenantsPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* ── LINE 串接（選填，代客設定用） ───────────────────── */}
+              <div className="rounded-xl border border-zinc-200 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowLineSection((v) => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-zinc-50 hover:bg-zinc-100 transition text-left"
+                >
+                  <span className="text-sm font-medium text-zinc-700">
+                    💬 LINE 串接 <span className="text-zinc-400 font-normal">（選填）</span>
+                  </span>
+                  <span className="text-zinc-400 text-xs">{showLineSection ? '收合 ▲' : '展開 ▼'}</span>
+                </button>
+                {showLineSection && (
+                  <div className="px-4 py-4 space-y-3 border-t border-zinc-100">
+                    <p className="text-xs text-zinc-500 leading-relaxed">
+                      若已拿到店家的 LINE 憑證，可在此一併綁定；留白則由店家事後在「設定精靈」自行填寫。
+                      填入 Channel Access Token 後會自動帶入 LINE@ 大頭貼。
+                    </p>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-600 mb-1">Channel ID</label>
+                      <input
+                        type="text"
+                        value={form.lineChannelId}
+                        onChange={(e) => setForm((f) => ({ ...f, lineChannelId: e.target.value }))}
+                        placeholder="Basic settings → Channel ID"
+                        className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-600 mb-1">Channel Secret</label>
+                      <input
+                        type="text"
+                        value={form.lineChannelSecret}
+                        onChange={(e) => setForm((f) => ({ ...f, lineChannelSecret: e.target.value }))}
+                        placeholder="Basic settings → Channel secret"
+                        className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-600 mb-1">Channel Access Token</label>
+                      <input
+                        type="text"
+                        value={form.channelAccessToken}
+                        onChange={(e) => setForm((f) => ({ ...f, channelAccessToken: e.target.value }))}
+                        placeholder="Messaging API → 長期 token"
+                        className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#06C755]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-600 mb-1">LIFF ID</label>
+                      <input
+                        type="text"
+                        value={form.liffId}
+                        onChange={(e) => setForm((f) => ({ ...f, liffId: e.target.value }))}
+                        placeholder="例：2001234567-AbcdEfgh"
+                        className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#06C755]"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {formError && (

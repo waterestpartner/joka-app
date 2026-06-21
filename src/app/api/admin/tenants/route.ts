@@ -4,6 +4,7 @@ import { NextRequest, NextResponse, after } from 'next/server'
 import { requireAdminAuth, isAdminAuth } from '@/lib/auth-helpers'
 import { getAllTenants, createTenant } from '@/repositories/tenantRepository'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
+import { fetchLineBotInfo } from '@/lib/line-messaging'
 import { logAudit } from '@/lib/audit'
 
 export async function GET() {
@@ -19,7 +20,10 @@ export async function POST(req: NextRequest) {
   if (!isAdminAuth(auth)) return auth
 
   const body = await req.json().catch(() => ({}))
-  const { name, slug, adminEmail, primaryColor, industryTemplateKey, initialPassword, environment } = body ?? {}
+  const {
+    name, slug, adminEmail, primaryColor, industryTemplateKey, initialPassword, environment,
+    lineChannelId, lineChannelSecret, channelAccessToken, liffId,
+  } = body ?? {}
 
   if (!name || !slug || !adminEmail) {
     return NextResponse.json(
@@ -87,7 +91,7 @@ export async function POST(req: NextRequest) {
 
   createdAuthUserId = authData.user?.id ?? null
 
-  // 建立 tenant + tenant_users
+  // 建立 tenant + tenant_users（含選填 LINE 憑證）
   const tenant = await createTenant({
     name: name as string,
     slug: slug as string,
@@ -95,6 +99,10 @@ export async function POST(req: NextRequest) {
     primaryColor: primaryColor as string | undefined,
     industryTemplateKey: (industryTemplateKey as string) || undefined,
     environment: environment as 'test' | 'production' | undefined,
+    lineChannelId: lineChannelId as string | undefined,
+    lineChannelSecret: lineChannelSecret as string | undefined,
+    channelAccessToken: channelAccessToken as string | undefined,
+    liffId: liffId as string | undefined,
   })
 
   if (!tenant) {
@@ -108,6 +116,22 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // 若建立時就提供了 channel access token，自動同步 LINE@ Bot 資訊
+  // （顯示名稱、大頭貼）→ 代客設定時自動帶入品牌資料。失敗不阻斷建立流程。
+  let lineBotSynced: { displayName?: string; pictureUrl?: string } | null = null
+  const tokenTrimmed = typeof channelAccessToken === 'string' ? channelAccessToken.trim() : ''
+  if (tokenTrimmed) {
+    const botInfo = await fetchLineBotInfo(tokenTrimmed).catch(() => null)
+    if (botInfo) {
+      lineBotSynced = { displayName: botInfo.displayName, pictureUrl: botInfo.pictureUrl }
+      // 建立時未填 logo → 用 LINE@ 大頭貼帶入（name 已為必填，不覆蓋）
+      // 用 admin client 直接寫，繞過 RLS（與本 route 其餘操作一致）
+      if (botInfo.pictureUrl) {
+        await supabase.from('tenants').update({ logo_url: botInfo.pictureUrl }).eq('id', tenant.id)
+      }
+    }
+  }
+
   after(() =>
     logAudit({
       tenant_id: tenant.id,
@@ -119,12 +143,13 @@ export async function POST(req: NextRequest) {
         admin_email: adminEmail,
         slug,
         has_initial_password: !!initialPassword,
-        // 絕不記錄密碼內容
+        line_bound: !!tokenTrimmed || !!liffId,
+        // 絕不記錄密碼 / 憑證內容
       },
     })
   )
 
-  return NextResponse.json(tenant, { status: 201 })
+  return NextResponse.json({ ...tenant, line_bot_synced: lineBotSynced }, { status: 201 })
 }
 
 /**

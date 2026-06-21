@@ -135,6 +135,11 @@ export async function createTenant(data: {
   primaryColor?: string
   industryTemplateKey?: string
   environment?: 'test' | 'production'
+  // LINE 串接（選填）— 代客設定時可在建立租戶時一併綁定
+  lineChannelId?: string
+  lineChannelSecret?: string
+  channelAccessToken?: string
+  liffId?: string
 }): Promise<Tenant | null> {
   try {
     const supabase = createSupabaseAdminClient()
@@ -150,6 +155,11 @@ export async function createTenant(data: {
         push_enabled: true,
         industry_template_key: data.industryTemplateKey ?? null,
         environment: data.environment ?? 'test',
+        // LINE 憑證：有值才寫入，留空則維持 null（事後可在設定頁補）
+        line_channel_id: data.lineChannelId?.trim() || null,
+        line_channel_secret: data.lineChannelSecret?.trim() || null,
+        channel_access_token: data.channelAccessToken?.trim() || null,
+        liff_id: data.liffId?.trim() || null,
       })
       .select()
       .single()
